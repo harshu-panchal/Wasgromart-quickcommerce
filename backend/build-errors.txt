@@ -1,0 +1,5 @@
+﻿src/modules/admin/controllers/adminBannerController.ts(8,50): error TS6133: 'req' is declared but its value is never read.
+src/modules/admin/controllers/adminBannerController.ts(19,42): error TS7030: Not all code paths return a value.
+src/modules/admin/controllers/adminBannerController.ts(46,42): error TS7030: Not all code paths return a value.
+src/modules/admin/controllers/adminBannerController.ts(76,42): error TS7030: Not all code paths return a value.
+src/modules/customer/controllers/customerBannerController.ts(8,53): error TS6133: 'req' is declared but its value is never read.
