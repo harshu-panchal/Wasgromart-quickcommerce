@@ -31,4 +31,4 @@ Thumbs.db
 
 # Firebase
 config/firebase-service-account.json
-*.json
+
