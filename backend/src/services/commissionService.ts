@@ -82,10 +82,7 @@ export const getSellerCommissionRate = async (
         }
 
         const settings = await AppSettings.findOne();
-        // @ts-ignore
-        return settings && settings.globalCommissionRate !== undefined
-            ? settings.globalCommissionRate
-            : 10;
+        return settings?.defaultCommission ?? 10;
     } catch (error) {
         console.error("Error getting seller commission rate:", error);
         return 10; // Default fallback
