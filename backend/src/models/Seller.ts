@@ -258,6 +258,11 @@ const SellerSchema = new Schema<ISeller>(
       default: 0,
       min: [0, 'Commission cannot be negative'],
     },
+    commissionRate: {
+      type: Number,
+      min: [0, 'Commission rate cannot be negative'],
+      max: [100, 'Commission rate cannot exceed 100%'],
+    },
 
     // Status
     status: {
@@ -326,4 +331,3 @@ SellerSchema.index({ status: 1 }); // Compound index for status + location queri
 const Seller = mongoose.model<ISeller>('Seller', SellerSchema);
 
 export default Seller;
-

@@ -34,6 +34,7 @@ export interface SellerSubscriptionRecord {
   status: "Active" | "Expired";
   startDate: string;
   expiryDate: string;
+  commissionRate?: number;
 }
 
 export interface ChatMessage {
@@ -206,6 +207,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
           status: seller.status === "Rejected" ? "Expired" : "Active",
           startDate: formatDate(seller.createdAt),
           expiryDate: formatDate(seller.updatedAt),
+          commissionRate: seller.commissionRate ?? seller.commission ?? 0,
         }));
 
         if (isMounted) {

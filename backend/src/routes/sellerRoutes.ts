@@ -5,6 +5,7 @@ import {
   updateSellerStatus,
   updateSeller,
   deleteSeller,
+  updateSellerCommission,
 } from "../modules/seller/controllers/sellerController";
 import { authenticate, requireUserType } from "../middleware/auth";
 
@@ -25,6 +26,9 @@ router.patch("/:id/status", updateSellerStatus);
 
 // Update seller details
 router.put("/:id", updateSeller);
+
+// Update seller commission rate
+router.patch("/:id/commission", updateSellerCommission);
 
 // Delete seller
 router.delete("/:id", deleteSeller);

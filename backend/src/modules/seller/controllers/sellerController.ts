@@ -171,6 +171,54 @@ export const updateSeller = asyncHandler(
 );
 
 /**
+ * Update seller commission rate (Admin)
+ */
+export const updateSellerCommission = asyncHandler(
+  async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { commissionRate } = req.body;
+
+    if (commissionRate === undefined || commissionRate === null) {
+      return res.status(400).json({
+        success: false,
+        message: "commissionRate is required",
+      });
+    }
+
+    const rateNum =
+      typeof commissionRate === "string"
+        ? parseFloat(commissionRate)
+        : Number(commissionRate);
+
+    if (Number.isNaN(rateNum) || rateNum < 0 || rateNum > 100) {
+      return res.status(400).json({
+        success: false,
+        message: "commissionRate must be between 0 and 100",
+      });
+    }
+
+    const seller = await Seller.findByIdAndUpdate(
+      id,
+      { commissionRate: rateNum },
+      { new: true, runValidators: true }
+    ).select("-password");
+
+    if (!seller) {
+      return res.status(404).json({
+        success: false,
+        message: "Seller not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Seller commission updated",
+      data: seller,
+    });
+  }
+);
+
+/**
  * Delete seller
  */
 export const deleteSeller = asyncHandler(
@@ -192,5 +240,4 @@ export const deleteSeller = asyncHandler(
     });
   }
 );
-
 

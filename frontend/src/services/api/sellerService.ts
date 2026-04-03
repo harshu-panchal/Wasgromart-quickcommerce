@@ -15,6 +15,7 @@ export interface Seller {
   logo?: string;
   balance: number;
   commission: number;
+  commissionRate?: number;
   categories: string[];
   status: "Approved" | "Pending" | "Rejected";
   category?: string;
@@ -129,6 +130,20 @@ export const updateSeller = async (
   data: Partial<Seller>
 ): Promise<ApiResponse<Seller>> => {
   const response = await api.put<ApiResponse<Seller>>(`/sellers/${id}`, data);
+  return response.data;
+};
+
+/**
+ * Update only commission rate for a seller
+ */
+export const updateSellerCommissionRate = async (
+  id: string,
+  commissionRate: number
+): Promise<ApiResponse<Seller>> => {
+  const response = await api.patch<ApiResponse<Seller>>(
+    `/sellers/${id}/commission`,
+    { commissionRate }
+  );
   return response.data;
 };
 

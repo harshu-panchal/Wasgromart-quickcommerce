@@ -8,6 +8,8 @@ import {
   PromotionRequest,
 } from "../../../services/api/promotionService";
 import { useToast } from "../../../context/ToastContext";
+import { updateSellerCommissionRate } from "../../../services/api/sellerService";
+// import { useSubscription } from "../../../context/SubscriptionContext";
 
 export default function AdminSubscriptionManagement() {
   const {
@@ -17,12 +19,15 @@ export default function AdminSubscriptionManagement() {
     updatePlanPrice,
     togglePlanActive,
     togglePlanFeature,
+    sellerSubscriptions,
   } = useSubscription();
   const { showToast } = useToast();
 
   const [promotionRequests, setPromotionRequests] = useState<PromotionRequest[]>([]);
   const [loadingPromotions, setLoadingPromotions] = useState(false);
   const [actionId, setActionId] = useState<string | null>(null);
+  const [commissionSaving, setCommissionSaving] = useState<string | null>(null);
+  const [commissionDrafts, setCommissionDrafts] = useState<Record<string, number>>({});
 
   useEffect(() => {
     let mounted = true;
@@ -45,6 +50,29 @@ export default function AdminSubscriptionManagement() {
     setPromotionRequests((prev) =>
       prev.map((req) => (req._id === updated._id ? updated : req))
     );
+  };
+
+  const handleSaveCommission = async (sellerId: string, value?: number) => {
+    const rate = value ?? commissionDrafts[sellerId];
+    if (rate === undefined || rate === null) {
+      showToast("Enter a commission rate", "error");
+      return;
+    }
+    setCommissionSaving(sellerId);
+    try {
+      await updateSellerCommissionRate(sellerId, rate);
+      // Update local subscription list
+      setCommissionDrafts((prev) => ({ ...prev, [sellerId]: rate }));
+      showToast("Commission rate updated", "success");
+    } catch (error: any) {
+      console.error("Failed to update commission", error);
+      showToast(
+        error?.response?.data?.message || "Failed to update commission",
+        "error"
+      );
+    } finally {
+      setCommissionSaving(null);
+    }
   };
 
   const handleApprove = async (req: PromotionRequest) => {
@@ -392,6 +420,83 @@ export default function AdminSubscriptionManagement() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+
+        {/* Reduced Commission for Subscribed Sellers */}
+        <div className="bg-white rounded-xl border border-neutral-200 shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between px-4 sm:px-5 py-3 bg-neutral-50 border-b border-neutral-100">
+            <div>
+              <h2 className="text-sm font-bold text-neutral-800">
+                Reduced Commission (Subscribed Sellers)
+              </h2>
+              <p className="text-xs text-neutral-500 mt-0.5">
+                Set custom commission rates for active sellers with subscription benefits.
+              </p>
+            </div>
+            <span className="text-[11px] font-semibold text-neutral-500">
+              {sellerSubscriptions.filter((s) => s.status === "Active").length} active
+            </span>
+          </div>
+
+          {sellerSubscriptions.length === 0 ? (
+            <div className="p-6 text-sm text-neutral-500">
+              No sellers found. They will appear here after subscription fetch.
+            </div>
+          ) : (
+            <div className="divide-y divide-neutral-100">
+              {sellerSubscriptions.map((seller) => {
+                const draft =
+                  commissionDrafts[seller.id] ??
+                  seller.commissionRate ??
+                  0;
+                const isSaving = commissionSaving === seller.id;
+                return (
+                  <div
+                    key={seller.id}
+                    className="flex flex-col sm:flex-row sm:items-center gap-3 px-4 sm:px-5 py-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-semibold text-neutral-800 line-clamp-1">
+                        {seller.sellerName}
+                      </p>
+                      <p className="text-[11px] text-neutral-500">
+                        Status: {seller.status} • Plan: {seller.planName}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 sm:w-64">
+                      <input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={0.1}
+                        value={draft}
+                        onChange={(e) =>
+                          setCommissionDrafts((prev) => ({
+                            ...prev,
+                            [seller.id]:
+                              e.target.value === ""
+                                ? 0
+                                : Number(e.target.value),
+                          }))
+                        }
+                        className="w-24 border border-neutral-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      />
+                      <span className="text-xs text-neutral-500">%</span>
+                      <button
+                        onClick={() => handleSaveCommission(seller.id, draft)}
+                        disabled={isSaving}
+                        className={`px-3 py-2 rounded-lg text-sm font-semibold ${
+                          isSaving
+                            ? "bg-teal-300 text-white cursor-not-allowed"
+                            : "bg-teal-600 text-white hover:bg-teal-700"
+                        }`}>
+                        {isSaving ? "Saving..." : "Save"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
