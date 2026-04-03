@@ -36,6 +36,7 @@ import deliveryTrackingRoutes from "../modules/delivery/routes/trackingRoutes";
 import customerBannerRoutes from "./customerBannerRoutes";
 import paymentRoutes from "./paymentRoutes";
 import supportChatRoutes from "./supportChatRoutes";
+import promotionRoutes from "./promotionRoutes";
 import {
   createOrder,
   getMyOrders,
@@ -121,6 +122,9 @@ router.use("/payment", paymentRoutes);
 
 // Support chat routes (admin/seller)
 router.use("/support", supportChatRoutes);
+
+// Seller promotion routes
+router.use("/promotions", promotionRoutes);
 
 // Seller dashboard routes
 router.use("/seller/dashboard", dashboardRoutes);

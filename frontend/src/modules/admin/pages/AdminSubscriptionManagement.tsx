@@ -1,4 +1,13 @@
+import { useEffect, useState } from "react";
 import { useSubscription } from "../../../context/SubscriptionContext";
+import {
+  listPromotionRequests,
+  approvePromotionRequest,
+  rejectPromotionRequest,
+  updatePromotionStatus,
+  PromotionRequest,
+} from "../../../services/api/promotionService";
+import { useToast } from "../../../context/ToastContext";
 
 export default function AdminSubscriptionManagement() {
   const {
@@ -9,6 +18,95 @@ export default function AdminSubscriptionManagement() {
     togglePlanActive,
     togglePlanFeature,
   } = useSubscription();
+  const { showToast } = useToast();
+
+  const [promotionRequests, setPromotionRequests] = useState<PromotionRequest[]>([]);
+  const [loadingPromotions, setLoadingPromotions] = useState(false);
+  const [actionId, setActionId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    setLoadingPromotions(true);
+    listPromotionRequests()
+      .then((data) => {
+        if (mounted) setPromotionRequests(data);
+      })
+      .catch((error) => {
+        console.error("Failed to load promotion requests", error);
+        showToast("Unable to fetch promotion requests", "error");
+      })
+      .finally(() => mounted && setLoadingPromotions(false));
+    return () => {
+      mounted = false;
+    };
+  }, [showToast]);
+
+  const updateLocalRequest = (updated: PromotionRequest) => {
+    setPromotionRequests((prev) =>
+      prev.map((req) => (req._id === updated._id ? updated : req))
+    );
+  };
+
+  const handleApprove = async (req: PromotionRequest) => {
+    setActionId(req._id);
+    try {
+      const updated = await approvePromotionRequest(req._id, {
+        order: req.order,
+        link: req.link,
+        title: req.title,
+      });
+      updateLocalRequest(updated);
+      showToast("Promotion approved and activated", "success");
+    } catch (error: any) {
+      console.error("Approve failed", error);
+      showToast(
+        error?.response?.data?.message || "Failed to approve promotion",
+        "error"
+      );
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const handleReject = async (id: string) => {
+    setActionId(id);
+    try {
+      const updated = await rejectPromotionRequest(id);
+      updateLocalRequest(updated);
+      showToast("Promotion rejected", "info");
+    } catch (error: any) {
+      console.error("Reject failed", error);
+      showToast(
+        error?.response?.data?.message || "Failed to reject promotion",
+        "error"
+      );
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const handleToggleActive = async (req: PromotionRequest) => {
+    setActionId(req._id);
+    try {
+      const updated = await updatePromotionStatus(req._id, {
+        isActive: !req.isActive,
+        order: req.order,
+      });
+      updateLocalRequest(updated);
+      showToast(
+        updated.isActive ? "Promotion activated" : "Promotion paused",
+        "success"
+      );
+    } catch (error: any) {
+      console.error("Toggle active failed", error);
+      showToast(
+        error?.response?.data?.message || "Failed to update promotion",
+        "error"
+      );
+    } finally {
+      setActionId(null);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-neutral-50 pb-8">
@@ -188,6 +286,114 @@ export default function AdminSubscriptionManagement() {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Promotion Requests from Sellers */}
+        <div className="bg-white rounded-xl border border-neutral-200 shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between px-4 sm:px-5 py-3 bg-neutral-50 border-b border-neutral-100">
+            <div>
+              <h2 className="text-sm font-bold text-neutral-800">
+                Promotion Banner Requests
+              </h2>
+              <p className="text-xs text-neutral-500 mt-0.5">
+                Approve seller banners to show on the user homepage
+              </p>
+            </div>
+            <span className="text-[11px] font-semibold text-neutral-500">
+              {promotionRequests.filter((p) => p.status === "Pending").length} pending
+            </span>
+          </div>
+
+          {loadingPromotions ? (
+            <div className="p-6 text-sm text-neutral-500">Loading requests...</div>
+          ) : promotionRequests.length === 0 ? (
+            <div className="p-6 text-sm text-neutral-500">
+              No promotion requests yet.
+            </div>
+          ) : (
+            <div className="divide-y divide-neutral-100">
+              {promotionRequests.map((req) => (
+                <div key={req._id} className="flex flex-col sm:flex-row sm:items-center gap-4 px-4 sm:px-5 py-4">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className="w-14 h-14 rounded-lg overflow-hidden bg-neutral-100 flex-shrink-0">
+                      <img src={req.image} alt={req.title} className="w-full h-full object-cover" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-neutral-800 line-clamp-1">{req.title}</p>
+                      <p className="text-[11px] text-neutral-500 line-clamp-1">
+                        {req.seller?.storeName || req.seller?.sellerName || "Seller"} • Link: {req.link || "auto store"}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1 text-[11px] text-neutral-500">
+                        <span className={`px-2 py-0.5 rounded-full font-semibold ${
+                          req.status === "Approved"
+                            ? "bg-emerald-50 text-emerald-700"
+                            : req.status === "Rejected"
+                              ? "bg-red-50 text-red-600"
+                              : "bg-amber-50 text-amber-700"
+                        }`}>
+                          {req.status}
+                        </span>
+                        {typeof req.order === "number" && (
+                          <span className="px-2 py-0.5 rounded-full bg-neutral-100 text-neutral-600 font-semibold">
+                            Order {req.order}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 sm:w-64">
+                    <input
+                      type="number"
+                      min={0}
+                      value={req.order ?? ""}
+                      onChange={(e) => {
+                        const value = e.target.value === "" ? 999 : Number(e.target.value);
+                        setPromotionRequests((prev) =>
+                          prev.map((p) =>
+                            p._id === req._id ? { ...p, order: value } : p
+                          )
+                        );
+                      }}
+                      className="w-20 border border-neutral-300 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500"
+                      placeholder="Order"
+                    />
+                    {req.status === "Pending" ? (
+                      <>
+                        <button
+                          onClick={() => handleApprove(req)}
+                          disabled={actionId === req._id}
+                          className={`px-3 py-2 rounded-lg text-sm font-semibold text-white ${
+                            actionId === req._id
+                              ? "bg-teal-300 cursor-not-allowed"
+                              : "bg-teal-600 hover:bg-teal-700"
+                          }`}>
+                          {actionId === req._id ? "Saving..." : "Approve"}
+                        </button>
+                        <button
+                          onClick={() => handleReject(req._id)}
+                          disabled={actionId === req._id}
+                          className="px-3 py-2 rounded-lg text-sm font-semibold text-red-600 bg-red-50 hover:bg-red-100">
+                          Reject
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => handleToggleActive(req)}
+                        disabled={actionId === req._id}
+                        className={`px-3 py-2 rounded-lg text-sm font-semibold ${
+                          req.isActive
+                            ? "text-neutral-700 bg-neutral-100 hover:bg-neutral-200"
+                            : "text-white bg-teal-600 hover:bg-teal-700"
+                        }`}>
+                        {req.isActive ? "Pause" : "Activate"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>

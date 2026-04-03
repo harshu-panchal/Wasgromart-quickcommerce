@@ -1,8 +1,24 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 
-export default function BannerUpload() {
-  const [image, setImage] = useState<string | null>(null);
+interface BannerUploadProps {
+  previewUrl?: string | null;
+  uploading?: boolean;
+  onFileSelected?: (file: File, previewUrl: string) => void;
+  onRemove?: () => void;
+}
+
+export default function BannerUpload({
+  previewUrl = null,
+  uploading = false,
+  onFileSelected,
+  onRemove,
+}: BannerUploadProps) {
+  const [image, setImage] = useState<string | null>(previewUrl);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setImage(previewUrl || null);
+  }, [previewUrl]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -13,6 +29,7 @@ export default function BannerUpload() {
       }
       const url = URL.createObjectURL(file);
       setImage(url);
+      onFileSelected?.(file, url);
     }
   };
 
@@ -21,6 +38,7 @@ export default function BannerUpload() {
       URL.revokeObjectURL(image);
     }
     setImage(null);
+    onRemove?.();
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -98,8 +116,9 @@ export default function BannerUpload() {
           <div className="absolute inset-0 bg-black/0 hover:bg-black/20 transition-all flex items-center justify-center opacity-0 hover:opacity-100">
             <button
                onClick={() => fileInputRef.current?.click()}
-               className="bg-white/90 text-teal-700 text-xs font-bold px-3 py-1.5 rounded-lg shadow-lg">
-               Change Image
+               disabled={uploading}
+               className={`bg-white/90 text-teal-700 text-xs font-bold px-3 py-1.5 rounded-lg shadow-lg ${uploading ? "opacity-60 cursor-not-allowed" : ""}`}>
+               {uploading ? "Uploading..." : "Change Image"}
             </button>
           </div>
         </div>

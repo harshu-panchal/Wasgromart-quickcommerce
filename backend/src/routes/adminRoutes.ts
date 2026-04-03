@@ -75,6 +75,9 @@ import * as promoStripController from "../modules/admin/controllers/adminPromoSt
 // Banner Controllers
 import * as bannerController from "../modules/admin/controllers/adminBannerController";
 
+// Promotion (Seller Banners) Controllers
+import * as promotionController from "../modules/admin/controllers/adminPromotionController";
+
 const router = Router();
 
 // All routes require admin authentication
@@ -387,5 +390,11 @@ router.get("/banners", bannerController.getAllBanners);
 router.post("/banners", bannerController.createBanner);
 router.put("/banners/:id", bannerController.updateBanner);
 router.delete("/banners/:id", bannerController.deleteBanner);
+
+// ==================== Promotion Banner Requests (Seller) ====================
+router.get("/promotion-requests", promotionController.listPromotionRequests);
+router.patch("/promotion-requests/:id/approve", promotionController.approvePromotionRequest);
+router.patch("/promotion-requests/:id/reject", promotionController.rejectPromotionRequest);
+router.patch("/promotion-requests/:id/status", promotionController.updatePromotionStatus);
 
 export default router;

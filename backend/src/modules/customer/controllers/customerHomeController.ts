@@ -9,6 +9,7 @@ import BestsellerCard from "../../../models/BestsellerCard";
 import LowestPricesProduct from "../../../models/LowestPricesProduct";
 import PromoStrip from "../../../models/PromoStrip";
 import Banner from "../../../models/Banner";
+import Promotion from "../../../models/Promotion";
 import mongoose from "mongoose";
 import { cache } from "../../../utils/cache";
 import { findSellersWithinRange } from "../../../utils/locationHelper";
@@ -622,10 +623,33 @@ export const getHomeContent = async (req: Request, res: Response) => {
       }
     }
 
-    // Fetch banners from database
+    // Fetch admin banners
     const banners = await Banner.find({ isActive: true })
       .sort({ order: 1 })
       .lean();
+
+    // Fetch approved seller promotion banners
+    const sellerPromotions = await Promotion.find({
+      status: "Approved",
+      isActive: true,
+    })
+      .populate("seller", "storeName sellerName")
+      .sort({ order: 1, approvedAt: -1, createdAt: -1 })
+      .lean();
+
+    const promoBanners = [...banners, ...sellerPromotions.map((p: any) => ({
+      _id: p._id?.toString(),
+      title: p.title || p.seller?.storeName || "Store promotion",
+      image: p.image,
+      link: p.link && p.link.trim().length > 0
+        ? p.link
+        : `/store/${p.seller?._id?.toString?.() || ""}`,
+      order: typeof p.order === "number" ? p.order : 999,
+    }))].sort((a: any, b: any) => {
+      const orderA = typeof a.order === "number" ? a.order : 999;
+      const orderB = typeof b.order === "number" ? b.order : 999;
+      return orderA - orderB;
+    });
 
     res.status(200).json({
       success: true,
@@ -637,8 +661,8 @@ export const getHomeContent = async (req: Request, res: Response) => {
         homeSections: dynamicSections,
         shops,
         promoBanners:
-          banners.length > 0
-            ? banners
+          promoBanners.length > 0
+            ? promoBanners
             : [
               {
                 _id: "1",

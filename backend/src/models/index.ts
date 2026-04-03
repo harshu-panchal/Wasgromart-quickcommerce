@@ -21,6 +21,7 @@ export { default as Notification } from "./Notification";
 export { default as AppSettings } from "./AppSettings";
 export { default as PromoStrip } from "./PromoStrip";
 export { default as Banner } from "./Banner";
+export { default as Promotion } from "./Promotion";
 
 // Support & Reference Models
 export { default as Address } from "./Address";
