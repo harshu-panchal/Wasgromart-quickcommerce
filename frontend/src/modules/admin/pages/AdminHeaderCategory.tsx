@@ -21,6 +21,7 @@ export default function AdminHeaderCategory() {
   const [selectedTheme, setSelectedTheme] = useState('all'); // This maps to slug
   const [selectedStatus, setSelectedStatus] = useState<'Published' | 'Unpublished'>('Published');
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [commissionRate, setCommissionRate] = useState<number>(0);
 
   // Icon search state
   const [iconSearchTerm, setIconSearchTerm] = useState('');
@@ -107,6 +108,7 @@ export default function AdminHeaderCategory() {
     setSelectedCategory('');
     setSelectedTheme('all');
     setSelectedStatus('Published');
+    setCommissionRate(0);
     setEditingId(null);
     setIconSearchTerm('');
   };
@@ -124,6 +126,7 @@ export default function AdminHeaderCategory() {
         slug: selectedTheme, // Use theme as slug for color mapping
         relatedCategory: selectedCategory,
         status: selectedStatus,
+        commissionRate,
       };
 
       if (editingId) {
@@ -150,6 +153,7 @@ export default function AdminHeaderCategory() {
     setSelectedCategory(category.relatedCategory || '');
     setSelectedTheme(category.slug);
     setSelectedStatus(category.status);
+    setCommissionRate(category.commissionRate ?? 0);
     setIconSearchTerm('');
   };
 
@@ -329,6 +333,25 @@ export default function AdminHeaderCategory() {
               </select>
             </div>
 
+            {/* Commission Rate */}
+            <div>
+              <label className="block text-sm font-medium text-neutral-700 mb-2">
+                Commission Rate (%):
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step={0.1}
+                value={commissionRate}
+                onChange={(e) => setCommissionRate(Number(e.target.value) || 0)}
+                className="w-full px-3 py-2 border border-neutral-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
+              />
+              <p className="text-xs text-neutral-500 mt-1">
+                Leave 0 to fall back to category/seller/global commission.
+              </p>
+            </div>
+
             {/* Status */}
             <div>
               <label className="block text-sm font-medium text-neutral-700 mb-2">
@@ -392,7 +415,7 @@ export default function AdminHeaderCategory() {
             <table className="w-full text-left border-collapse">
               <thead className="bg-neutral-50 sticky top-0 z-10">
                 <tr>
-                  {['Name', 'Icon', 'Theme', 'Status', 'Actions'].map((header) => (
+                  {['Name', 'Icon', 'Theme', 'Commission', 'Status', 'Actions'].map((header) => (
                     <th
                       key={header}
                       onClick={() => handleSort(header.toLowerCase())}
@@ -428,6 +451,11 @@ export default function AdminHeaderCategory() {
                           />
                           {category.slug}
                         </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-neutral-600">
+                        {typeof category.commissionRate === 'number'
+                          ? `${category.commissionRate}%`
+                          : '0%'}
                       </td>
                       <td className="px-4 py-3 text-sm">
                         <span
@@ -465,7 +493,7 @@ export default function AdminHeaderCategory() {
                   ))
                 ) : (
                   <tr>
-                    <td colSpan={5} className="px-6 py-10 text-center text-neutral-500">
+                    <td colSpan={6} className="px-6 py-10 text-center text-neutral-500">
                       <div className="flex flex-col items-center justify-center">
                         <svg className="w-10 h-10 text-neutral-300 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />

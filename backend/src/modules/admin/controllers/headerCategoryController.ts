@@ -47,6 +47,7 @@ export const createHeaderCategory = async (req: Request, res: Response) => {
       relatedCategory,
       status,
       order,
+      commissionRate,
     } = req.body;
 
     const categoryExists = await HeaderCategory.findOne({ slug });
@@ -64,6 +65,7 @@ export const createHeaderCategory = async (req: Request, res: Response) => {
       relatedCategory,
       status,
       order,
+      commissionRate,
     });
 
     return res.status(201).json(category);
@@ -88,6 +90,7 @@ export const updateHeaderCategory = async (req: Request, res: Response) => {
       relatedCategory,
       status,
       order,
+      commissionRate,
     } = req.body;
     const category = await HeaderCategory.findById(req.params.id);
 
@@ -109,6 +112,9 @@ export const updateHeaderCategory = async (req: Request, res: Response) => {
       category.relatedCategory = relatedCategory; // Allow clearing it (undefined or null or empty string)
       category.status = status || category.status;
       category.order = order !== undefined ? order : category.order;
+      if (commissionRate !== undefined && commissionRate !== null) {
+        category.commissionRate = commissionRate;
+      }
 
       const updatedCategory = await category.save();
       return res.json(updatedCategory);
