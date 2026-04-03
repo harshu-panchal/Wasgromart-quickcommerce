@@ -1,4 +1,5 @@
 ﻿import { Request, Response } from "express";
+import { Types } from "mongoose";
 import Promotion from "../../../models/Promotion";
 import { asyncHandler } from "../../../utils/asyncHandler";
 
@@ -35,7 +36,9 @@ export const approvePromotionRequest = asyncHandler(async (req: Request, res: Re
   promotion.status = "Approved";
   promotion.isActive = true;
   promotion.approvedAt = new Date();
-  promotion.reviewedBy = adminId;
+  if (adminId) {
+    promotion.reviewedBy = new Types.ObjectId(adminId);
+  }
   if (typeof order === "number") {
     promotion.order = order;
   }
@@ -69,7 +72,9 @@ export const rejectPromotionRequest = asyncHandler(async (req: Request, res: Res
   promotion.status = "Rejected";
   promotion.isActive = false;
   promotion.rejectionReason = reason || "";
-  promotion.reviewedBy = adminId;
+  if (adminId) {
+    promotion.reviewedBy = new Types.ObjectId(adminId);
+  }
   promotion.approvedAt = undefined;
 
   await promotion.save();
