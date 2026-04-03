@@ -5,6 +5,7 @@ import {
   getSupportMessages,
   listSupportConversations,
   markConversationRead,
+  deleteSupportConversation,
 } from "../services/supportChatService";
 import { Server as SocketIOServer } from "socket.io";
 
@@ -76,6 +77,20 @@ const emitConversationUpdate = (
     "support:conversation-update",
     conversationPayload
   );
+};
+
+const emitConversationDeleted = (
+  io: SocketIOServer | undefined,
+  payload: {
+    sellerId: string;
+  }
+) => {
+  if (!io) return;
+  const { sellerId } = payload;
+  io.to("support-admin").emit("support:conversation-deleted", { sellerId });
+  io.to(`support-seller-${sellerId}`).emit("support:conversation-deleted", {
+    sellerId,
+  });
 };
 
 export const getConversations = asyncHandler(
@@ -221,3 +236,41 @@ export const markRead = asyncHandler(async (req: Request, res: Response) => {
     message: "Conversation marked as read",
   });
 });
+
+export const deleteConversation = asyncHandler(
+  async (req: Request, res: Response) => {
+    const user = req.user;
+    const { sellerId } = req.params;
+
+    if (!sellerId) {
+      return res.status(400).json({
+        success: false,
+        message: "Seller id is required",
+      });
+    }
+
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    if (user.userType === "Seller" && user.userId !== sellerId) {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied",
+      });
+    }
+
+    await deleteSupportConversation(sellerId);
+
+    const io = req.app.get("io") as SocketIOServer | undefined;
+    emitConversationDeleted(io, { sellerId });
+
+    res.status(200).json({
+      success: true,
+      message: "Conversation deleted",
+    });
+  }
+);

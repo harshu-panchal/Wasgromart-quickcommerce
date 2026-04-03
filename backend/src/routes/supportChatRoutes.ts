@@ -5,6 +5,7 @@ import {
   getConversationMessages,
   markRead,
   sendMessage,
+  deleteConversation,
 } from "../modules/chat/controllers/supportChatController";
 
 const router = Router();
@@ -29,6 +30,11 @@ router.post(
   "/conversations/:sellerId/read",
   requireUserType("Admin", "Seller"),
   markRead
+);
+router.delete(
+  "/conversations/:sellerId",
+  requireUserType("Admin", "Seller"),
+  deleteConversation
 );
 
 export default router;

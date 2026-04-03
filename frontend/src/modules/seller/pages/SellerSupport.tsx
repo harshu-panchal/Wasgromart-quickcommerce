@@ -6,6 +6,7 @@ import {
   fetchSupportMessages,
   sendSupportMessage,
   SupportMessageApi,
+  deleteSupportConversation,
 } from "../../../services/api/supportChatService";
 
 interface UiMessage {
@@ -24,6 +25,8 @@ export default function SellerSupport() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [input, setInput] = useState("");
+  const [deleting, setDeleting] = useState(false);
+  const [unreadForAdmin, setUnreadForAdmin] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const formatTime = useMemo(
@@ -61,6 +64,7 @@ export default function SellerSupport() {
         const data = await fetchSupportMessages(sellerId, 100);
         const mapped = (data?.messages || []).map(mapMessage);
         setMessages(mapped);
+        setUnreadForAdmin(data?.conversation?.unreadForAdmin ?? 0);
       } catch (err: any) {
         setError(err?.response?.data?.message || "Failed to load messages");
       } finally {
@@ -88,13 +92,26 @@ export default function SellerSupport() {
     };
 
     socket.on("support:message", handleMessage);
+    socket.on("support:conversation-update", (payload: any) => {
+      if (payload?.sellerId !== sellerId) return;
+      if (typeof payload?.unreadForAdmin === "number") {
+        setUnreadForAdmin(payload.unreadForAdmin);
+      }
+    });
     socket.on("support:error", (payload: any) => {
       if (payload?.message) setError(payload.message);
+    });
+    socket.on("support:conversation-deleted", (payload: any) => {
+      if (payload?.sellerId === sellerId) {
+        setMessages([]);
+      }
     });
 
     return () => {
       socket.off("support:message", handleMessage);
+      socket.off("support:conversation-update");
       socket.off("support:error");
+      socket.off("support:conversation-deleted");
     };
   }, [socket, sellerId, formatTime]);
 
@@ -121,6 +138,25 @@ export default function SellerSupport() {
       .catch((err: any) => {
         setError(err?.response?.data?.message || "Failed to send message");
       });
+  };
+
+  const handleDeleteConversation = async () => {
+    if (!sellerId || deleting) return;
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this conversation? This cannot be undone."
+    );
+    if (!confirmed) return;
+
+    setDeleting(true);
+    setError("");
+    try {
+      await deleteSupportConversation(sellerId);
+      setMessages([]);
+    } catch (err: any) {
+      setError(err?.response?.data?.message || "Failed to delete conversation");
+    } finally {
+      setDeleting(false);
+    }
   };
 
   return (
@@ -170,6 +206,13 @@ export default function SellerSupport() {
               <div className="text-[11px] font-medium text-teal-600 bg-teal-50 px-2 py-0.5 rounded-full">
                 Average response: 2 mins
               </div>
+              <button
+                type="button"
+                onClick={handleDeleteConversation}
+                disabled={deleting}
+                className="text-[11px] font-semibold text-rose-600 bg-rose-50 px-2 py-0.5 rounded-full hover:bg-rose-100 disabled:opacity-50">
+                {deleting ? "Deleting..." : "Delete Chat"}
+              </button>
             </div>
 
             {/* Messages Area */}
@@ -205,32 +248,58 @@ export default function SellerSupport() {
                   </p>
                 </div>
               ) : (
-                messages.map((msg) => (
-                  <div
-                    key={msg.id}
-                    className={`flex ${
-                      msg.sender === "admin"
-                        ? "justify-start"
-                        : "justify-end"
-                    }`}>
+                messages.map((msg, index) => {
+                  const isMine = msg.sender === "seller";
+                  const isLastMine =
+                    isMine &&
+                    index ===
+                      messages
+                        .map((m) => m.sender)
+                        .lastIndexOf("seller");
+                  const showReadTick = isLastMine && unreadForAdmin === 0;
+
+                  return (
                     <div
-                      className={`flex flex-col ${
-                        msg.sender === "admin" ? "items-start" : "items-end"
-                      } max-w-[85%] sm:max-w-[70%]`}>
+                      key={msg.id}
+                      className={`flex ${
+                        msg.sender === "admin"
+                          ? "justify-start"
+                          : "justify-end"
+                      }`}>
                       <div
-                        className={`px-4 py-3 rounded-2xl text-sm ${
-                          msg.sender === "admin"
-                            ? "bg-white text-neutral-800 shadow-sm border border-neutral-100 rounded-tl-none"
-                            : "bg-teal-600 text-white rounded-br-none shadow-md shadow-teal-600/20"
-                        }`}>
-                        {msg.text}
+                        className={`flex flex-col ${
+                          msg.sender === "admin" ? "items-start" : "items-end"
+                        } max-w-[85%] sm:max-w-[70%]`}>
+                        <div
+                          className={`px-4 py-3 rounded-2xl text-sm ${
+                            msg.sender === "admin"
+                              ? "bg-white text-neutral-800 shadow-sm border border-neutral-100 rounded-tl-none"
+                              : "bg-teal-600 text-white rounded-br-none shadow-md shadow-teal-600/20"
+                          }`}>
+                          {msg.text}
+                        </div>
+                        <span className="text-[10px] text-neutral-400 mt-1 px-1 flex items-center gap-1">
+                          {msg.timestamp}
+                          {showReadTick ? (
+                            <span className="inline-flex items-center">
+                              <svg
+                                className="w-3 h-3 text-blue-500"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round">
+                                <polyline points="20 6 9 17 4 12" />
+                                <polyline points="23 6 12 17 10 15" />
+                              </svg>
+                            </span>
+                          ) : null}
+                        </span>
                       </div>
-                      <span className="text-[10px] text-neutral-400 mt-1 px-1">
-                        {msg.timestamp}
-                      </span>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
 

@@ -130,3 +130,15 @@ export const markConversationRead = async (
 
   return conversation;
 };
+
+export const deleteSupportConversation = async (sellerId: string) => {
+  const conversation = await SupportConversation.findOne({ seller: sellerId });
+  if (!conversation) {
+    return { deleted: false };
+  }
+
+  await SupportMessage.deleteMany({ conversation: conversation._id });
+  await SupportConversation.deleteOne({ _id: conversation._id });
+
+  return { deleted: true };
+};

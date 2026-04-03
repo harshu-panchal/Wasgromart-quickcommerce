@@ -7,6 +7,7 @@ import {
   sendSupportMessage,
   SupportConversationApi,
   SupportMessageApi,
+  deleteSupportConversation,
 } from "../../../services/api/supportChatService";
 import api from "../../../services/api/config";
 
@@ -27,6 +28,7 @@ interface UiConversation {
   lastMessageAt?: string;
   lastMessageBy?: "Seller" | "Admin";
   unreadForAdmin: number;
+  unreadForSeller: number;
 }
 
 export default function AdminSupportInbox() {
@@ -63,6 +65,7 @@ export default function AdminSupportInbox() {
     lastMessageAt: conv.lastMessageAt,
     lastMessageBy: conv.lastMessageBy,
     unreadForAdmin: conv.unreadForAdmin ?? 0,
+    unreadForSeller: conv.unreadForSeller ?? 0,
   });
 
   const mapMessage = (msg: SupportMessageApi | any): UiMessage => ({
@@ -110,6 +113,7 @@ export default function AdminSupportInbox() {
             lastMessageAt: undefined,
             lastMessageBy: undefined,
             unreadForAdmin: 0,
+            unreadForSeller: 0,
           };
         });
 
@@ -171,6 +175,7 @@ export default function AdminSupportInbox() {
                 ? {
                     ...conv,
                     unreadForAdmin: data.conversation?.unreadForAdmin ?? 0,
+                    unreadForSeller: data.conversation?.unreadForSeller ?? 0,
                     lastMessage: data.conversation?.lastMessage,
                     lastMessageAt: data.conversation?.lastMessageAt,
                     lastMessageBy: data.conversation?.lastMessageBy,
@@ -212,14 +217,16 @@ export default function AdminSupportInbox() {
         if (existing) {
           const updated = prev.map((c) =>
             c.sellerId === payload.sellerId
-              ? {
-                  ...c,
-                  lastMessage: payload.lastMessage,
-                  lastMessageAt: payload.lastMessageAt,
-                  lastMessageBy: payload.lastMessageBy,
-                  unreadForAdmin: payload.unreadForAdmin ?? c.unreadForAdmin,
-                }
-              : c
+                ? {
+                    ...c,
+                    lastMessage: payload.lastMessage,
+                    lastMessageAt: payload.lastMessageAt,
+                    lastMessageBy: payload.lastMessageBy,
+                    unreadForAdmin: payload.unreadForAdmin ?? c.unreadForAdmin,
+                    unreadForSeller:
+                      payload.unreadForSeller ?? c.unreadForSeller,
+                  }
+                : c
           );
           updated.sort((a, b) => {
             const aTime = a.lastMessageAt
@@ -240,6 +247,7 @@ export default function AdminSupportInbox() {
           lastMessageAt: payload.lastMessageAt,
           lastMessageBy: payload.lastMessageBy,
           unreadForAdmin: payload.unreadForAdmin ?? 0,
+          unreadForSeller: payload.unreadForSeller ?? 0,
         };
         return [fresh, ...prev];
       });
@@ -249,13 +257,26 @@ export default function AdminSupportInbox() {
       if (payload?.message) setError(payload.message);
     };
 
+    const handleConversationDeleted = (payload: any) => {
+      if (!payload?.sellerId) return;
+      setConversations((prev) =>
+        prev.filter((conv) => conv.sellerId !== payload.sellerId)
+      );
+      if (payload.sellerId === selectedSellerId) {
+        setSelectedSellerId(null);
+        setMessages([]);
+      }
+    };
+
     socket.on("support:message", handleMessage);
     socket.on("support:conversation-update", handleConversationUpdate);
+    socket.on("support:conversation-deleted", handleConversationDeleted);
     socket.on("support:error", handleError);
 
     return () => {
       socket.off("support:message", handleMessage);
       socket.off("support:conversation-update", handleConversationUpdate);
+      socket.off("support:conversation-deleted", handleConversationDeleted);
       socket.off("support:error", handleError);
     };
   }, [socket, selectedSellerId, formatTime]);
@@ -287,6 +308,26 @@ export default function AdminSupportInbox() {
       .catch((err: any) => {
         setError(err?.response?.data?.message || "Failed to send message");
       });
+  };
+
+  const handleDeleteConversation = async () => {
+    if (!selectedConversation) return;
+    const confirmed = window.confirm(
+      "Are you sure you want to delete this conversation? This cannot be undone."
+    );
+    if (!confirmed) return;
+
+    setError("");
+    try {
+      await deleteSupportConversation(selectedConversation.sellerId);
+      setConversations((prev) =>
+        prev.filter((conv) => conv.sellerId !== selectedConversation.sellerId)
+      );
+      setSelectedSellerId(null);
+      setMessages([]);
+    } catch (err: any) {
+      setError(err?.response?.data?.message || "Failed to delete conversation");
+    }
   };
 
   return (
@@ -374,6 +415,12 @@ export default function AdminSupportInbox() {
                     </span>
                   </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={handleDeleteConversation}
+                  className="text-[11px] font-semibold text-rose-600 bg-rose-50 px-2 py-1 rounded-full hover:bg-rose-100">
+                  Delete Chat
+                </button>
               </div>
 
               {/* Message List */}
@@ -403,32 +450,60 @@ export default function AdminSupportInbox() {
                     </p>
                   </div>
                 ) : (
-                  messages.map((msg) => (
-                    <div
-                      key={msg.id}
-                      className={`flex ${
-                        msg.sender === "admin"
-                          ? "justify-end"
-                          : "justify-start"
-                      }`}>
+                  messages.map((msg, index) => {
+                    const isMine = msg.sender === "admin";
+                    const isLastMine =
+                      isMine &&
+                      index ===
+                        messages
+                          .map((m) => m.sender)
+                          .lastIndexOf("admin");
+                    const showReadTick =
+                      isLastMine &&
+                      (selectedConversation?.unreadForSeller ?? 0) === 0;
+
+                    return (
                       <div
-                        className={`max-w-[70%] group relative px-4 py-2.5 rounded-2xl shadow-sm text-sm ${
+                        key={msg.id}
+                        className={`flex ${
                           msg.sender === "admin"
-                            ? "bg-teal-600 text-white rounded-br-none"
-                            : "bg-white text-neutral-800 border border-neutral-200 rounded-tl-none"
+                            ? "justify-end"
+                            : "justify-start"
                         }`}>
-                        <p>{msg.text}</p>
-                        <span
-                          className={`text-[10px] mt-1 block opacity-70 ${
+                        <div
+                          className={`max-w-[70%] group relative px-4 py-2.5 rounded-2xl shadow-sm text-sm ${
                             msg.sender === "admin"
-                              ? "text-teal-50"
-                              : "text-neutral-500"
+                              ? "bg-teal-600 text-white rounded-br-none"
+                              : "bg-white text-neutral-800 border border-neutral-200 rounded-tl-none"
                           }`}>
-                          {msg.timestamp}
-                        </span>
+                          <p>{msg.text}</p>
+                          <span
+                            className={`text-[10px] mt-1 flex items-center gap-1 opacity-70 ${
+                              msg.sender === "admin"
+                                ? "text-teal-50"
+                                : "text-neutral-500"
+                            }`}>
+                            {msg.timestamp}
+                            {showReadTick ? (
+                              <span className="inline-flex items-center">
+                                <svg
+                                  className="w-3 h-3 text-blue-200"
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round">
+                                  <polyline points="20 6 9 17 4 12" />
+                                  <polyline points="23 6 12 17 10 15" />
+                                </svg>
+                              </span>
+                            ) : null}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
 

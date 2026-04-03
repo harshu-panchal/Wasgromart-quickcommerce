@@ -57,3 +57,8 @@ export const markSupportConversationRead = async (sellerId: string) => {
   const response = await api.post(`/support/conversations/${sellerId}/read`);
   return response.data;
 };
+
+export const deleteSupportConversation = async (sellerId: string) => {
+  const response = await api.delete(`/support/conversations/${sellerId}`);
+  return response.data;
+};
