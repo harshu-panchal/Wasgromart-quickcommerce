@@ -35,6 +35,7 @@ import customerTrackingRoutes from "../modules/customer/routes/trackingRoutes";
 import deliveryTrackingRoutes from "../modules/delivery/routes/trackingRoutes";
 import customerBannerRoutes from "./customerBannerRoutes";
 import paymentRoutes from "./paymentRoutes";
+import supportChatRoutes from "./supportChatRoutes";
 import {
   createOrder,
   getMyOrders,
@@ -117,6 +118,9 @@ router.use("/customer", customerRoutes);
 
 // Payment routes
 router.use("/payment", paymentRoutes);
+
+// Support chat routes (admin/seller)
+router.use("/support", supportChatRoutes);
 
 // Seller dashboard routes
 router.use("/seller/dashboard", dashboardRoutes);

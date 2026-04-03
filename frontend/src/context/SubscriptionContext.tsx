@@ -1,4 +1,6 @@
-import { createContext, useContext, useState, ReactNode, useCallback } from "react";
+import { createContext, useContext, useState, ReactNode, useCallback, useEffect } from "react";
+import api from "../services/api/config";
+import { useAuth } from "./AuthContext";
 
 // ── Types ──────────────────────────────────────────────────────────────
 export interface SubscriptionFeature {
@@ -162,6 +164,7 @@ const SubscriptionContext = createContext<SubscriptionContextType | undefined>(u
 const CURRENT_SELLER_RECORD_ID = "rec_current_seller";
 
 export function SubscriptionProvider({ children }: { children: ReactNode }) {
+  const { isAuthenticated, user } = useAuth();
   const [subscriptionEnabled, setSubscriptionEnabled] = useState(true);
   const [plans, setPlans] = useState<SubscriptionPlan[]>(defaultPlans);
   const [currentSubscription, setCurrentSubscription] = useState<CurrentSubscription | null>(null);
@@ -171,6 +174,55 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
   const [chatMessages, setChatMessages] = useState<Record<string, ChatMessage[]>>(
     initialChatMessages
   );
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchSellers = async () => {
+      if (!isAuthenticated || user?.userType !== "Admin") return;
+
+      try {
+        const response = await api.get("/sellers");
+        const sellers = response.data?.data || [];
+
+        if (!Array.isArray(sellers) || sellers.length === 0) return;
+
+        const formatDate = (value?: string) => {
+          if (!value) return "";
+          const date = new Date(value);
+          if (Number.isNaN(date.getTime())) return "";
+          return date.toLocaleDateString("en-IN", {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          });
+        };
+
+        const mapped: SellerSubscriptionRecord[] = sellers.map((seller: any) => ({
+          id: seller._id || seller.id,
+          sellerName: seller.sellerName || seller.storeName || "Seller",
+          planId: "support",
+          planName: "Support",
+          status: seller.status === "Rejected" ? "Expired" : "Active",
+          startDate: formatDate(seller.createdAt),
+          expiryDate: formatDate(seller.updatedAt),
+        }));
+
+        if (isMounted) {
+          setSellerSubscriptions(mapped);
+        }
+      } catch (error) {
+        // Keep existing mock data if API fails
+        console.warn("Failed to fetch sellers list for support inbox:", error);
+      }
+    };
+
+    fetchSellers();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthenticated, user?.userType]);
 
   const toggleSubscriptionSystem = useCallback(() => {
     setSubscriptionEnabled((prev) => !prev);

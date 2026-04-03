@@ -1,12 +1,16 @@
 
 
 import dotenv from "dotenv";
+import dns from "dns";
 
 // Load environment variables as early as possible
 dotenv.config();
 
 console.log('--- SERVER STARTING ---');
 console.log('RAZORPAY_KEY_ID exists:', !!process.env.RAZORPAY_KEY_ID);
+
+// Force public DNS resolvers for SRV lookups (MongoDB Atlas)
+dns.setServers(["8.8.8.8", "8.8.4.4", "1.1.1.1"]);
 
 import express, { Application, Request, Response } from "express";
 import { createServer } from "http";

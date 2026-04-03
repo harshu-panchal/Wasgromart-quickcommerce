@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { handleOrderAcceptance, handleOrderRejection } from '../services/orderNotificationService';
 import Order from '../models/Order';
 import DeliveryTracking from '../models/DeliveryTracking';
+import { createSupportMessage } from '../modules/chat/services/supportChatService';
 
 // In-memory cache for order destinations (lat, lng) to avoid DB reads on every update
 // Key: orderId, Value: { latitude, longitude }
@@ -137,6 +138,114 @@ export const initializeSocket = (httpServer: HttpServer) => {
 
     io.on('connection', (socket) => {
         console.log('✅ Socket connected:', socket.id, 'User:', (socket as any).user?.userId || 'Unauthenticated');
+
+        // Auto-join support rooms based on user type
+        const socketUser = (socket as any).user;
+        if (socketUser?.userType === 'Seller') {
+            socket.join(`support-seller-${socketUser.userId}`);
+        } else if (socketUser?.userType === 'Admin') {
+            socket.join('support-admin');
+        }
+
+        // Support chat: join a specific seller room (Admin) or own room (Seller)
+        socket.on('support:join', (data: { sellerId?: string }) => {
+            const user = (socket as any).user;
+            if (!user) {
+                socket.emit('support:error', { message: 'Authentication required' });
+                return;
+            }
+
+            const sellerId =
+                user.userType === 'Seller' ? user.userId : data?.sellerId;
+
+            if (!sellerId) {
+                socket.emit('support:error', { message: 'Seller id is required' });
+                return;
+            }
+
+            socket.join(`support-seller-${sellerId}`);
+            socket.emit('support:joined', { sellerId });
+        });
+
+        // Support chat: send message
+        socket.on(
+            'support:message',
+            async (
+                data: { sellerId?: string; text?: string },
+                callback?: (response: { success: boolean; message: string; data?: any }) => void
+            ) => {
+                const user = (socket as any).user;
+                if (!user) {
+                    const response = { success: false, message: 'Authentication required' };
+                    if (callback) callback(response);
+                    socket.emit('support:error', response);
+                    return;
+                }
+
+                const senderType = user.userType === 'Seller' ? 'Seller' : 'Admin';
+                const sellerId =
+                    senderType === 'Seller' ? user.userId : data?.sellerId;
+
+                if (!sellerId) {
+                    const response = { success: false, message: 'Seller id is required' };
+                    if (callback) callback(response);
+                    socket.emit('support:error', response);
+                    return;
+                }
+
+                if (!data?.text || typeof data.text !== 'string') {
+                    const response = { success: false, message: 'Message text is required' };
+                    if (callback) callback(response);
+                    socket.emit('support:error', response);
+                    return;
+                }
+
+                try {
+                    const { conversation, message } = await createSupportMessage({
+                        sellerId,
+                        senderType,
+                        senderId: user.userId,
+                        text: data.text,
+                    });
+
+                    const messagePayload = {
+                        id: message._id,
+                        conversationId: conversation?._id,
+                        sellerId,
+                        senderType: message.senderType,
+                        senderId: message.senderId,
+                        text: message.text,
+                        createdAt: message.createdAt,
+                        updatedAt: message.updatedAt,
+                    };
+
+                    const conversationPayload = {
+                        id: conversation?._id,
+                        sellerId,
+                        lastMessage: conversation?.lastMessage || message.text,
+                        lastMessageAt: conversation?.lastMessageAt || message.createdAt,
+                        lastMessageBy: conversation?.lastMessageBy || message.senderType,
+                        unreadForAdmin: conversation?.unreadForAdmin ?? 0,
+                        unreadForSeller: conversation?.unreadForSeller ?? 0,
+                        isOpen: conversation?.isOpen ?? true,
+                    };
+
+                    io.to('support-admin').emit('support:conversation-update', conversationPayload);
+                    io.to(`support-seller-${sellerId}`).emit('support:conversation-update', conversationPayload);
+                    io.to('support-admin').emit('support:message', messagePayload);
+                    io.to(`support-seller-${sellerId}`).emit('support:message', messagePayload);
+
+                    if (callback) {
+                        callback({ success: true, message: 'Message sent', data: messagePayload });
+                    }
+                } catch (error: any) {
+                    console.error('Support chat error:', error);
+                    const response = { success: false, message: error.message || 'Failed to send message' };
+                    if (callback) callback(response);
+                    socket.emit('support:error', response);
+                }
+            }
+        );
 
         // Customer subscribes to order tracking
         socket.on('track-order', async (orderId: string) => {
