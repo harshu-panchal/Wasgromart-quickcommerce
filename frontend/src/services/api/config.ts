@@ -38,7 +38,9 @@ api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const token = localStorage.getItem("authToken");
     if (token && config.headers) {
-      config.headers.Authorization = `Bearer ${token}`;
+      // Always send token in proper Bearer format, even if stored with prefix
+      const sanitizedToken = token.replace(/^Bearer\\s+/i, "");
+      config.headers.Authorization = `Bearer ${sanitizedToken}`;
     }
     return config;
   },

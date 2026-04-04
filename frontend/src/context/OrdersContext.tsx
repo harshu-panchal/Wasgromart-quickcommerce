@@ -82,7 +82,11 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Ensure userType is set in user object if missing (for backward compatibility)
     if (isAuthenticated && user && !user.userType) {
-      const updatedUser = { ...user, userType: "Customer" as const };
+      const inferredType =
+        typeof user.role === "string" && user.role.toLowerCase() === "customer"
+          ? "Customer"
+          : "Customer";
+      const updatedUser = { ...user, userType: inferredType as const };
       updateUser(updatedUser);
     }
 
@@ -97,6 +101,13 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
 
   const addOrder = async (order: Order): Promise<string | undefined> => {
     try {
+      const roleValue =
+        user?.userType ||
+        (typeof user?.role === "string" ? user.role : user?.role?.name);
+      if (!isAuthenticated || (roleValue?.toLowerCase?.() ?? "") !== "customer") {
+        throw new Error("Please sign in as a customer to place an order");
+      }
+
       // Construct payload
       const payload = {
         address: {
