@@ -14,6 +14,7 @@ import {
 } from "../../../services/api/headerCategoryService";
 import LocationPickerMap from "../../../components/LocationPickerMap";
 import { useEffect } from "react";
+import logo from "@assets/wasgromart-black-text-removebg-preview.png";
 
 export default function SellerSignUp() {
   const navigate = useNavigate();
@@ -296,7 +297,7 @@ export default function SellerSignUp() {
             <div className="relative mb-2 group">
               <div className="absolute inset-0 bg-white/20 rounded-full blur-xl transform group-hover:scale-110 transition-transform duration-500" />
               <img
-                src="/assets/wasgromart-black-text-removebg-preview.png"
+                src={logo}
                 alt="Wasgro mart"
                 className="h-40 w-auto object-contain relative z-10 drop-shadow-lg transform hover:scale-105 transition-transform duration-300"
               />

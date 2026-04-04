@@ -5,6 +5,7 @@ import FloatingCartPill from './FloatingCartPill';
 import { useLocation as useLocationContext } from '../hooks/useLocation';
 import LocationPermissionRequest from './LocationPermissionRequest';
 import { useThemeContext } from '../context/ThemeContext';
+import logo from '@assets/wasgromart-black-text-removebg-preview.png';
 
 interface AppLayoutProps {
   children: ReactNode;
@@ -289,7 +290,7 @@ export default function AppLayout({ children }: AppLayoutProps) {
                   {/* Logo - top right */}
                   <div className="flex-shrink-0">
                     <img
-                      src="/assets/wasgromart-black-text-removebg-preview.png"
+                      src={logo}
                       alt="Wasgro-mart Logo"
                       className="h-20 w-auto object-contain md:h-24 -my-4 md:-my-6 relative z-10"
                       style={{ minWidth: '70px' }}

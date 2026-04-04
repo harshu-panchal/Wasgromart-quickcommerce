@@ -8,6 +8,7 @@ import {
   Category as ApiCategory,
 } from "../../services/api/customerProductService";
 import { useLocation as useLocationContext } from "../../hooks/useLocation";
+import logo from "@assets/wasgromart-black-text-removebg-preview.png";
 
 export default function CategoryPage() {
   const { id } = useParams<{ id: string }>();
@@ -377,10 +378,10 @@ export default function CategoryPage() {
               {/* Logo - top right */}
               <div className="flex-shrink-0">
                 <img
-                  src="/assets/wasgromart-black-text-removebg-preview.png"
+                  src={logo}
                   alt="Wasgro-mart Logo"
                   className="h-20 w-auto object-contain md:h-24 -my-4 md:-my-6 relative z-10"
-                  style={{ minWidth: '70px' }}
+                  style={{ minWidth: "70px" }}
                 />
               </div>
             </div>
