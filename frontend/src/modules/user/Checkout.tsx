@@ -2350,7 +2350,7 @@ export default function Checkout() {
             customerDetails={{
               name: user.name || "Customer",
               email: user.email || "",
-              phone: user.phone || "",
+              phone: user.phone || user.mobile || "",
             }}
             onSuccess={(paymentId) => {
               setShowRazorpayCheckout(false);

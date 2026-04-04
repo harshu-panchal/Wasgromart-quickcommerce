@@ -75,7 +75,7 @@ export const verifyPaymentSignature = (
     razorpaySignature: string
 ): boolean => {
     try {
-        const keySecret = process.env.RAZORPAY_KEY_SECRET;
+        const keySecret = process.env.RAZORPAY_KEY_SECRET?.trim();
 
         if (!keySecret) {
             throw new Error('Razorpay key secret not configured');
@@ -103,8 +103,24 @@ export const capturePayment = async (
     razorpayPaymentId: string,
     razorpaySignature: string
 ) => {
-    const session = await mongoose.startSession();
-    session.startTransaction();
+    let session: mongoose.ClientSession | null = null;
+    let hasTransaction = false;
+
+    // Transactions require a replica set. Fall back safely if not supported.
+    try {
+        session = await mongoose.startSession();
+        try {
+            session.startTransaction();
+            hasTransaction = true;
+        } catch (txError) {
+            console.warn('MongoDB transactions not supported. Proceeding without transaction.');
+            hasTransaction = false;
+        }
+    } catch (sessionError) {
+        console.warn('MongoDB session not available. Proceeding without transaction.');
+        session = null;
+        hasTransaction = false;
+    }
 
     try {
         // Verify signature
@@ -119,7 +135,9 @@ export const capturePayment = async (
         }
 
         // Find order
-        const order = await Order.findById(orderId).session(session);
+        const order = session
+            ? await Order.findById(orderId).session(session)
+            : await Order.findById(orderId);
         if (!order) {
             throw new Error('Order not found');
         }
@@ -143,7 +161,11 @@ export const capturePayment = async (
             },
         });
 
-        await payment.save({ session });
+        if (session) {
+            await payment.save({ session });
+        } else {
+            await payment.save();
+        }
 
         // Update Platform Wallet tracking
         try {
@@ -169,7 +191,11 @@ export const capturePayment = async (
         if (order.status === 'Pending') {
             order.status = 'Received';
         }
-        await order.save({ session });
+        if (session) {
+            await order.save({ session });
+        } else {
+            await order.save();
+        }
 
         // Trigger creation of Pending commissions
         try {
@@ -179,15 +205,9 @@ export const capturePayment = async (
             console.error("Failed to create pending commissions after payment:", commError);
         }
 
-        // Trigger creation of Pending commissions
-        // Note: We do this inside the transaction or right after. Ideally inside but createPendingCommissions might not support session passing yet.
-        // For safety/simplicity in this refactor step, we'll do it post-commit or ensure createPendingCommissions is safe.
-        // Given existing architecture, let's do it part of the flow but loosely coupled if needed.
-        // Actually, for data integrity, let's run it.
-        const { createPendingCommissions } = await import('./commissionService');
-        await createPendingCommissions(orderId); // This creates them as 'Pending'
-
-        await session.commitTransaction();
+        if (hasTransaction && session) {
+            await session.commitTransaction();
+        }
 
         return {
             success: true,
@@ -198,14 +218,16 @@ export const capturePayment = async (
             },
         };
     } catch (error: any) {
-        await session.abortTransaction();
+        if (hasTransaction && session) {
+            await session.abortTransaction();
+        }
         console.error('Error capturing payment:', error);
         return {
             success: false,
             message: error.message || 'Failed to capture payment',
         };
     } finally {
-        session.endSession();
+        if (session) session.endSession();
     }
 };
 
@@ -270,24 +292,32 @@ export const handleWebhook = async (
     signature: string
 ): Promise<{ success: boolean; message: string }> => {
     try {
-        const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
+        const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET?.trim();
 
         if (!webhookSecret) {
             throw new Error('Razorpay webhook secret not configured');
         }
 
+        const payloadString = Buffer.isBuffer(body)
+            ? body.toString('utf8')
+            : (typeof body === 'string' ? body : JSON.stringify(body));
+
         // Verify webhook signature
         const expectedSignature = crypto
             .createHmac('sha256', webhookSecret)
-            .update(JSON.stringify(body))
+            .update(payloadString)
             .digest('hex');
 
         if (expectedSignature !== signature) {
             throw new Error('Invalid webhook signature');
         }
 
-        const event = body.event;
-        const payload = body.payload.payment.entity;
+        const parsedBody = Buffer.isBuffer(body) || typeof body === 'string'
+            ? JSON.parse(payloadString)
+            : body;
+
+        const event = parsedBody.event;
+        const payload = parsedBody.payload.payment.entity;
 
         // Handle different events
         switch (event) {
@@ -303,7 +333,7 @@ export const handleWebhook = async (
 
             case 'refund.created':
                 // Refund was created
-                await handleRefundCreated(body.payload.refund.entity);
+                await handleRefundCreated(parsedBody.payload.refund.entity);
                 break;
 
             default:

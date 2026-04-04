@@ -117,7 +117,8 @@ router.post('/webhook', async (req: Request, res: Response) => {
             });
         }
 
-        const result = await handleWebhook(req.body, signature);
+        const rawBody = (req as any).rawBody ?? req.body;
+        const result = await handleWebhook(rawBody, signature);
 
         if (!result.success) {
             return res.status(400).json(result);

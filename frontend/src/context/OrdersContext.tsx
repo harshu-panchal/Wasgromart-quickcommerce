@@ -82,11 +82,7 @@ export function OrdersProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     // Ensure userType is set in user object if missing (for backward compatibility)
     if (isAuthenticated && user && !user.userType) {
-      const inferredType =
-        typeof user.role === "string" && user.role.toLowerCase() === "customer"
-          ? "Customer"
-          : "Customer";
-      const updatedUser = { ...user, userType: inferredType as const };
+      const updatedUser = { ...user, userType: "Customer" as const };
       updateUser(updatedUser);
     }
 

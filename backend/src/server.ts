@@ -96,7 +96,16 @@ const corsOptions = {
 // Apply CORS middleware - This handles everything including preflight
 app.use(cors(corsOptions));
 
-app.use(express.json());
+// Capture raw body for Razorpay webhook signature verification without changing existing routes.
+app.use(
+  express.json({
+    verify: (req: any, _res, buf) => {
+      if (req?.originalUrl?.includes("/payment/webhook")) {
+        req.rawBody = buf;
+      }
+    },
+  })
+);
 app.use(express.urlencoded({ extended: true }));
 
 // Initialize Socket.io

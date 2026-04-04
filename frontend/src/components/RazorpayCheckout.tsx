@@ -30,6 +30,10 @@ const RazorpayCheckout: React.FC<RazorpayCheckoutProps> = ({
         // Load Razorpay script if not already loaded
         const loadRazorpayScript = () => {
             return new Promise((resolve) => {
+                if (document.querySelector('script[src="https://checkout.razorpay.com/v1/checkout.js"]')) {
+                    resolve(true);
+                    return;
+                }
                 const script = document.createElement('script');
                 script.src = 'https://checkout.razorpay.com/v1/checkout.js';
                 script.onload = () => resolve(true);
@@ -55,13 +59,14 @@ const RazorpayCheckout: React.FC<RazorpayCheckoutProps> = ({
                     return;
                 }
 
-                const { razorpayOrderId, razorpayKey } = orderResponse.data;
+                const { razorpayOrderId, razorpayKey, amount: gatewayAmount, currency } = orderResponse.data;
 
                 // Razorpay options
                 const options = {
                     key: razorpayKey, // Get key from backend response
-                    amount: amount * 100, // Amount in paise
-                    currency: 'INR',
+                    // Use backend-created order amount/currency to avoid mismatch issues.
+                    amount: gatewayAmount,
+                    currency: currency || 'INR',
                     name: 'Wasgro Mart',
                     description: `Order #${orderId}`,
                     order_id: razorpayOrderId,
