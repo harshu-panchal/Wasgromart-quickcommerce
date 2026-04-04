@@ -10,6 +10,7 @@ export interface HeaderCategory {
     relatedCategory?: string;
     status: 'Published' | 'Unpublished';
     order?: number;
+    commissionRate?: number;
 }
 
 export const getHeaderCategoriesPublic = async (skipLoader = false): Promise<HeaderCategory[]> => {

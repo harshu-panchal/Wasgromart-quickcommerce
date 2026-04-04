@@ -8,6 +8,7 @@ export interface IHeaderCategory extends Document {
     relatedCategory?: string; // Links to a product category
     order: number;
     status: 'Published' | 'Unpublished';
+    commissionRate?: number;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -21,6 +22,12 @@ const HeaderCategorySchema: Schema = new Schema(
         relatedCategory: { type: String, required: false },
         order: { type: Number, default: 0 },
         status: { type: String, enum: ['Published', 'Unpublished'], default: 'Published' },
+        commissionRate: {
+            type: Number,
+            min: [0, 'Commission rate cannot be negative'],
+            max: [100, 'Commission rate cannot exceed 100%'],
+            default: 0,
+        },
     },
     { timestamps: true }
 );

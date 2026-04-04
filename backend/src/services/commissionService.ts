@@ -41,10 +41,24 @@ export const getOrderItemCommissionRate = async (
         }
 
         // 3. Check Category
+        let categoryDoc: any = null;
         if (product.category) {
-            const cat = await Category.findById(product.category);
-            if (cat?.commissionRate && cat.commissionRate > 0) {
-                return cat.commissionRate;
+            categoryDoc = await Category.findById(product.category);
+            if (categoryDoc?.commissionRate && categoryDoc.commissionRate > 0) {
+                return categoryDoc.commissionRate;
+            }
+        }
+
+        // 4. Check Header Category (theme-level) commission
+        if (!categoryDoc && product.category) {
+            categoryDoc = await Category.findById(product.category);
+        }
+        if (categoryDoc?.headerCategoryId) {
+            const headerCat = await (await import("../models/HeaderCategory")).default.findById(
+                categoryDoc.headerCategoryId
+            );
+            if (headerCat?.commissionRate && headerCat.commissionRate > 0) {
+                return headerCat.commissionRate;
             }
         }
 
