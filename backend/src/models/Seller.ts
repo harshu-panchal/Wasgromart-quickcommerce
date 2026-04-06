@@ -70,6 +70,20 @@ export interface ISeller extends Document {
   fcmTokens?: string[];
   fcmTokenMobile?: string[];
 
+  // Subscription (Razorpay) - used for paid seller features (e.g. chat support)
+  subscription?: {
+    isActive: boolean;
+    status?: "Active" | "Cancelled" | "Expired";
+    planId?: string;
+    startDate?: Date;
+    expiryDate?: Date;
+    razorpaySubscriptionId?: string;
+    razorpayCustomerId?: string;
+    lastPaymentId?: string;
+    lastInvoiceId?: string;
+    cancelledAt?: Date;
+  };
+
   createdAt: Date;
   updatedAt: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
@@ -294,6 +308,21 @@ const SellerSchema = new Schema<ISeller>(
     fcmTokenMobile: {
       type: [String],
       default: [],
+    },
+
+    // Subscription fields are additive and backward compatible.
+    // Webhook handlers update these to make backend the source of truth.
+    subscription: {
+      isActive: { type: Boolean, default: false },
+      status: { type: String, enum: ["Active", "Cancelled", "Expired"] },
+      planId: { type: String, trim: true },
+      startDate: { type: Date },
+      expiryDate: { type: Date },
+      razorpaySubscriptionId: { type: String, trim: true },
+      razorpayCustomerId: { type: String, trim: true },
+      lastPaymentId: { type: String, trim: true },
+      lastInvoiceId: { type: String, trim: true },
+      cancelledAt: { type: Date },
     },
   },
   {

@@ -22,6 +22,7 @@ import { notFound } from "./middleware/notFound";
 import { ensureDefaultAdmin } from "./utils/ensureDefaultAdmin";
 import { seedHeaderCategories } from "./utils/seedHeaderCategories";
 import { initializeSocket } from "./socket/socketService";
+import razorpayWebhookRoutes from "./webhooks/razorpay/razorpayWebhookRoutes";
 
 const app: Application = express();
 const httpServer = createServer(app);
@@ -100,13 +101,21 @@ app.use(cors(corsOptions));
 app.use(
   express.json({
     verify: (req: any, _res, buf) => {
-      if (req?.originalUrl?.includes("/payment/webhook")) {
+      if (
+        req?.originalUrl?.includes("/payment/webhook") ||
+        req?.originalUrl?.includes("/api/webhooks/razorpay")
+      ) {
         req.rawBody = buf;
       }
     },
   })
 );
 app.use(express.urlencoded({ extended: true }));
+
+// Dedicated webhook endpoint (source of truth for payment/subscription state).
+// Mounted outside /api/v1 to match: POST /api/webhooks/razorpay
+// Must be registered AFTER the JSON middleware so rawBody capture works.
+app.use("/api/webhooks/razorpay", razorpayWebhookRoutes);
 
 // Initialize Socket.io
 const io = initializeSocket(httpServer);
