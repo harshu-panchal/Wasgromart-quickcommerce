@@ -60,6 +60,8 @@ export interface OrderDetail {
   paymentMethod: string;
   paymentStatus: string;
   deliveryAddress: DeliveryAddress;
+  deliveryInstructions?: string;
+  specialRequests?: string;
 }
 
 export interface UpdateOrderStatusData {

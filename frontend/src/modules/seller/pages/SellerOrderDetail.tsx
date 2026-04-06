@@ -536,6 +536,32 @@ export default function SellerOrderDetail() {
             </div>
           </div>
 
+          {/* Customer Notes */}
+          {(orderDetail.deliveryInstructions || orderDetail.specialRequests) && (
+            <div className="mb-6 grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {orderDetail.deliveryInstructions && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+                  <div className="text-xs font-semibold text-amber-700 uppercase tracking-wide mb-1">
+                    Delivery Instructions
+                  </div>
+                  <div className="text-sm text-neutral-800 whitespace-pre-wrap">
+                    {orderDetail.deliveryInstructions}
+                  </div>
+                </div>
+              )}
+              {orderDetail.specialRequests && (
+                <div className="bg-sky-50 border border-sky-200 rounded-lg p-4">
+                  <div className="text-xs font-semibold text-sky-700 uppercase tracking-wide mb-1">
+                    Special Requests
+                  </div>
+                  <div className="text-sm text-neutral-800 whitespace-pre-wrap">
+                    {orderDetail.specialRequests}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Product Table */}
           <div className="overflow-x-auto mb-6">
             <table className="w-full min-w-[500px]">

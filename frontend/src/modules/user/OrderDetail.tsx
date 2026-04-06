@@ -687,7 +687,9 @@ export default function OrderDetail() {
       handleRefresh();
     } catch (error) {
       console.error("Failed to save instructions:", error);
-      alert("Failed to save instructions");
+      const msg =
+        (error as any)?.response?.data?.message || "Failed to save instructions";
+      alert(msg);
     }
   };
 
@@ -700,7 +702,10 @@ export default function OrderDetail() {
       handleRefresh();
     } catch (error) {
       console.error("Failed to save special requests:", error);
-      alert("Failed to save special requests");
+      const msg =
+        (error as any)?.response?.data?.message ||
+        "Failed to save special requests";
+      alert(msg);
     }
   };
 

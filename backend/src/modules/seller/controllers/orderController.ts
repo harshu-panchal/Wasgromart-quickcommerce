@@ -242,6 +242,9 @@ export const getOrderById = asyncHandler(
       paymentMethod: order.paymentMethod || 'N/A',
       paymentStatus: order.paymentStatus || 'Pending',
       deliveryAddress: order.deliveryAddress || {},
+      // Notes visible to seller
+      deliveryInstructions: (order as any).deliveryInstructions || '',
+      specialRequests: (order as any).specialRequests || '',
     };
 
     return res.status(200).json({
