@@ -16,6 +16,7 @@ import { getProductById } from "../../services/api/customerProductService";
 import WishlistButton from "../../components/WishlistButton";
 import StarRating from "../../components/ui/StarRating";
 import { calculateProductPrice } from "../../utils/priceUtils";
+import logo from "@assets/wasgromart-black-text-removebg-preview.png";
 
 export default function ProductDetail() {
   const { id } = useParams<{ id: string }>();
@@ -337,10 +338,10 @@ export default function ProductDetail() {
             {/* Logo - top right */}
             <div className="flex-shrink-0">
               <img
-                src="/assets/wasgromart-black-text-removebg-preview.png"
+                src={logo}
                 alt="Wasgro-mart Logo"
                 className="h-20 w-auto object-contain md:h-24 -my-4 md:-my-6 relative z-10"
-                style={{ minWidth: '70px' }}
+                style={{ minWidth: "70px" }}
               />
             </div>
             {/* Heart icon */}

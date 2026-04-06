@@ -1,5 +1,6 @@
 import { useDeliveryStatus } from '../context/DeliveryStatusContext';
 import { useDeliveryUser } from '../context/DeliveryUserContext';
+import logo from '@assets/wasgromart-black-text-removebg-preview.png';
 
 interface DeliveryHeaderProps {
   userName?: string;
@@ -24,7 +25,7 @@ export default function DeliveryHeader({ userName }: DeliveryHeaderProps) {
         {/* App Title */}
         <div className="flex justify-center mb-1">
           <img
-            src="/assets/wasgromart-black-text-removebg-preview.png"
+            src={logo}
             alt="Wasgro Mart"
             className="h-14 sm:h-28 w-auto object-contain"
           />

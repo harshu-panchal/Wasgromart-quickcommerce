@@ -309,6 +309,19 @@ function copyKosilLogo() {
   }
 }
 
+// Copy main wasgromart logo
+function copyMainLogo() {
+  const logoFile = "wasgromart-black-text-removebg-preview.png";
+  const logoPath = path.join(assetsDir, logoFile);
+  if (fs.existsSync(logoPath)) {
+    const destPath = path.join(publicAssetsDir, logoFile);
+    if (!fs.existsSync(destPath)) {
+      fs.copyFileSync(logoPath, destPath);
+      console.log(`Copied main logo: ${logoFile}`);
+    }
+  }
+}
+
 // Copy delivery boy icon
 function copyDeliveryIcon() {
   const deliveryboyDir = path.join(assetsDir, "deliveryboy");
@@ -337,5 +350,6 @@ copyBannerImage();
 copyShopByStoreImages();
 copyLoginVideo();
 copyKosilLogo();
+copyMainLogo();
 copyDeliveryIcon();
 console.log("Image copy completed!");

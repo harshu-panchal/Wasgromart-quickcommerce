@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
+import logo from "@assets/wasgromart-black-text-removebg-preview.png";
 
 interface SellerHeaderProps {
   onMenuClick: () => void;
@@ -110,7 +111,7 @@ export default function SellerHeader({
             onClick={handleLogoClick}
             className="hover:opacity-80 transition-opacity">
             <img
-              src="/assets/wasgromart-black-text-removebg-preview.png"
+              src={logo}
               alt="Wasgro mart"
               className="h-14 sm:h-28 w-auto object-contain cursor-pointer -my-[20px] sm:-my-[40px] relative z-50"
               style={{ maxWidth: "none" }}

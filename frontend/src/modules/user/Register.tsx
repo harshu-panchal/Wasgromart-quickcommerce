@@ -7,6 +7,7 @@ import {
 import { updateProfile } from "../../services/api/customerService";
 import { useAuth } from "../../context/AuthContext";
 import OTPInput from "../../components/OTPInput";
+import logo from "@assets/wasgromart-black-text-removebg-preview.png";
 
 export default function Register() {
     const navigate = useNavigate();
@@ -129,7 +130,7 @@ export default function Register() {
                         <div className="relative mb-2 group">
                             <div className="absolute inset-0 bg-white/20 rounded-full blur-xl transform group-hover:scale-110 transition-transform duration-500" />
                             <img
-                                src="/assets/wasgromart-black-text-removebg-preview.png"
+                                src={logo}
                                 alt="Wasgro-mart Logo"
                                 className="h-40 w-auto object-contain relative z-10 drop-shadow-lg transform hover:scale-105 transition-transform duration-300"
                             />

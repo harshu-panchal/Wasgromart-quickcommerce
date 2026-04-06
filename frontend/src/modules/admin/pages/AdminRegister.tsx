@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
+import logo from "@assets/wasgromart-black-text-removebg-preview.png";
 import { register, getPublicRoles, PublicRole } from "../../../services/api/auth/adminAuthService";
 
 export default function AdminRegister() {
@@ -129,7 +130,7 @@ export default function AdminRegister() {
                         <div className="relative mb-2 group">
                             <div className="absolute inset-0 bg-white/20 rounded-full blur-xl transform group-hover:scale-110 transition-transform duration-500" />
                             <img
-                                src="/assets/wasgromart-black-text-removebg-preview.png"
+                                src={logo}
                                 alt="Wasgro mart"
                                 className="h-32 w-auto object-contain relative z-10 drop-shadow-lg transform hover:scale-105 transition-transform duration-300"
                             />

@@ -9,6 +9,7 @@ import { getCategories } from "../../../services/api/customerProductService";
 import { Category } from "../../../types/domain";
 import { getHeaderCategoriesPublic } from "../../../services/api/headerCategoryService";
 import { getIconByName } from "../../../utils/iconLibrary";
+import logo from "@assets/wasgromart-black-text-removebg-preview.png";
 
 gsap.registerPlugin(ScrollTrigger);
 
@@ -420,10 +421,10 @@ export default function HomeHero({
             {/* Logo - top right */}
             <div className="flex-shrink-0">
               <img
-                src="/assets/wasgromart-black-text-removebg-preview.png"
+                src={logo}
                 alt="Wasgro-mart Logo"
                 className="h-24 w-auto object-contain md:h-28 -my-6 md:-my-8 relative z-10"
-                style={{ minWidth: '80px' }}
+                style={{ minWidth: "80px" }}
               />
             </div>
           </div>
