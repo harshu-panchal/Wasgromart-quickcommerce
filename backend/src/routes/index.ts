@@ -37,6 +37,7 @@ import customerBannerRoutes from "./customerBannerRoutes";
 import paymentRoutes from "./paymentRoutes";
 import supportChatRoutes from "./supportChatRoutes";
 import promotionRoutes from "./promotionRoutes";
+import subscriptionRoutes from "./subscriptionRoutes";
 import {
   createOrder,
   getMyOrders,
@@ -162,6 +163,9 @@ router.use("/seller/reports", reportRoutes);
 
 // Wallet routes (protected, seller only)
 router.use("/seller/wallet", sellerWalletRoutes);
+
+// Seller subscriptions (protected, seller only)
+router.use("/subscriptions", subscriptionRoutes);
 
 // Tax routes (protected, seller/admin)
 router.use("/seller/taxes", taxRoutes);
