@@ -465,6 +465,11 @@ export default function OrderDetail() {
   } | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
+  const cancelWindowMs = 3 * 60 * 1000;
+  const placedAtMs = order?.createdAt ? new Date(order.createdAt).getTime() : NaN;
+  const isWithinCancelWindow =
+    !Number.isFinite(placedAtMs) || Date.now() - placedAtMs <= cancelWindowMs;
+
   // Modal states
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [showInstructionsModal, setShowInstructionsModal] = useState(false);
@@ -674,7 +679,9 @@ export default function OrderDetail() {
       handleRefresh();
     } catch (error) {
       console.error("Error cancelling order:", error);
-      alert("Failed to cancel order");
+      const msg =
+        (error as any)?.response?.data?.message || "Failed to cancel order";
+      alert(msg);
     }
   };
 
@@ -1182,8 +1189,13 @@ export default function OrderDetail() {
           <SectionItem
             icon={CircleSlashIcon}
             title="Cancel order"
-            subtitle=""
-            onClick={() => setShowCancelModal(true)}
+            subtitle={
+              isWithinCancelWindow
+                ? ""
+                : "Cancellation is available only for 3 minutes after placing the order"
+            }
+            onClick={isWithinCancelWindow ? () => setShowCancelModal(true) : undefined}
+            showArrow={isWithinCancelWindow}
           />
         </motion.div>
 

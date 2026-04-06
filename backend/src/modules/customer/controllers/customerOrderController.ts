@@ -606,6 +606,7 @@ export const cancelOrder = async (req: Request, res: Response) => {
         const { id } = req.params;
         const { reason } = req.body;
         const userId = req.user!.userId;
+        const cancelWindowMs = Number(process.env.CUSTOMER_ORDER_CANCEL_WINDOW_MS || 3 * 60 * 1000);
 
         if (!reason) {
             return res.status(400).json({ success: false, message: "Cancellation reason is required" });
@@ -627,6 +628,22 @@ export const cancelOrder = async (req: Request, res: Response) => {
         if (!order) {
             if (session) await session.abortTransaction();
             return res.status(404).json({ success: false, message: "Order not found" });
+        }
+
+        // Customers can cancel only within a limited time window after placing the order.
+        // This is enforced server-side to keep the flow reliable regardless of frontend state.
+        if (Number.isFinite(cancelWindowMs) && cancelWindowMs > 0) {
+            const placedAt = (order as any).orderDate || (order as any).createdAt;
+            const placedAtMs = placedAt ? new Date(placedAt).getTime() : NaN;
+            const nowMs = Date.now();
+            if (Number.isFinite(placedAtMs) && nowMs - placedAtMs > cancelWindowMs) {
+                if (session) await session.abortTransaction();
+                const minutes = Math.round(cancelWindowMs / 60000);
+                return res.status(400).json({
+                    success: false,
+                    message: `Order can only be cancelled within ${minutes} minutes of placing it`,
+                });
+            }
         }
 
         if (['Delivered', 'Cancelled', 'Returned', 'Rejected', 'Out for Delivery', 'Shipped'].includes(order.status)) {
