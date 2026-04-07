@@ -27,12 +27,14 @@ if (messaging) {
     messaging.onBackgroundMessage((payload) => {
         console.log('[firebase-messaging-sw.js] Received background message ', payload);
 
-        // Customize notification here
-        const notificationTitle = payload.notification?.title || 'New Message';
+        const data = payload?.data || {};
+        const notificationTitle = data.title || payload.notification?.title || 'New Message';
         const notificationOptions = {
-            body: payload.notification?.body || '',
+            body: data.body || payload.notification?.body || '',
             icon: '/favicon.ico',
-            data: payload.data
+            badge: '/favicon.ico',
+            tag: data.type || 'kosil-general',
+            data: data
         };
 
         self.registration.showNotification(notificationTitle, notificationOptions);

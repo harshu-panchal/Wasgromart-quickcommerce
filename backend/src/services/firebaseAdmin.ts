@@ -64,6 +64,12 @@ export interface PushNotificationPayload {
     data?: { [key: string]: string };
 }
 
+const INVALID_TOKEN_ERROR_CODES = new Set([
+    'messaging/registration-token-not-registered',
+    'messaging/invalid-registration-token',
+    'messaging/invalid-argument',
+]);
+
 /**
  * Send push notification to multiple tokens
  */
@@ -76,12 +82,18 @@ export async function sendPushNotification(tokens: string[], payload: PushNotifi
     }
 
     try {
+        const normalizedDataEntries = Object.entries(payload.data || {}).map(([key, value]) => [
+            key,
+            typeof value === 'string' ? value : JSON.stringify(value),
+        ]);
+        const messageData: { [key: string]: string } = {
+            ...Object.fromEntries(normalizedDataEntries),
+            title: String(payload.title),
+            body: String(payload.body),
+        };
+
         const message: any = {
-            notification: {
-                title: payload.title,
-                body: payload.body,
-            },
-            data: payload.data || {},
+            data: messageData,
             tokens: tokens,
             // Mobile Specifics
             android: {
@@ -104,7 +116,40 @@ export async function sendPushNotification(tokens: string[], payload: PushNotifi
         };
 
         const response = await admin.messaging().sendEachForMulticast(message);
-        console.log(`[${new Date().toISOString()}] FCM Send to ${tokens.length} tokens: ${response.successCount} success, ${response.failureCount} failure`);
+        const invalidTokens: string[] = [];
+        const perTokenErrors: Array<{ token: string; code?: string; message?: string }> = [];
+
+        response.responses.forEach((sendResponse, index) => {
+            if (sendResponse.success) {
+                return;
+            }
+
+            const token = tokens[index];
+            const code = sendResponse.error?.code;
+            const message = sendResponse.error?.message;
+            perTokenErrors.push({ token, code, message });
+
+            if (code && INVALID_TOKEN_ERROR_CODES.has(code)) {
+                invalidTokens.push(token);
+            }
+        });
+
+        console.log(
+            `[${new Date().toISOString()}] FCM Send to ${tokens.length} tokens: ` +
+            `${response.successCount} success, ${response.failureCount} failure`
+        );
+        if (perTokenErrors.length > 0) {
+            console.warn(
+                `[${new Date().toISOString()}] FCM token send errors:`,
+                perTokenErrors.map((entry) => ({
+                    tokenPreview: `${entry.token.slice(0, 12)}...`,
+                    code: entry.code,
+                    message: entry.message,
+                }))
+            );
+        }
+
+        (response as any).invalidTokens = [...new Set(invalidTokens)];
 
         return response;
     } catch (error) {

@@ -295,7 +295,15 @@ const AdminSupportInbox = lazy(
 
 import ProtectedAdminRoute from "./components/ProtectedAdminRoute";
 
-import { initializePushNotifications, setupForegroundNotificationHandler, registerFCMToken } from "./services/pushNotificationService";
+import {
+  initializePushNotifications,
+  setupForegroundNotificationHandler,
+  cleanupForegroundNotificationHandler,
+  registerFCMToken,
+  startFCMTokenRefreshSync,
+  stopFCMTokenRefreshSync,
+  clearCachedFCMToken,
+} from "./services/pushNotificationService";
 
 function AppContent() {
   const { isAuthenticated } = useAuth();
@@ -304,15 +312,26 @@ function AppContent() {
   useEffect(() => {
     initializePushNotifications();
     setupForegroundNotificationHandler();
+    return () => {
+      cleanupForegroundNotificationHandler();
+    };
   }, []);
 
-  // NOTE: FCM token registration is handled in individual login flows
-  // (DeliveryLogin, SellerLogin, AdminLogin, CustomerLogin)
-  // This prevents duplicate notifications from being sent on:
-  // - Page refresh
-  // - Tab switching
-  // - Component re-renders
-  // - Auth state rehydration
+  // Keep token registration tied to auth state so we do not change login UI flow.
+  useEffect(() => {
+    if (!isAuthenticated) {
+      stopFCMTokenRefreshSync();
+      clearCachedFCMToken();
+      return;
+    }
+
+    void registerFCMToken(false);
+    startFCMTokenRefreshSync();
+
+    return () => {
+      stopFCMTokenRefreshSync();
+    };
+  }, [isAuthenticated]);
 
   return (
     <ErrorBoundary>

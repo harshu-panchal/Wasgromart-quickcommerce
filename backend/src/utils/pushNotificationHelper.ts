@@ -39,7 +39,18 @@ export async function sendNotificationToUser(userId: string, payload: PushNotifi
         }
 
         console.log(`Sending notification to user ${userId} (${uniqueTokens.length} tokens)`);
-        await sendPushNotification(uniqueTokens, payload);
+        const response: any = await sendPushNotification(uniqueTokens, payload);
+
+        const invalidTokens: string[] = response?.invalidTokens || [];
+        if (invalidTokens.length > 0) {
+            const invalidSet = new Set(invalidTokens);
+            // @ts-ignore
+            user.fcmTokens = (user.fcmTokens || []).filter((token: string) => !invalidSet.has(token));
+            // @ts-ignore
+            user.fcmTokenMobile = (user.fcmTokenMobile || []).filter((token: string) => !invalidSet.has(token));
+            await user.save();
+            console.log(`Removed ${invalidTokens.length} invalid FCM token(s) for user ${userId}`);
+        }
     } catch (error) {
         console.error(`Error sending notification to user ${userId}:`, error);
         // Non-blocking error
