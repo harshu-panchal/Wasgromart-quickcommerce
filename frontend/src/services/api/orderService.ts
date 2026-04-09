@@ -45,6 +45,7 @@ export interface OrderDetail {
   id: string;
   invoiceNumber: string;
   orderDate: string;
+  orderTime?: string;
   deliveryDate: string;
   timeSlot: string;
   status: 'Out For Delivery' | 'Received' | 'Payment Pending' | 'Cancelled' | 'Rejected';

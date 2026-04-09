@@ -226,6 +226,7 @@ export const getOrderById = asyncHandler(
       id: order._id,
       invoiceNumber: order.invoiceNumber || order.orderNumber || 'N/A',
       orderDate: order.orderDate ? order.orderDate.toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      orderTime: order.orderDate ? order.orderDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : '',
       deliveryDate: order.estimatedDeliveryDate ? order.estimatedDeliveryDate.toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
       timeSlot: order.timeSlot || 'N/A',
       status: order.status === 'On the way' ? 'Out For Delivery' : order.status,

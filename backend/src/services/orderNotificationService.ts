@@ -5,6 +5,7 @@ import Seller from '../models/Seller';
 import DeliveryTracking from '../models/DeliveryTracking';
 import mongoose from 'mongoose';
 import { notifySellersOfOrderUpdate } from './sellerNotificationService';
+import { sendPushNotification } from './firebaseAdmin';
 
 // Track order notification state
 export interface OrderNotificationState {
@@ -405,6 +406,31 @@ export async function notifyNextDeliveryBoy(
     // Emit the notification
     io.to(roomName).emit('new-order', state.orderData);
     console.log(`📤 [Sequential] Notified delivery boy ${nextDeliveryBoyId} (Index ${state.currentIndex}/${state.allNearbyDeliveryBoyIds.length}) about order ${state.orderData.orderNumber}`);
+
+    // Firebase push notification to delivery boy's devices
+    try {
+        const deliveryBoy = await Delivery.findById(nextDeliveryBoyId).select('fcmTokens fcmTokenMobile').lean() as any;
+        const tokens: string[] = [
+            ...(deliveryBoy?.fcmTokens || []),
+            ...(deliveryBoy?.fcmTokenMobile || []),
+        ].filter(Boolean);
+
+        if (tokens.length > 0) {
+            await sendPushNotification(tokens, {
+                title: `🚴 New Delivery Order #${state.orderData.orderNumber}`,
+                body: `Pickup for ${state.orderData.customerName} • ₹${state.orderData.total}`,
+                data: {
+                    type: 'NEW_ORDER',
+                    orderId: state.orderData.orderId,
+                    orderNumber: state.orderData.orderNumber,
+                    link: '/delivery/orders',
+                },
+            });
+            console.log(`🔔 Push notification sent to delivery boy ${nextDeliveryBoyId} (${tokens.length} token(s))`);
+        }
+    } catch (pushErr) {
+        console.error(`Failed to send push notification to delivery boy ${nextDeliveryBoyId}:`, pushErr);
+    }
 
     return true;
 }
