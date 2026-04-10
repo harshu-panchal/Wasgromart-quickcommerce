@@ -11,32 +11,16 @@ try {
     } else {
         let raw = process.env.FIREBASE_SERVICE_ACCOUNT.trim();
 
-        // Log exact bytes around position 2282 to diagnose private_key mangling
-        console.log('[Firebase] Length:', raw.length);
-        console.log('[Firebase] First 100 chars:', JSON.stringify(raw.substring(0, 100)));
-        console.log('[Firebase] Chars 2270-2300:', JSON.stringify(raw.substring(2270, 2300)));
-
-        // Strip surrounding single quotes
-        if (raw.startsWith("'")) raw = raw.slice(1);
-        if (raw.endsWith("'"))   raw = raw.slice(0, -1);
-
-        // Strip leading backslash-brace \{ → {
-        if (raw.startsWith('\\{')) raw = '{' + raw.slice(2);
-
-        // Unescape all \" → "
-        raw = raw.replace(/\\"/g, '"');
-
-        // Fix double-escaped newlines \\n → \n
-        raw = raw.replace(/\\\\n/g, '\\n');
-
-        // Fix invalid \% escape (Hostinger escapes % in URLs, e.g. \%40 → %40)
-        raw = raw.replace(/\\%/g, '%');
-
-        // Ensure it ends with } — strip any trailing single quote or backslash
-        raw = raw.trimEnd().replace(/['\s]+$/, '').replace(/\\}$/, '}');
-
-        console.log('[Firebase] After cleanup, chars 2270-2300:', JSON.stringify(raw.substring(2270, 2300)));
-        console.log('[Firebase] After cleanup, chars 2350-2394:', JSON.stringify(raw.substring(2350, 2394)));
+        // Hostinger mangles JSON env values with shell-escaping:
+        // '\{\"type\": \"service_account\", ..., \"client_x509_cert_url\": \"https://...%40...\"}' 
+        // Fix each mangling pattern:
+        if (raw.startsWith("'")) raw = raw.slice(1);          // strip leading '
+        if (raw.endsWith("'"))   raw = raw.slice(0, -1);      // strip trailing '
+        if (raw.startsWith('\\{')) raw = '{' + raw.slice(2);  // \{ → {
+        raw = raw.replace(/\\"/g, '"');                        // \" → "
+        raw = raw.replace(/\\\\n/g, '\\n');                   // \\n → \n
+        raw = raw.replace(/\\%/g, '%');                        // \% → %
+        raw = raw.trimEnd().replace(/['\s]+$/, '').replace(/\\}$/, '}'); // clean trailing
 
         const serviceAccount = JSON.parse(raw);
 
@@ -88,20 +72,32 @@ export async function sendPushNotification(tokens: string[], payload: PushNotifi
         };
 
         const message: any = {
+            // Top-level notification block — required for Flutter/native apps to
+            // auto-display the notification without any Flutter-side handling code
+            notification: {
+                title: String(payload.title),
+                body: String(payload.body),
+            },
+            // Data payload — available to Flutter app via message.data
             data: messageData,
             tokens: tokens,
-            // Mobile Specifics
             android: {
                 priority: 'high',
                 notification: {
+                    title: String(payload.title),
+                    body: String(payload.body),
                     sound: 'default',
-                    channelId: 'kosil_notifications', // Ensure this matches your Flutter side channel if defined
+                    channelId: 'wasgromart_notifications',
                     clickAction: 'FLUTTER_NOTIFICATION_CLICK',
                 },
             },
             apns: {
                 payload: {
                     aps: {
+                        alert: {
+                            title: String(payload.title),
+                            body: String(payload.body),
+                        },
                         sound: 'default',
                         badge: 1,
                         contentAvailable: true,
