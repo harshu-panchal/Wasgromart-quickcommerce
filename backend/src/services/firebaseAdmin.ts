@@ -9,30 +9,7 @@ try {
     if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
         console.warn('⚠️ FIREBASE_SERVICE_ACCOUNT is not set. Push notifications are disabled.');
     } else {
-        const envVal = process.env.FIREBASE_SERVICE_ACCOUNT;
-        // Log first 80 chars to diagnose hosting panel mangling
-        console.log('[Firebase] Raw env value (first 80 chars):', JSON.stringify(envVal.substring(0, 80)));
-
-        // Hosting panels often mangle the JSON value by:
-        // 1. Wrapping in single quotes: '{"type":...}'
-        // 2. Escaping double quotes with backslashes: \{"type\": \"service_account\"...}
-        // Strip both before parsing
-        // The hosting panel mangles the JSON:
-        // Raw stored value: '\{\"type\": \"service_account\", ... \"private_key\": \"-----BEGIN...\\n...\"}'
-        // Steps to fix:
-        // 1. Strip surrounding single quote (leading ')
-        // 2. Fix leading \{ → {
-        // 3. Unescape \" → " throughout
-        // 4. \\n (double-escaped newline) → \n (single, so JSON.parse handles it as newline in private_key)
-        const raw = envVal
-            .trim()
-            .replace(/^'/, '')        // strip leading single quote
-            .replace(/\\{/, '{')      // fix \{ → { at start
-            .replace(/\\"/g, '"')     // unescape \" → "
-            .replace(/\\\\n/g, '\\n') // fix \\n → \n inside private_key strings
-
-        console.log('[Firebase] Cleaned value (first 80 chars):', JSON.stringify(raw.substring(0, 80)));
-        const serviceAccount = JSON.parse(raw);
+        const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 
         if (admin.apps.length === 0) {
             admin.initializeApp({
