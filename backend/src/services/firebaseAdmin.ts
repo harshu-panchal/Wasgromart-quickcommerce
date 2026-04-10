@@ -9,7 +9,10 @@ try {
     if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
         console.warn('⚠️ FIREBASE_SERVICE_ACCOUNT is not set. Push notifications are disabled.');
     } else {
-        const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+        // Strip surrounding single quotes if the hosting panel added them
+        // e.g. '{"type":"service_account",...}' → {"type":"service_account",...}
+        const raw = process.env.FIREBASE_SERVICE_ACCOUNT.trim().replace(/^'([\s\S]*)'$/, '$1');
+        const serviceAccount = JSON.parse(raw);
 
         if (admin.apps.length === 0) {
             admin.initializeApp({
