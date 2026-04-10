@@ -303,6 +303,7 @@ import {
   startFCMTokenRefreshSync,
   stopFCMTokenRefreshSync,
   clearCachedFCMToken,
+  setupFlutterFCMBridge,
 } from "./services/pushNotificationService";
 
 function AppContent() {
@@ -310,6 +311,8 @@ function AppContent() {
 
   // Initialize push notifications (service worker registration only)
   useEffect(() => {
+    // Set up Flutter bridge FIRST so it's ready before Flutter calls it
+    setupFlutterFCMBridge();
     initializePushNotifications();
     setupForegroundNotificationHandler();
     return () => {

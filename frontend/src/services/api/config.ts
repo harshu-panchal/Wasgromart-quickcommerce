@@ -121,7 +121,8 @@ export const getAuthToken = (): string | null => {
 export const removeAuthToken = () => {
   localStorage.removeItem("authToken");
   localStorage.removeItem("userData");
-  localStorage.removeItem("fcm_token_web"); // Clear FCM registration cache on logout
+  localStorage.removeItem("fcm_token_web");    // Clear web FCM cache on logout
+  localStorage.removeItem("fcm_token_mobile"); // Clear Flutter FCM cache on logout
 };
 
 export default api;

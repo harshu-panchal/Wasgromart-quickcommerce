@@ -3,12 +3,46 @@ import api from './api/config';
 
 const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY || 'dummy-vapid-key';
 const LOCAL_FCM_TOKEN_KEY = 'fcm_token_web';
+const LOCAL_FCM_TOKEN_MOBILE_KEY = 'fcm_token_mobile';
 const TOKEN_SYNC_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
 
 let tokenSyncIntervalId: number | null = null;
 let visibilitySyncHandler: (() => void) | null = null;
 let isTokenSyncInProgress = false;
 let foregroundUnsubscribe: (() => void) | null = null;
+
+/**
+ * Called by Flutter via: window.onFlutterFCMToken("token-string")
+ * Flutter gets the native FCM token and passes it here so we can
+ * save it to the backend as platform='mobile' (stored in fcmTokenMobile).
+ * This is the ONLY way push notifications work inside a Flutter WebView.
+ */
+export function setupFlutterFCMBridge() {
+  (window as any).onFlutterFCMToken = async (token: string) => {
+    if (!token) return;
+    console.log('[FCM] Received native FCM token from Flutter bridge');
+
+    const cached = localStorage.getItem(LOCAL_FCM_TOKEN_MOBILE_KEY);
+    if (cached === token) {
+      console.log('[FCM] Flutter token unchanged, skipping sync');
+      return;
+    }
+
+    try {
+      const response = await api.post('/fcm-tokens/save', {
+        token,
+        platform: 'mobile',
+      });
+      if (response.data.success) {
+        localStorage.setItem(LOCAL_FCM_TOKEN_MOBILE_KEY, token);
+        console.log('[FCM] Flutter native token saved to backend successfully');
+      }
+    } catch (err: any) {
+      console.error('[FCM] Failed to save Flutter token to backend:', err?.response?.data || err?.message);
+    }
+  };
+  console.log('[FCM] Flutter bridge ready: window.onFlutterFCMToken');
+}
 
 async function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) {
