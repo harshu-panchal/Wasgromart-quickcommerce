@@ -17,12 +17,19 @@ try {
         // 1. Wrapping in single quotes: '{"type":...}'
         // 2. Escaping double quotes with backslashes: \{"type\": \"service_account\"...}
         // Strip both before parsing
+        // The hosting panel mangles the JSON:
+        // Raw stored value: '\{\"type\": \"service_account\", ... \"private_key\": \"-----BEGIN...\\n...\"}'
+        // Steps to fix:
+        // 1. Strip surrounding single quote (leading ')
+        // 2. Fix leading \{ → {
+        // 3. Unescape \" → " throughout
+        // 4. \\n (double-escaped newline) → \n (single, so JSON.parse handles it as newline in private_key)
         const raw = envVal
             .trim()
-            .replace(/^'([\s\S]*)'$/, '$1')  // remove surrounding single quotes
-            .replace(/\\"/g, '"')             // unescape \" → "
-            .replace(/^\\{/, '{')             // fix leading \{
-            .replace(/\\}$/, '}');            // fix trailing \}
+            .replace(/^'/, '')        // strip leading single quote
+            .replace(/\\{/, '{')      // fix \{ → { at start
+            .replace(/\\"/g, '"')     // unescape \" → "
+            .replace(/\\\\n/g, '\\n') // fix \\n → \n inside private_key strings
 
         console.log('[Firebase] Cleaned value (first 80 chars):', JSON.stringify(raw.substring(0, 80)));
         const serviceAccount = JSON.parse(raw);
