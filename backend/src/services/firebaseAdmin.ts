@@ -9,7 +9,36 @@ try {
     if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
         console.warn('⚠️ FIREBASE_SERVICE_ACCOUNT is not set. Push notifications are disabled.');
     } else {
-        const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
+        // Hostinger mangles env values containing JSON:
+        // Stored as: '\{\"type\": \"service_account\", ...}'
+        // We need to recover the original JSON regardless of how it was mangled.
+        let raw = process.env.FIREBASE_SERVICE_ACCOUNT;
+
+        // Step 1: Strip surrounding single quotes if present: '...' → ...
+        if (raw.startsWith("'") && raw.endsWith("'")) {
+            raw = raw.slice(1, -1);
+        } else if (raw.startsWith("'")) {
+            raw = raw.slice(1);
+        }
+
+        // Step 2: The entire string may be shell-escaped. Use JSON.parse on a
+        // double-quoted wrapper to unescape all \" and \\ sequences at once.
+        // e.g. \{"type\": \"x\"} → {"type": "x"}
+        if (!raw.startsWith('{')) {
+            // Try wrapping in double quotes and parsing as a JSON string value
+            // to unescape all backslash sequences in one shot
+            try {
+                raw = JSON.parse('"' + raw + '"');
+            } catch {
+                // If that fails, do manual replacements
+                raw = raw
+                    .replace(/^\\{/, '{')
+                    .replace(/\\}/g, '}')
+                    .replace(/\\"/g, '"');
+            }
+        }
+
+        const serviceAccount = JSON.parse(raw);
 
         if (admin.apps.length === 0) {
             admin.initializeApp({
