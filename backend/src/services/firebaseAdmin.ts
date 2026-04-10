@@ -9,16 +9,22 @@ try {
     if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
         console.warn('⚠️ FIREBASE_SERVICE_ACCOUNT is not set. Push notifications are disabled.');
     } else {
+        const envVal = process.env.FIREBASE_SERVICE_ACCOUNT;
+        // Log first 80 chars to diagnose hosting panel mangling
+        console.log('[Firebase] Raw env value (first 80 chars):', JSON.stringify(envVal.substring(0, 80)));
+
         // Hosting panels often mangle the JSON value by:
         // 1. Wrapping in single quotes: '{"type":...}'
         // 2. Escaping double quotes with backslashes: \{"type\": \"service_account\"...}
         // Strip both before parsing
-        const raw = process.env.FIREBASE_SERVICE_ACCOUNT
+        const raw = envVal
             .trim()
             .replace(/^'([\s\S]*)'$/, '$1')  // remove surrounding single quotes
             .replace(/\\"/g, '"')             // unescape \" → "
-            .replace(/^\\"/, '"')             // fix leading \"
-            .replace(/\\"$/, '"');            // fix trailing \"
+            .replace(/^\\{/, '{')             // fix leading \{
+            .replace(/\\}$/, '}');            // fix trailing \}
+
+        console.log('[Firebase] Cleaned value (first 80 chars):', JSON.stringify(raw.substring(0, 80)));
         const serviceAccount = JSON.parse(raw);
 
         if (admin.apps.length === 0) {
