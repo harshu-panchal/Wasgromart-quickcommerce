@@ -2,14 +2,15 @@
 importScripts('https://www.gstatic.com/firebasejs/10.9.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.9.0/firebase-messaging-compat.js');
 
+// ⚠️ MUST match the Firebase project used in src/firebase.ts (appzeto-quick-commerce)
 const firebaseConfig = {
-    apiKey: "AIzaSyCGGEeLFXSt0TScXaPnzhOQRE3icZqxf4M",
-    authDomain: "kosil-e-com.firebaseapp.com",
-    projectId: "kosil-e-com",
-    storageBucket: "kosil-e-com.firebasestorage.app",
-    messagingSenderId: "277843928493",
-    appId: "1:277843928493:web:02b318e1002498016e6d24",
-    measurementId: "G-QY6BQ2GDYB"
+    apiKey: "AIzaSyBqT8QRQJuljNV1W5-XGK-plhSwLzwUJW4",
+    authDomain: "appzeto-quick-commerce.firebaseapp.com",
+    projectId: "appzeto-quick-commerce",
+    storageBucket: "appzeto-quick-commerce.firebasestorage.app",
+    messagingSenderId: "477007016819",
+    appId: "1:477007016819:web:cc5fafe34a8b25b24a8b06",
+    measurementId: "G-NKHFJRKT0Z"
 };
 
 // Initialize Firebase
