@@ -9,9 +9,16 @@ try {
     if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
         console.warn('⚠️ FIREBASE_SERVICE_ACCOUNT is not set. Push notifications are disabled.');
     } else {
-        // Strip surrounding single quotes if the hosting panel added them
-        // e.g. '{"type":"service_account",...}' → {"type":"service_account",...}
-        const raw = process.env.FIREBASE_SERVICE_ACCOUNT.trim().replace(/^'([\s\S]*)'$/, '$1');
+        // Hosting panels often mangle the JSON value by:
+        // 1. Wrapping in single quotes: '{"type":...}'
+        // 2. Escaping double quotes with backslashes: \{"type\": \"service_account\"...}
+        // Strip both before parsing
+        const raw = process.env.FIREBASE_SERVICE_ACCOUNT
+            .trim()
+            .replace(/^'([\s\S]*)'$/, '$1')  // remove surrounding single quotes
+            .replace(/\\"/g, '"')             // unescape \" → "
+            .replace(/^\\"/, '"')             // fix leading \"
+            .replace(/\\"$/, '"');            // fix trailing \"
         const serviceAccount = JSON.parse(raw);
 
         if (admin.apps.length === 0) {
