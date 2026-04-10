@@ -29,6 +29,9 @@ try {
         // Fix double-escaped newlines \\n → \n
         raw = raw.replace(/\\\\n/g, '\\n');
 
+        // Fix invalid \% escape (Hostinger escapes % in URLs, e.g. \%40 → %40)
+        raw = raw.replace(/\\%/g, '%');
+
         console.log('[Firebase] After cleanup, chars 2270-2300:', JSON.stringify(raw.substring(2270, 2300)));
 
         const serviceAccount = JSON.parse(raw);
