@@ -32,7 +32,11 @@ try {
         // Fix invalid \% escape (Hostinger escapes % in URLs, e.g. \%40 → %40)
         raw = raw.replace(/\\%/g, '%');
 
+        // Ensure it ends with } — strip any trailing single quote or backslash
+        raw = raw.trimEnd().replace(/['\s]+$/, '').replace(/\\}$/, '}');
+
         console.log('[Firebase] After cleanup, chars 2270-2300:', JSON.stringify(raw.substring(2270, 2300)));
+        console.log('[Firebase] After cleanup, chars 2350-2394:', JSON.stringify(raw.substring(2350, 2394)));
 
         const serviceAccount = JSON.parse(raw);
 
