@@ -9,34 +9,31 @@ try {
     if (!process.env.FIREBASE_SERVICE_ACCOUNT) {
         console.warn('⚠️ FIREBASE_SERVICE_ACCOUNT is not set. Push notifications are disabled.');
     } else {
-        // Hostinger mangles env values containing JSON:
-        // Stored as: '\{\"type\": \"service_account\", ...}'
-        // We need to recover the original JSON regardless of how it was mangled.
-        let raw = process.env.FIREBASE_SERVICE_ACCOUNT;
+        let raw = process.env.FIREBASE_SERVICE_ACCOUNT.trim();
 
-        // Step 1: Strip surrounding single quotes if present: '...' → ...
-        if (raw.startsWith("'") && raw.endsWith("'")) {
-            raw = raw.slice(1, -1);
-        } else if (raw.startsWith("'")) {
-            raw = raw.slice(1);
-        }
+        // Hostinger stores env values with shell-escaping applied:
+        // '\{\"type\": \"service_account\", \"private_key\": \"-----BEGIN...\\n...-----END...\\n\"}'
+        //
+        // The full unescaping sequence:
+        // 1. Strip surrounding single quotes
+        // 2. Strip leading backslash before {
+        // 3. Unescape \" → " (all escaped double quotes)
+        // 4. Unescape \\n → \n (double-escaped newlines in private_key become single \n)
+        //    BUT only outside of already-valid JSON strings — simplest: replace \\n with \n
+        //    since JSON.parse will then correctly interpret \n as newline in string values
 
-        // Step 2: The entire string may be shell-escaped. Use JSON.parse on a
-        // double-quoted wrapper to unescape all \" and \\ sequences at once.
-        // e.g. \{"type\": \"x\"} → {"type": "x"}
-        if (!raw.startsWith('{')) {
-            // Try wrapping in double quotes and parsing as a JSON string value
-            // to unescape all backslash sequences in one shot
-            try {
-                raw = JSON.parse('"' + raw + '"');
-            } catch {
-                // If that fails, do manual replacements
-                raw = raw
-                    .replace(/^\\{/, '{')
-                    .replace(/\\}/g, '}')
-                    .replace(/\\"/g, '"');
-            }
-        }
+        // Strip surrounding single quotes
+        if (raw.startsWith("'")) raw = raw.slice(1);
+        if (raw.endsWith("'"))   raw = raw.slice(0, -1);
+
+        // Strip leading backslash-brace \{ → {
+        if (raw.startsWith('\\{')) raw = '{' + raw.slice(2);
+
+        // Unescape all \" → "
+        raw = raw.replace(/\\"/g, '"');
+
+        // Fix double-escaped newlines \\n → \n so JSON.parse handles private_key correctly
+        raw = raw.replace(/\\\\n/g, '\\n');
 
         const serviceAccount = JSON.parse(raw);
 
