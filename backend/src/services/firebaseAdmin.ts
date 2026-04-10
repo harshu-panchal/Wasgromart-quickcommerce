@@ -11,16 +11,10 @@ try {
     } else {
         let raw = process.env.FIREBASE_SERVICE_ACCOUNT.trim();
 
-        // Hostinger stores env values with shell-escaping applied:
-        // '\{\"type\": \"service_account\", \"private_key\": \"-----BEGIN...\\n...-----END...\\n\"}'
-        //
-        // The full unescaping sequence:
-        // 1. Strip surrounding single quotes
-        // 2. Strip leading backslash before {
-        // 3. Unescape \" → " (all escaped double quotes)
-        // 4. Unescape \\n → \n (double-escaped newlines in private_key become single \n)
-        //    BUT only outside of already-valid JSON strings — simplest: replace \\n with \n
-        //    since JSON.parse will then correctly interpret \n as newline in string values
+        // Log exact bytes around position 2282 to diagnose private_key mangling
+        console.log('[Firebase] Length:', raw.length);
+        console.log('[Firebase] First 100 chars:', JSON.stringify(raw.substring(0, 100)));
+        console.log('[Firebase] Chars 2270-2300:', JSON.stringify(raw.substring(2270, 2300)));
 
         // Strip surrounding single quotes
         if (raw.startsWith("'")) raw = raw.slice(1);
@@ -32,8 +26,10 @@ try {
         // Unescape all \" → "
         raw = raw.replace(/\\"/g, '"');
 
-        // Fix double-escaped newlines \\n → \n so JSON.parse handles private_key correctly
+        // Fix double-escaped newlines \\n → \n
         raw = raw.replace(/\\\\n/g, '\\n');
+
+        console.log('[Firebase] After cleanup, chars 2270-2300:', JSON.stringify(raw.substring(2270, 2300)));
 
         const serviceAccount = JSON.parse(raw);
 
