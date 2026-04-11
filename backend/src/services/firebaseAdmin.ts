@@ -41,6 +41,7 @@ export interface PushNotificationPayload {
     title: string;
     body: string;
     data?: { [key: string]: string };
+    sound?: string; // custom sound filename without extension (e.g. 'seller_alert')
 }
 
 const INVALID_TOKEN_ERROR_CODES = new Set([
@@ -86,8 +87,10 @@ export async function sendPushNotification(tokens: string[], payload: PushNotifi
                 notification: {
                     title: String(payload.title),
                     body: String(payload.body),
-                    sound: 'default',
-                    channelId: 'wasgromart_notifications',
+                    // Use custom sound channel for seller alerts, default otherwise
+                    // The channel must be pre-created in Flutter with the matching sound
+                    channelId: payload.sound ? `wasgromart_${payload.sound}` : 'wasgromart_notifications',
+                    sound: payload.sound ? `${payload.sound}.mp3` : 'default',
                     clickAction: 'FLUTTER_NOTIFICATION_CLICK',
                 },
             },
@@ -98,7 +101,8 @@ export async function sendPushNotification(tokens: string[], payload: PushNotifi
                             title: String(payload.title),
                             body: String(payload.body),
                         },
-                        sound: 'default',
+                        // iOS: sound file must be bundled in the Flutter app
+                        sound: payload.sound ? `${payload.sound}.mp3` : 'default',
                         badge: 1,
                         contentAvailable: true,
                     },

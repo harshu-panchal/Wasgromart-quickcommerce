@@ -91,6 +91,7 @@ export async function notifySellersOfOrderUpdate(
                             orderNumber: order.orderNumber,
                             link: '/seller/orders',
                         },
+                        sound: type === 'NEW_ORDER' ? 'seller_alert' : undefined,
                     });
                     console.log(`🔔 Push notification sent to seller ${sellerId} (${tokens.length} token(s))`);
                 }
