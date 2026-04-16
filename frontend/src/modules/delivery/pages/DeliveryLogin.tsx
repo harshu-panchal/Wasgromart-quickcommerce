@@ -12,7 +12,7 @@ import logo from "@assets/wasgromart-black-text-removebg-preview.png";
 export default function DeliveryLogin() {
   const navigate = useNavigate();
   const { login } = useAuth();
-  const [mobileNumber, setMobileNumber] = useState("9111966732");
+  const [mobileNumber, setMobileNumber] = useState("");
   const [sessionId, setSessionId] = useState("");
   const [showOTP, setShowOTP] = useState(false);
   const [loading, setLoading] = useState(false);
