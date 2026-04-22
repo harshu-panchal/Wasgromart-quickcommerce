@@ -63,11 +63,13 @@ export default function HomeHero({
       try {
         const cats = await getHeaderCategoriesPublic();
         if (cats && cats.length > 0) {
-          const mapped = cats.map((c) => ({
-            id: c.slug,
-            label: c.name,
-            icon: getIconByName(c.iconName),
-          }));
+          const mapped = cats
+            .filter(c => c.slug !== "all") // Prevent duplicate 'all' tab if it exists in DB
+            .map((c) => ({
+              id: c.slug,
+              label: c.name,
+              icon: getIconByName(c.iconName),
+            }));
 
           setTabs([ALL_TAB, ...mapped]);
         } else {
@@ -350,12 +352,17 @@ export default function HomeHero({
     const timeout2 = setTimeout(() => updateIndicator(true), 150);
     const timeout3 = setTimeout(() => updateIndicator(false), 300); // Last update without scroll to avoid conflicts
 
+    // Add resize listener to keep indicator accurate
+    const handleResize = () => updateIndicator(false);
+    window.addEventListener("resize", handleResize);
+
     return () => {
       clearTimeout(timeout1);
       clearTimeout(timeout2);
       clearTimeout(timeout3);
+      window.removeEventListener("resize", handleResize);
     };
-  }, [activeTab]);
+  }, [activeTab, tabs]);
 
   const handleTabClick = (tabId: string) => {
     onTabChange?.(tabId);

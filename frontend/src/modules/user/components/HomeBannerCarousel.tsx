@@ -30,8 +30,8 @@ const HomeBannerCarousel = ({ banners }: HomeBannerCarouselProps) => {
   if (!banners || banners.length === 0) return null;
 
   return (
-    <div className="w-full px-4 md:px-6 lg:px-8 mt-4 md:mt-6">
-      <div className="relative overflow-hidden rounded-2xl aspect-[1.5/1] md:aspect-[3/1] lg:aspect-[4/1] bg-neutral-100 shadow-sm group">
+    <div className="w-full px-0 md:px-6 lg:px-8 mt-0 md:mt-2">
+      <div className="relative overflow-hidden rounded-none aspect-[2.2/1] md:aspect-[4/1] lg:aspect-[5/1] bg-neutral-100 shadow-sm group">
         <AnimatePresence mode="wait">
           <motion.div
             key={currentSlide}

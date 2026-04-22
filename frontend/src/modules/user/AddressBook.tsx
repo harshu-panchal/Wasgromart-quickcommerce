@@ -104,6 +104,25 @@ export default function AddressBook() {
     }
   };
 
+  const handleEdit = (addr: Address) => {
+    // Map backend address format to frontend OrderAddress format expected by CheckoutAddress
+    const parts = (addr.address || "").split(", ");
+    const editData = {
+      id: addr._id,
+      _id: addr._id,
+      name: addr.fullName,
+      phone: addr.phone,
+      flat: parts[0] || "",
+      street: parts[1] || "",
+      city: addr.city,
+      state: addr.state || "",
+      pincode: addr.pincode,
+      landmark: addr.landmark || "",
+      type: addr.type
+    };
+    navigate("/checkout/address", { state: { editAddress: editData } });
+  };
+
   const defaultBadge = useMemo(
     () => (
       <span className="ml-2 inline-flex items-center px-2 py-0.5 text-[10px] font-semibold text-green-700 bg-green-50 border border-green-100 rounded-full">
@@ -252,6 +271,25 @@ export default function AddressBook() {
                             <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
                           </svg>
                           {addr.isDefault ? "Default" : "Set default"}
+                        </button>
+                        <button
+                          onClick={() => handleEdit(addr)}
+                          className="flex items-center gap-1 text-sm font-semibold hover:text-teal-800 disabled:text-neutral-400"
+                          disabled={isBusy}
+                        >
+                          <svg
+                            viewBox="0 0 24 24"
+                            className="w-4 h-4"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+                          </svg>
+                          Edit
                         </button>
                         <button
                           onClick={() => handleDelete(addr._id)}

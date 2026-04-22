@@ -39,11 +39,13 @@ export async function findSellersWithinRange(
   userLng: number
 ): Promise<mongoose.Types.ObjectId[]> {
   if (userLat === null || userLng === null || isNaN(userLat) || isNaN(userLng)) {
+    console.log("DEBUG: findSellersWithinRange - INVALID USER COORDINATES", { userLat, userLng });
     return [];
   }
 
   // Validate coordinates
   if (userLat < -90 || userLat > 90 || userLng < -180 || userLng > 180) {
+    console.log("DEBUG: findSellersWithinRange - USER COORDINATES OUT OF RANGE", { userLat, userLng });
     return [];
   }
 
@@ -51,10 +53,11 @@ export async function findSellersWithinRange(
     // Fetch all approved sellers with location
     const sellers = await Seller.find({
       status: "Approved",
-    }).select("_id location serviceRadiusKm latitude longitude");
+    }).select("_id location serviceRadiusKm latitude longitude storeName");
 
     // Filter sellers where user is within their service radius
     const nearbySellerIds: mongoose.Types.ObjectId[] = [];
+    console.log(`DEBUG: findSellersWithinRange - Total Approved sellers found: ${sellers.length}`);
 
     for (const seller of sellers) {
       let sellerLat: number | null = null;
@@ -72,6 +75,12 @@ export async function findSellersWithinRange(
       }
 
       if (sellerLat !== null && sellerLng !== null && !isNaN(sellerLat) && !isNaN(sellerLng)) {
+        // Basic check for 0,0 coordinates
+        if (sellerLat === 0 && sellerLng === 0) {
+          console.log(`DEBUG: Seller ${seller._id} (${seller.storeName}) skipped - COORDINATES ARE 0,0`);
+          continue;
+        }
+
         const distance = calculateDistance(
           userLat,
           userLng,
@@ -80,12 +89,23 @@ export async function findSellersWithinRange(
         );
         const serviceRadius = seller.serviceRadiusKm || 10; // Default to 10km if not set
 
+        console.log(`DEBUG: Seller ${seller._id} (${seller.storeName}) - Distance: ${distance.toFixed(2)}km, Radius: ${serviceRadius}km`);
+
         if (distance <= serviceRadius) {
           nearbySellerIds.push(seller._id as mongoose.Types.ObjectId);
         }
+      } else {
+        console.log(`DEBUG: Seller ${seller._id} (${seller.storeName}) skipped - MISSING OR INVALID COORDINATES`, {
+          lat: sellerLat,
+          lng: sellerLng,
+          rawLat: seller.latitude,
+          rawLng: seller.longitude,
+          hasLoc: !!seller.location
+        });
       }
     }
 
+    console.log(`DEBUG: findSellersWithinRange - Final nearbySellerIds count: ${nearbySellerIds.length}`);
     return nearbySellerIds;
   } catch (error) {
     console.error("Error finding nearby sellers:", error);

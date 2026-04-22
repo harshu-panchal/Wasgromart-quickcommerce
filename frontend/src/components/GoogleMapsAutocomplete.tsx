@@ -157,7 +157,10 @@ export default function GoogleMapsAutocomplete({
         value={inputValue}
         onChange={(e) => {
           setInputValue(e.target.value);
-          onChange(e.target.value, 0, 0, e.target.value);
+          // When typing manually, only update the address/searchLocation string.
+          // Do NOT trigger coordinate updates (passed as undefined) so the parent can keep existing ones.
+          // @ts-ignore - passing undefined for lat/lng to signal no change
+          onChange(e.target.value, undefined, undefined, e.target.value);
         }}
         placeholder={placeholder}
         className={`w-full px-3 py-2 border border-neutral-300 rounded-lg placeholder:text-neutral-400 focus:outline-none focus:border-orange-500 bg-white ${className}`}

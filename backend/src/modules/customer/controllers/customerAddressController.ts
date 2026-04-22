@@ -27,27 +27,7 @@ export const addAddress = async (req: Request, res: Response) => {
             await Address.updateMany({ customer: userId }, { isDefault: false });
         }
 
-        // Check if an address of this type already exists for this user
-        const existingAddress = await Address.findOne({ customer: userId, type: type || 'Home' });
 
-        if (existingAddress) {
-            // Update existing address of this type
-            existingAddress.fullName = finalName;
-            existingAddress.phone = phone;
-            existingAddress.address = fullAddress;
-            existingAddress.city = city;
-            existingAddress.state = state;
-            existingAddress.pincode = pincode;
-            existingAddress.isDefault = isDefault || false;
-
-            await existingAddress.save();
-
-            return res.status(200).json({
-                success: true,
-                data: existingAddress,
-                message: "Address updated successfully"
-            });
-        }
 
         const newAddress = new Address({
             customer: userId,

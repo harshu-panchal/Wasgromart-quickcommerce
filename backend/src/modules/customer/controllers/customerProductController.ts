@@ -23,23 +23,29 @@ export const getProducts = async (req: Request, res: Response) => {
       longitude, // User location longitude
     } = req.query;
 
+    // Base query: only active and published products
+    // Also exclude shop-by-store-only products from category pages
     const query: any = {
-      status: "Active",
-      publish: true,
-      // Exclude shop-by-store-only products from category pages
-      $or: [
-        { isShopByStoreOnly: { $ne: true } },
-        { isShopByStoreOnly: { $exists: false } },
-      ],
+      $and: [
+        { status: "Active" },
+        { publish: true },
+        {
+          $or: [
+            { isShopByStoreOnly: { $ne: true } },
+            { isShopByStoreOnly: { $exists: false } },
+          ],
+        }
+      ]
     };
 
     // Location-based filtering: Only show products from sellers within user's range
     const userLat = latitude ? parseFloat(latitude as string) : null;
     const userLng = longitude ? parseFloat(longitude as string) : null;
 
+    let nearbySellerIds: any[] = [];
     if (userLat && userLng && !isNaN(userLat) && !isNaN(userLng)) {
       // Find sellers within user's location range
-      const nearbySellerIds = await findSellersWithinRange(userLat, userLng);
+      nearbySellerIds = await findSellersWithinRange(userLat, userLng);
 
       if (nearbySellerIds.length === 0) {
         // No sellers within range, return empty result
@@ -58,7 +64,7 @@ export const getProducts = async (req: Request, res: Response) => {
       }
 
       // Filter products by sellers within range
-      query.seller = { $in: nearbySellerIds };
+      query.$and.push({ seller: { $in: nearbySellerIds } });
     } else {
       // If no location provided, return empty result (strictly enforce location)
       return res.status(200).json({
@@ -80,7 +86,10 @@ export const getProducts = async (req: Request, res: Response) => {
       value: string,
       modelName: string = ""
     ) => {
+      if (!value) return null;
       if (mongoose.Types.ObjectId.isValid(value)) return value;
+
+      const trimmedValue = value.trim();
 
       // Build query - only check status if model has status field (Category has it, SubCategory might not)
       const baseQuery: any = {};
@@ -90,7 +99,7 @@ export const getProducts = async (req: Request, res: Response) => {
 
       // Try exact slug match first
       let item = await model
-        .findOne({ ...baseQuery, slug: value })
+        .findOne({ ...baseQuery, slug: trimmedValue })
         .select("_id")
         .lean();
       if (item) return item._id;
@@ -99,14 +108,14 @@ export const getProducts = async (req: Request, res: Response) => {
       item = await model
         .findOne({
           ...baseQuery,
-          slug: { $regex: new RegExp(`^${value}$`, "i") },
+          slug: { $regex: new RegExp(`^${trimmedValue}$`, "i") },
         })
         .select("_id")
         .lean();
       if (item) return item._id;
 
       // Try name match as fallback (case-insensitive) - replace hyphens/underscores with spaces
-      let namePattern = value.replace(/[-_]/g, " ");
+      let namePattern = trimmedValue.replace(/[-_]/g, " ");
       item = await model
         .findOne({
           ...baseQuery,
@@ -116,9 +125,19 @@ export const getProducts = async (req: Request, res: Response) => {
         .lean();
       if (item) return item._id;
 
+      // Very broad name match as last resort
+      item = await model
+        .findOne({
+          ...baseQuery,
+          name: { $regex: new RegExp(namePattern, "i") },
+        })
+        .select("_id")
+        .lean();
+      if (item) return item._id;
+
       // Special handling for Category and "and" -> "&"
-      if (modelName === "Category" && value.includes("and")) {
-         const withAmpersand = value.replace(/-and-/g, " & ").replace(/-/g, " ");
+      if (modelName === "Category" && trimmedValue.includes("and")) {
+         const withAmpersand = trimmedValue.replace(/-and-/g, " & ").replace(/-/g, " ");
          item = await model
            .findOne({
              ...baseQuery,
@@ -132,50 +151,54 @@ export const getProducts = async (req: Request, res: Response) => {
       return null;
     };
 
+    // Handle Category and Subcategory resolving
+    let resolvedCategoryId = null;
+    let resolvedSubcategoryId = null;
+
     if (category) {
-      const categoryId = await resolveId(
-        Category,
-        category as string,
-        "Category"
-      );
-      if (categoryId) query.category = categoryId;
+      resolvedCategoryId = await resolveId(Category, category as string, "Category");
+      console.log(`DEBUG: resolveId result for category "${category}":`, resolvedCategoryId);
     }
 
     if (subcategory) {
-      // Try to resolve from Category model first (new structure where subcategories are categories with parentId)
-      let subcategoryId = await resolveId(
-        Category,
-        subcategory as string,
-        "Category"
-      );
-      // If not found in Category, try old SubCategory model (backward compatibility)
-      if (!subcategoryId) {
-        subcategoryId = await resolveId(
-          SubCategory,
-          subcategory as string,
-          "SubCategory"
-        );
+      // Try Category model first (new system), then SubCategory (old system)
+      resolvedSubcategoryId = await resolveId(Category, subcategory as string, "Category");
+      if (!resolvedSubcategoryId) {
+        resolvedSubcategoryId = await resolveId(SubCategory, subcategory as string, "SubCategory");
       }
-      if (subcategoryId) query.subcategory = subcategoryId;
+      console.log(`DEBUG: resolveId result for subcategory "${subcategory}":`, resolvedSubcategoryId);
+    }
+
+    // Flexible filtering: if we have a target ID, check BOTH category and subcategory fields
+    // This handles hierarchical leveling differences across products/sellers
+    const targetId = resolvedSubcategoryId || resolvedCategoryId;
+    if (targetId) {
+      query.$and.push({
+        $or: [
+          { category: targetId },
+          { subcategory: targetId }
+        ]
+      });
     }
 
     if (brand) {
-      query.brand = brand;
+      query.$and.push({ brand });
     }
 
     if (minPrice || maxPrice) {
-      query.price = {};
-      if (minPrice) query.price.$gte = Number(minPrice);
-      if (maxPrice) query.price.$lte = Number(maxPrice);
+      const priceFilter: any = {};
+      if (minPrice) priceFilter.$gte = Number(minPrice);
+      if (maxPrice) priceFilter.$lte = Number(maxPrice);
+      query.$and.push({ price: priceFilter });
     }
 
     if (minDiscount) {
-      query.discount = { $gte: Number(minDiscount) };
+      query.$and.push({ discount: { $gte: Number(minDiscount) } });
     }
 
     if (search) {
       // Use text search for broad matching
-      query.$text = { $search: search as string };
+      query.$and.push({ $text: { $search: search as string } });
     }
 
     // Calculate skip for pagination
@@ -188,19 +211,52 @@ export const getProducts = async (req: Request, res: Response) => {
     if (sort === "discount") sortOptions = { discount: -1 };
     if (sort === "popular") sortOptions = { popular: -1, dealOfDay: -1 };
 
+    // Add debug logging for development
+    console.log("DEBUG: getProducts Query:", JSON.stringify(query, null, 2));
+    console.log("DEBUG: Nearby Seller IDs:", nearbySellerIds);
+
     const products = await Product.find(query)
       .populate("category", "name icon image")
       .populate("subcategory", "name")
       .populate("brand", "name")
-      .populate("seller", "storeName")
+      .populate("seller", "storeName status")
       .sort(sortOptions)
       .skip(skip)
       .limit(Number(limit));
 
     const total = await Product.countDocuments(query);
 
+    // --- IMPROVED DIAGNOSTICS FOR EMPTY RESULTS ---
+    let extraMessage = "";
+    if (total === 0 && targetId) {
+       // Check if products exist for this category but were filtered by seller state
+       const rawCount = await Product.countDocuments({
+         $or: [{ category: targetId }, { subcategory: targetId }],
+         publish: true
+       });
+
+       if (rawCount > 0) {
+          // Check if it's due to seller status
+          const productsWithSellers = await Product.find({
+            $or: [{ category: targetId }, { subcategory: targetId }],
+            publish: true
+          }).populate('seller', 'status storeName');
+
+          const pendingSellers = productsWithSellers
+            .filter((p: any) => p.seller && p.seller.status === 'Pending')
+            .map((p: any) => p.seller.storeName);
+
+          if (pendingSellers.length > 0) {
+            extraMessage = `Found ${rawCount} products, but they are hidden because the seller(s) [${[...new Set(pendingSellers)].join(', ')}] are still 'Pending' admin approval.`;
+          } else {
+            extraMessage = `Products found, but they might be outside your current location range (${nearbySellerIds.length} sellers nearby).`;
+          }
+       }
+    }
+
     return res.status(200).json({
       success: true,
+      message: extraMessage || (total === 0 ? "No products found matches your criteria." : undefined),
       data: products,
       pagination: {
         page: Number(page),

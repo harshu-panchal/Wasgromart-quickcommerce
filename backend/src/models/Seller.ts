@@ -332,6 +332,19 @@ const SellerSchema = new Schema<ISeller>(
 
 // Hash password before saving (only if password is provided)
 SellerSchema.pre('save', async function (next) {
+  // Update GeoJSON location from latitude/longitude strings if they've changed
+  if (this.isModified('latitude') || this.isModified('longitude')) {
+    const lat = parseFloat(this.latitude || '0');
+    const lng = parseFloat(this.longitude || '0');
+    
+    if (!isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0) {
+      this.location = {
+        type: 'Point' as const,
+        coordinates: [lng, lat] // MongoDB expects [longitude, latitude]
+      };
+    }
+  }
+
   // Skip password hashing if password is not provided or not modified
   if (!this.isModified('password') || !this.password) {
     return next();

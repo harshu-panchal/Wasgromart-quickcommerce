@@ -85,41 +85,20 @@ export default function CheckoutAddress() {
     }
   }, [isAuthenticated, editAddress]);
 
-  // Update address when addressType changes
+  // REMOVED: Auto-loading of existing addresses when addressType changes.
+  // This was preventing users from adding a second address of the same type.
+  /*
   useEffect(() => {
     if (!editAddress && savedAddresses.length > 0) {
       const typeLabel = addressType.charAt(0).toUpperCase() + addressType.slice(1) as any;
       const existingAddr = savedAddresses.find(a => a.type === typeLabel);
 
       if (existingAddr) {
-        const parts = existingAddr.address.split(', ');
-        setAddress({
-          name: existingAddr.fullName,
-          phone: existingAddr.phone,
-          flat: parts[0] || '',
-          street: parts[1] || '',
-          city: existingAddr.city,
-          state: existingAddr.state || '',
-          pincode: existingAddr.pincode,
-          landmark: existingAddr.landmark || '',
-          id: existingAddr._id,
-        });
-      } else {
-        // Clear or reset to defaults if no address of this type
-        setAddress(prev => ({
-          ...prev,
-          flat: '',
-          street: '',
-          city: '',
-          state: '',
-          pincode: '',
-          landmark: '',
-          id: undefined,
-          _id: undefined,
-        }));
+        // ... populate ...
       }
     }
   }, [addressType, savedAddresses, editAddress]);
+  */
 
   // Update address when editAddress changes
   useEffect(() => {

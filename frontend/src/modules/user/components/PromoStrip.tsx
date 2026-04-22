@@ -511,7 +511,7 @@ export default function PromoStrip({ activeTab = "all" }: PromoStripProps) {
   // Show "No active promotions" only if there are no cards AND no products
   if (!hasData || (categoryCards.length === 0 && featuredProducts.length === 0)) {
     return (
-      <div className="text-center py-6 text-neutral-400 text-sm">
+      <div className="text-center py-2 text-neutral-400 text-sm">
         No active promotions
       </div>
     );

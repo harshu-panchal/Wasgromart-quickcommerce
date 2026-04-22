@@ -299,7 +299,7 @@ export default function SellerSignUp() {
               <img
                 src={logo}
                 alt="Wasgro mart"
-                className="h-40 w-auto object-contain relative z-10 drop-shadow-lg transform hover:scale-105 transition-transform duration-300"
+                className="h-32 w-auto object-contain relative z-10 drop-shadow-lg transform hover:scale-105 transition-transform duration-300"
               />
             </div>
             {!showOTP && (
@@ -319,14 +319,18 @@ export default function SellerSignUp() {
         <div
           className="px-6 pb-6 space-y-4 seller-signup-form"
           style={{
-            maxHeight: "70vh",
+            maxHeight: "85vh",
             overflowY: "auto",
             scrollbarWidth: "none",
             msOverflowStyle: "none",
           }}>
           <style>{`
             .seller-signup-form::-webkit-scrollbar {
-              display: none;
+              width: 6px;
+            }
+            .seller-signup-form::-webkit-scrollbar-thumb {
+              background-color: rgba(255, 255, 255, 0.2);
+              border-radius: 10px;
             }
           `}</style>
           {!showOTP ? (
@@ -462,8 +466,8 @@ export default function SellerSignUp() {
                           setFormData((prev) => ({
                             ...prev,
                             searchLocation: address,
-                            latitude: lat.toString(),
-                            longitude: lng.toString(),
+                            latitude: lat !== undefined ? lat.toString() : prev.latitude,
+                            longitude: lng !== undefined ? lng.toString() : prev.longitude,
                             address: address,
                             city: components?.city || prev.city,
                           }));
