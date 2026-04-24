@@ -245,3 +245,15 @@ export const bulkUploadProducts = async (file: File): Promise<ApiResponse<any>> 
   });
   return response.data;
 };
+
+/**
+ * Bulk create products manually
+ */
+export const bulkCreateProducts = async (
+  products: CreateProductData[]
+): Promise<ApiResponse<any>> => {
+  const response = await api.post<ApiResponse<any>>("/products/bulk-create", {
+    products,
+  });
+  return response.data;
+};

@@ -23,46 +23,43 @@ export const createProduct = asyncHandler(
       });
     }
 
-    // 2. Map fields to match Product model
+    // Map fields to match Product model
     const newProductData: any = {
       ...productData,
-      seller: sellerId, // Map sellerId to seller
-      headerCategoryId: productData.headerCategoryId, // Map headerCategoryId
-      category: productData.categoryId, // Map categoryId to category
+      seller: sellerId,
+      headerCategoryId: productData.headerCategoryId,
+      category: productData.categoryId,
       subcategory: productData.subcategoryId,
+      subSubCategory: productData.subSubCategoryId,
       brand: productData.brandId,
-      mainImage: productData.mainImageUrl, // Map mainImageUrl to mainImage
-      galleryImages: productData.galleryImageUrls,
+      mainImage: productData.mainImageUrl,
+      galleryImages: productData.galleryImageUrls || [],
+      tax: productData.taxId,
+      hsnCode: productData.hsnCode,
     };
 
-    // Map variations: Ensure 'title' from frontend is mapped to 'value' (or name) expected by Schema
+    // Map variations
     if (newProductData.variations) {
       newProductData.variations = newProductData.variations.map((v: any) => ({
         ...v,
-        value: v.value || v.title, // Map title to value
-        name: v.name || "Variation", // Default name
+        value: v.value || v.title,
+        name: v.name || "Variation",
         discPrice: v.discPrice || 0,
         status: v.status || "Available",
       }));
     }
 
-    // 3. Set Price and Stock from Variations
-    // The Product model requires a top-level price and stock
+    // Set Price and Stock from Variations
     if (newProductData.variations && newProductData.variations.length > 0) {
-      // Use the price of the first variation as the base price
       newProductData.price = newProductData.variations[0].price;
       newProductData.discPrice = newProductData.variations[0].discPrice || 0;
-
-      // Calculate total stock (sum of all variations)
-      // Note: If any variation has stock 0 (unlimited), how should we handle top level?
-      // For now, let's sum them up. If purely unlimited, logic might differ.
       newProductData.stock = newProductData.variations.reduce(
         (acc: number, curr: any) => acc + (parseInt(curr.stock) || 0),
         0
       );
     }
 
-    // 4. Validate Price (Model requirement)
+    // Validate Price
     if (newProductData.price === undefined || newProductData.price === null) {
       return res.status(400).json({
         success: false,
@@ -70,54 +67,27 @@ export const createProduct = asyncHandler(
       });
     }
 
-    // 5. Clean up undefined fields
-    if (!newProductData.headerCategoryId)
-      delete newProductData.headerCategoryId;
+    // Clean up undefined fields
+    if (!newProductData.headerCategoryId) delete newProductData.headerCategoryId;
     if (!newProductData.subcategory) delete newProductData.subcategory;
+    if (!newProductData.subSubCategory) delete newProductData.subSubCategory;
     if (!newProductData.brand) delete newProductData.brand;
 
-    // Handle Tax: Frontend sends taxId, Model expects 'tax' (string) or something else?
-    // Checking SellerAddProduct.tsx sending taxId -> formData.tax
-    // Model Product.ts -> tax: { type: String }
-    // Ideally we should store the Tax ID or Name. Since frontend sends ID, let's map it.
-    if (productData.taxId) {
-      newProductData.tax = productData.taxId;
-    }
-
     // Validate variation prices
-    for (const variation of productData.variations) {
-      if (Number(variation.discPrice) > Number(variation.price)) {
-        return res.status(400).json({
-          success: false,
-          message: `Discounted price (${variation.discPrice}) cannot be greater than price (${variation.price}) for variation ${variation.title}`,
-        });
+    if (productData.variations) {
+      for (const variation of productData.variations) {
+        if (Number(variation.discPrice) > Number(variation.price)) {
+          return res.status(400).json({
+            success: false,
+            message: `Discounted price (${variation.discPrice}) cannot be greater than price (${variation.price}) for variation ${variation.title}`,
+          });
+        }
       }
     }
 
-    // 6. Set product status - All products are published automatically without approval
-    newProductData.publish = true;
+    // Set product status
     newProductData.status = "Active";
     newProductData.requiresApproval = false;
-
-    // Set default values for other required fields if not provided
-    if (!newProductData.popular) newProductData.popular = false;
-    if (!newProductData.dealOfDay) newProductData.dealOfDay = false;
-    if (!newProductData.isReturnable) newProductData.isReturnable = false;
-    if (!newProductData.rating) newProductData.rating = 0;
-    if (!newProductData.reviewsCount) newProductData.reviewsCount = 0;
-    if (!newProductData.discount) newProductData.discount = 0;
-    if (!newProductData.tags) newProductData.tags = [];
-
-    // Handle Shop by Store fields
-    if (productData.isShopByStoreOnly !== undefined) {
-      newProductData.isShopByStoreOnly = productData.isShopByStoreOnly === true || productData.isShopByStoreOnly === "true";
-    }
-    if (productData.shopId) {
-      newProductData.shopId = productData.shopId;
-    } else if (newProductData.isShopByStoreOnly) {
-      // If shop by store only is true but no shopId provided, set to null
-      newProductData.shopId = null;
-    }
 
     const product = await Product.create(newProductData);
 
@@ -125,6 +95,117 @@ export const createProduct = asyncHandler(
       success: true,
       message: "Product created successfully",
       data: product,
+    });
+  }
+);
+
+/**
+ * Create multiple products at once (Manual Bulk Upload)
+ */
+export const bulkCreateProducts = asyncHandler(
+  async (req: Request, res: Response) => {
+    const sellerId = (req as any).user.userId;
+    const { products } = req.body;
+
+    if (!Array.isArray(products)) {
+      return res.status(400).json({
+        success: false,
+        message: "Payload must be an array of products",
+      });
+    }
+
+    const results = {
+      total: products.length,
+      inserted: 0,
+      failed: 0,
+      errors: [] as any[],
+    };
+
+    const productsToInsert: any[] = [];
+
+    for (let i = 0; i < products.length; i++) {
+      const p = products[i];
+      const rowIndex = i + 1;
+
+      try {
+        // Map fields (same logic as createProduct)
+        const mappedData: any = {
+          ...p,
+          seller: sellerId,
+          headerCategoryId: p.headerCategoryId,
+          category: p.categoryId,
+          subcategory: p.subcategoryId,
+          subSubCategory: p.subSubCategoryId,
+          brand: p.brandId,
+          mainImage: p.mainImageUrl,
+          galleryImages: p.galleryImageUrls || [],
+          tax: p.taxId,
+          hsnCode: p.hsnCode,
+          status: "Active",
+          requiresApproval: false,
+          publish: p.publish !== undefined ? p.publish : true,
+        };
+
+        // Handle Variations
+        if (mappedData.variations) {
+          mappedData.variations = mappedData.variations.map((v: any) => ({
+            ...v,
+            value: v.value || v.title,
+            name: v.name || "Variation",
+            discPrice: v.discPrice || 0,
+            status: v.status || "Available",
+          }));
+
+          // Sync Price/Stock
+          if (mappedData.variations.length > 0) {
+            mappedData.price = mappedData.variations[0].price;
+            mappedData.discPrice = mappedData.variations[0].discPrice || 0;
+            mappedData.stock = mappedData.variations.reduce(
+              (acc: number, curr: any) => acc + (parseInt(curr.stock) || 0),
+              0
+            );
+          }
+        }
+
+        // Basic Validation
+        if (!mappedData.productName) throw new Error("Product name is required");
+        if (mappedData.price === undefined || mappedData.price === null) throw new Error("Price is required");
+        if (!mappedData.category) throw new Error("Category is required");
+
+        productsToInsert.push(mappedData);
+      } catch (err: any) {
+        results.failed++;
+        results.errors.push({
+          index: rowIndex,
+          product: p.productName || "Unknown",
+          error: err.message,
+        });
+      }
+    }
+
+    if (productsToInsert.length > 0) {
+      try {
+        const inserted = await Product.insertMany(productsToInsert, { ordered: false });
+        results.inserted = inserted.length;
+      } catch (bulkError: any) {
+        if (bulkError.insertedDocs) results.inserted = bulkError.insertedDocs.length;
+        if (bulkError.writeErrors) {
+          results.failed += bulkError.writeErrors.length;
+          bulkError.writeErrors.forEach((we: any) => {
+            results.errors.push({
+              index: "DB",
+              product: "Multiple",
+              error: we.errmsg || "Database error",
+            });
+          });
+        }
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Processed ${results.total} products: ${results.inserted} saved, ${results.failed} failed`,
+      data: results,
     });
   }
 );

@@ -10,6 +10,7 @@ import {
   bulkUpdateStock,
   getShops,
   bulkUpload,
+  bulkCreateProducts,
 } from "../modules/seller/controllers/productController";
 import { getBrands } from "../modules/admin/controllers/adminProductController";
 import { authenticate, requireUserType } from "../middleware/auth";
@@ -26,6 +27,9 @@ router.get("/brands", getBrands);
 
 // Get all active shops - sellers need this for shop-by-store-only products
 router.get("/shops", getShops);
+
+// Bulk Create Products (Manual Bulk Entry)
+router.post("/bulk-create", bulkCreateProducts);
 
 // Create product
 router.post("/", createProduct);

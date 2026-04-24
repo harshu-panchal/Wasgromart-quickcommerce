@@ -64,6 +64,7 @@ export interface IProduct extends mongoose.Document {
   seoImageAlt?: string;
 
   // Details
+  hsnCode?: string;
   pack?: string;
   shelfLife?: string;
   marketer?: string;
@@ -282,6 +283,10 @@ const ProductSchema = new Schema<IProduct>(
     },
 
     // Details
+    hsnCode: {
+      type: String,
+      trim: true,
+    },
     pack: { type: String, trim: true },
     shelfLife: { type: String, trim: true },
     marketer: { type: String, trim: true },
