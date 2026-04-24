@@ -20,6 +20,7 @@ export interface VerifyOTPResponse {
       logo?: string;
       address?: string;
       city?: string;
+      pincode?: string;
     };
   };
 }
@@ -33,11 +34,20 @@ export interface RegisterData {
   categories: string[]; // multiple categories
   address: string;
   city: string;
+  pincode?: string;
   serviceableArea?: string;
   searchLocation?: string;
   latitude?: string;
   longitude?: string;
   serviceRadiusKm?: string | number;
+  panCard?: string;
+  taxName?: string;
+  taxNumber?: string;
+  accountName?: string;
+  bankName?: string;
+  branch?: string;
+  accountNumber?: string;
+  ifsc?: string;
 }
 
 export interface RegisterResponse {

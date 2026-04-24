@@ -130,10 +130,10 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
   } = req.body;
 
   // Validation
-  if (!name || !mobile || !email || !password) {
+  if (!name || !mobile || !email) {
     return res.status(400).json({
       success: false,
-      message: "Name, mobile, email, and password are required",
+      message: "Name, mobile, and email are required",
     });
   }
 

@@ -12,6 +12,12 @@ export interface CustomerProfile {
   walletAmount: number;
   totalOrders: number;
   totalSpent: number;
+  address?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  profilePhoto?: string;
+  gstNumber?: string;
 }
 
 export interface GetProfileResponse {
@@ -23,7 +29,14 @@ export interface GetProfileResponse {
 export interface UpdateProfileData {
   name?: string;
   email?: string;
+  phone?: string;
   dateOfBirth?: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  profilePhoto?: string;
+  gstNumber?: string;
 }
 
 export interface UpdateProfileResponse {

@@ -94,6 +94,7 @@ export const verifyOTP = asyncHandler(async (req: Request, res: Response) => {
         logo: seller.logo,
         address: seller.address,
         city: seller.city,
+        pincode: seller.pincode,
       },
     },
   });
@@ -111,7 +112,16 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
     category,
     address,
     city,
+    pincode,
     serviceableArea,
+    panCard,
+    taxName,
+    taxNumber,
+    accountName,
+    bankName,
+    branch,
+    accountNumber,
+    ifsc,
   } = req.body;
 
   // Validation (password removed - sellers don't need password during signup)
@@ -197,6 +207,7 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
     category,
     address,
     city,
+    pincode,
     ...(serviceableArea && { serviceableArea }),
     searchLocation: req.body.searchLocation,
     latitude: req.body.latitude,
@@ -209,6 +220,14 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
     commission: 0,
     balance: 0,
     categories: req.body.categories || [],
+    panCard,
+    taxName,
+    taxNumber,
+    accountName,
+    bankName,
+    branch,
+    accountNumber,
+    ifsc,
   });
 
   // Generate token
@@ -228,6 +247,7 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
         status: seller.status,
         address: seller.address,
         city: seller.city,
+        pincode: seller.pincode,
       },
     },
   });

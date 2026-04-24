@@ -18,6 +18,8 @@ export interface ICustomer extends Document {
   city?: string;
   state?: string;
   pincode?: string;
+  profilePhoto?: string;
+  gstNumber?: string;
   locationUpdatedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -128,6 +130,15 @@ const CustomerSchema = new Schema<ICustomer>(
     pincode: {
       type: String,
       trim: true,
+    },
+    profilePhoto: {
+      type: String,
+      trim: true,
+    },
+    gstNumber: {
+      type: String,
+      trim: true,
+      uppercase: true,
     },
     locationUpdatedAt: {
       type: Date,

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
     sendOTP,
@@ -12,22 +12,90 @@ import logo from "@assets/wasgromart-black-text-removebg-preview.png";
 export default function Register() {
     const navigate = useNavigate();
     const { login } = useAuth();
-    const [name, setName] = useState("");
-    const [email, setEmail] = useState("");
-    const [mobileNumber, setMobileNumber] = useState("");
+    const [name, setName] = useState(() => {
+        const saved = localStorage.getItem("customer_register_draft");
+        if (saved) {
+            try {
+                return JSON.parse(saved).name || "";
+            } catch {
+                return "";
+            }
+        }
+        return "";
+    });
+    const [email, setEmail] = useState(() => {
+        const saved = localStorage.getItem("customer_register_draft");
+        if (saved) {
+            try {
+                return JSON.parse(saved).email || "";
+            } catch {
+                return "";
+            }
+        }
+        return "";
+    });
+    const [mobileNumber, setMobileNumber] = useState(() => {
+        const saved = localStorage.getItem("customer_register_draft");
+        if (saved) {
+            try {
+                return JSON.parse(saved).mobileNumber || "";
+            } catch {
+                return "";
+            }
+        }
+        return "";
+    });
     const [showOTP, setShowOTP] = useState(false);
     const [sessionId, setSessionId] = useState("");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState("");
+    const [timer, setTimer] = useState(0);
+    const [canResend, setCanResend] = useState(true);
+
+    useEffect(() => {
+        localStorage.setItem(
+            "customer_register_draft",
+            JSON.stringify({ name, email, mobileNumber })
+        );
+    }, [name, email, mobileNumber]);
+
+    useEffect(() => {
+        let interval: NodeJS.Timeout;
+        if (timer > 0) {
+            interval = setInterval(() => {
+                setTimer((prev) => prev - 1);
+            }, 1000);
+        } else {
+            setCanResend(true);
+        }
+        return () => clearInterval(interval);
+    }, [timer]);
+
+    const startTimer = () => {
+        setTimer(30);
+        setCanResend(false);
+    };
 
     const handleContinue = async () => {
         if (!name.trim()) {
             setError("Please enter your name");
             return;
         }
+        if (/[^a-zA-Z\s]/.test(name)) {
+            setError("Name must contain only alphabets");
+            return;
+        }
         if (mobileNumber.length !== 10) {
             setError("Please enter a valid 10-digit mobile number");
             return;
+        }
+
+        if (email.trim()) {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(email)) {
+                setError("Please enter a valid email address (ex - ags@gmail.com)");
+                return;
+            }
         }
 
         setLoading(true);
@@ -39,6 +107,7 @@ export default function Register() {
                 setSessionId(response.sessionId);
             }
             setShowOTP(true);
+            startTimer();
         } catch (err: any) {
             setError(
                 err.response?.data?.message ||
@@ -82,6 +151,7 @@ export default function Register() {
                     }
                 }
 
+                localStorage.removeItem("customer_register_draft");
                 navigate("/");
             }
         } catch (err: any) {
@@ -161,7 +231,7 @@ export default function Register() {
                                     <input
                                         type="text"
                                         value={name}
-                                        onChange={(e) => setName(e.target.value)}
+                                        onChange={(e) => setName(e.target.value.replace(/[^a-zA-Z\s]/g, ""))}
                                         placeholder="Full Name"
                                         className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-black/20 border border-white/10 text-white placeholder:text-white/30 focus:outline-none focus:border-green-400/50 focus:bg-black/30 transition-all font-medium text-sm tracking-wide shadow-inner"
                                         disabled={loading}
@@ -205,6 +275,7 @@ export default function Register() {
                                         className="w-full pl-12 pr-4 py-2.5 rounded-xl bg-black/20 border border-white/10 text-white placeholder:text-white/30 focus:outline-none focus:border-green-400/50 focus:bg-black/30 transition-all font-medium text-sm tracking-wide shadow-inner"
                                         maxLength={10}
                                         disabled={loading}
+                                        autoComplete="off"
                                     />
                                 </div>
 
@@ -298,10 +369,13 @@ export default function Register() {
                                 </button>
                                 <button
                                     onClick={handleContinue}
-                                    disabled={loading}
-                                    className="py-2.5 rounded-lg text-xs font-semibold text-green-400 hover:text-green-300 hover:bg-green-500/10 border border-green-500/20 transition-all active:scale-95"
+                                    disabled={loading || !canResend}
+                                    className={`py-2.5 rounded-lg text-xs font-semibold border transition-all active:scale-95 ${canResend && !loading
+                                        ? "text-green-400 hover:text-green-300 hover:bg-green-500/10 border-green-500/20"
+                                        : "text-white/30 border-white/5 cursor-not-allowed"
+                                        }`}
                                 >
-                                    {loading ? "Resending..." : "Resend OTP"}
+                                    {loading ? "Resending..." : timer > 0 ? `Resend in ${timer}s` : "Resend OTP"}
                                 </button>
                             </div>
                         </div>
@@ -312,13 +386,19 @@ export default function Register() {
                 <div className="px-6 py-3 bg-black/20 border-t border-white/10 text-center backdrop-blur-md">
                     <p className="text-[9px] text-white/50">
                         By continuing, you agree to our{" "}
-                        <a href="#" className="text-green-400 hover:text-green-300 hover:underline transition-colors">
+                        <button
+                            onClick={() => navigate("/terms-of-service")}
+                            className="text-green-400 hover:text-green-300 hover:underline transition-colors"
+                        >
                             Terms of Service
-                        </a>{" "}
+                        </button>{" "}
                         and{" "}
-                        <a href="#" className="text-green-400 hover:text-green-300 hover:underline transition-colors">
+                        <button
+                            onClick={() => navigate("/privacy-policy")}
+                            className="text-green-400 hover:text-green-300 hover:underline transition-colors"
+                        >
                             Privacy Policy
-                        </a>
+                        </button>
                     </p>
                 </div>
             </div>

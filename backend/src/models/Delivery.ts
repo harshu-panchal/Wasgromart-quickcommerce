@@ -89,9 +89,9 @@ const DeliverySchema = new Schema<IDelivery>(
     },
     password: {
       type: String,
-      required: [true, 'Password is required'],
+      required: false,
       minlength: [6, 'Password must be at least 6 characters'],
-      select: false, // Don't return password by default
+      select: false,
     },
     address: {
       type: String,
@@ -212,7 +212,7 @@ const DeliverySchema = new Schema<IDelivery>(
 
 // Hash password before saving
 DeliverySchema.pre('save', async function (next) {
-  if (!this.isModified('password')) {
+  if (!this.isModified('password') || !this.password) {
     return next();
   }
 

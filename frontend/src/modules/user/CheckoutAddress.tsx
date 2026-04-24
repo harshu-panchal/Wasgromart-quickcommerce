@@ -57,25 +57,6 @@ export default function CheckoutAddress() {
           const response = await getAddresses();
           if (response.success && Array.isArray(response.data)) {
             setSavedAddresses(response.data);
-
-            // If not editing, try to load the default 'home' address if it exists
-            if (!editAddress) {
-              const homeAddr = response.data.find(a => a.type === 'Home');
-              if (homeAddr) {
-                const parts = homeAddr.address.split(', ');
-                setAddress({
-                  name: homeAddr.fullName,
-                  phone: homeAddr.phone,
-                  flat: parts[0] || '',
-                  street: parts[1] || '',
-                  city: homeAddr.city,
-                  state: homeAddr.state || '',
-                  pincode: homeAddr.pincode,
-                  landmark: homeAddr.landmark || '',
-                  id: homeAddr._id,
-                });
-              }
-            }
           }
         } catch (error) {
           console.error('Error fetching addresses:', error);
@@ -252,9 +233,9 @@ export default function CheckoutAddress() {
     address.pincode.trim().length >= 6;
 
   return (
-    <div className="pb-24 bg-white min-h-screen">
+    <div className="pb-24 bg-white min-h-screen pt-6 md:pt-8">
       {/* Header */}
-      <div className="sticky top-0 z-50 bg-white border-b border-neutral-200">
+      <div className="sticky top-6 md:top-8 z-50 bg-white border-b border-neutral-200">
         <div className="px-4 py-2 flex items-center justify-between">
           <div className="flex items-center">
             <button
@@ -369,7 +350,7 @@ export default function CheckoutAddress() {
           <input
             type="text"
             value={address.name}
-            onChange={(e) => handleInputChange('name', e.target.value)}
+            onChange={(e) => handleInputChange('name', e.target.value.replace(/[^a-zA-Z\s]/g, ""))}
             className={`w-full px-3 py-2 bg-white border rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-green-500 focus:border-green-500 transition-colors ${errors.name ? 'border-red-500' : 'border-neutral-200'
               }`}
             placeholder="Enter your name"
@@ -430,7 +411,7 @@ export default function CheckoutAddress() {
           <input
             type="text"
             value={address.city}
-            onChange={(e) => handleInputChange('city', e.target.value)}
+            onChange={(e) => handleInputChange('city', e.target.value.replace(/[^a-zA-Z\s]/g, ""))}
             className={`w-full px-3 py-2 bg-white border rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-green-500 focus:border-green-500 transition-colors ${errors.city ? 'border-red-500' : 'border-neutral-200'
               }`}
             placeholder="City"
@@ -445,7 +426,7 @@ export default function CheckoutAddress() {
           <input
             type="text"
             value={address.state || ''}
-            onChange={(e) => handleInputChange('state', e.target.value)}
+            onChange={(e) => handleInputChange('state', e.target.value.replace(/[^a-zA-Z\s]/g, ""))}
             className={`w-full px-3 py-2 bg-white border rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-green-500 focus:border-green-500 transition-colors ${errors.state ? 'border-red-500' : 'border-neutral-200'
               }`}
             placeholder="State"
@@ -470,54 +451,7 @@ export default function CheckoutAddress() {
         </div>
       </div>
 
-      {/* Order Summary */}
-      <div className="px-4 mb-4">
-        <h2 className="text-sm font-bold text-neutral-900 mb-2.5">Order Summary</h2>
-        <div className="bg-white rounded-lg border border-neutral-200 p-2.5">
-          {/* Cart Items */}
-          <div className="space-y-2 mb-3">
-            {cart.items.map((item) => {
-              const { displayPrice } = calculateProductPrice(item.product);
-              return (
-                <div key={item.product.id} className="flex items-center justify-between text-xs">
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium text-neutral-900 truncate">{item.product.name}</div>
-                    <div className="text-[10px] text-neutral-500">
-                      {item.product.pack} × {item.quantity}
-                    </div>
-                  </div>
-                  <div className="font-semibold text-neutral-900 ml-2 flex-shrink-0">
-                    ₹{(displayPrice * item.quantity).toFixed(0)}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
 
-          <div className="border-t border-neutral-200 pt-2.5 space-y-1.5">
-            <div className="flex justify-between text-xs text-neutral-700">
-              <span>Subtotal</span>
-              <span className="font-medium">₹{cart.total.toFixed(0)}</span>
-            </div>
-            <div className="flex justify-between text-xs text-neutral-700">
-              <span>Platform Fee</span>
-              <span className="font-medium">₹{platformFee}</span>
-            </div>
-            <div className="flex justify-between text-xs text-neutral-700">
-              <span>Delivery Charges</span>
-              <span className={`font-medium ${deliveryFee === 0 ? 'text-green-600' : ''}`}>
-                {deliveryFee === 0 ? 'Free' : `₹${deliveryFee}`}
-              </span>
-            </div>
-            <div className="border-t border-neutral-200 pt-2 mt-2">
-              <div className="flex justify-between items-center">
-                <span className="text-sm font-bold text-neutral-900">Total</span>
-                <span className="text-base font-bold text-neutral-900">₹{totalAmount.toFixed(0)}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* Save Address Button */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-neutral-200 z-[60] shadow-lg">

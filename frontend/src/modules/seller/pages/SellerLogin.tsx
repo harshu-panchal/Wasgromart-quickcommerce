@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   sendOTP,
@@ -15,6 +15,25 @@ export default function SellerLogin() {
   const [showOTP, setShowOTP] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [timer, setTimer] = useState(0);
+  const [canResend, setCanResend] = useState(true);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (timer > 0) {
+      interval = setInterval(() => {
+        setTimer((prev) => prev - 1);
+      }, 1000);
+    } else {
+      setCanResend(true);
+    }
+    return () => clearInterval(interval);
+  }, [timer]);
+
+  const startTimer = () => {
+    setTimer(30);
+    setCanResend(false);
+  };
 
   const handleMobileLogin = async () => {
     if (mobileNumber.length !== 10) return;
@@ -26,6 +45,7 @@ export default function SellerLogin() {
       const response = await sendOTP(mobileNumber);
       if (response.success) {
         setShowOTP(true);
+        startTimer();
         setError("");
       } else {
         setError(response.message || "Failed to send OTP. Please try again.");
@@ -76,26 +96,7 @@ export default function SellerLogin() {
       <div className="absolute bottom-[-10%] right-[-5%] w-[400px] h-[400px] rounded-full bg-teal-400/20 blur-[120px] animate-pulse delay-700" />
       <div className="absolute top-[40%] left-[20%] w-[300px] h-[300px] rounded-full bg-emerald-400/10 blur-[80px]" />
 
-      {/* Back Button */}
-      <button
-        onClick={() => navigate(-1)}
-        className="absolute top-4 left-4 z-20 w-10 h-10 rounded-full bg-white/10 backdrop-blur-md border border-white/20 shadow-lg flex items-center justify-center text-white hover:bg-white/20 transition-all active:scale-95"
-        aria-label="Back">
-        <svg
-          width="20"
-          height="20"
-          viewBox="0 0 24 24"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg">
-          <path
-            d="M15 18L9 12L15 6"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </button>
+
 
       {/* Glassmorphism Card */}
       <div className="w-full max-w-sm relative z-10 backdrop-blur-xl bg-white/10 border border-white/20 rounded-2xl shadow-[0_8px_32px_0_rgba(0,0,0,0.36)] overflow-hidden animate-fade-in-up">
@@ -144,6 +145,7 @@ export default function SellerLogin() {
                     className="w-full pl-12 pr-4 py-2.5 rounded-xl bg-black/20 border border-white/10 text-white placeholder:text-white/30 focus:outline-none focus:border-green-400/50 focus:bg-black/30 transition-all font-medium text-sm tracking-wide shadow-inner"
                     maxLength={10}
                     disabled={loading}
+                    autoComplete="off"
                     autoFocus
                   />
                 </div>
@@ -243,6 +245,7 @@ export default function SellerLogin() {
                       const response = await sendOTP(mobileNumber);
                       if (response.success) {
                         setError("");
+                        startTimer();
                       } else {
                         setError(response.message || "Failed to resend OTP.");
                       }
@@ -252,10 +255,13 @@ export default function SellerLogin() {
                       setLoading(false);
                     }
                   }}
-                  disabled={loading}
-                  className="py-2.5 rounded-lg text-xs font-semibold text-green-400 hover:text-green-300 hover:bg-green-500/10 border border-green-500/20 transition-all active:scale-95"
+                  disabled={loading || !canResend}
+                  className={`py-2.5 rounded-lg text-xs font-semibold border transition-all active:scale-95 ${canResend && !loading
+                    ? "text-green-400 hover:text-green-300 hover:bg-green-500/10 border-green-500/20"
+                    : "text-white/30 border-white/5 cursor-not-allowed"
+                    }`}
                 >
-                  {loading ? "Sending..." : "Resend OTP"}
+                  {loading ? "Sending..." : timer > 0 ? `Resend in ${timer}s` : "Resend OTP"}
                 </button>
               </div>
             </div>
@@ -265,7 +271,20 @@ export default function SellerLogin() {
         {/* Footer */}
         <div className="px-6 py-3 bg-black/20 border-t border-white/10 text-center backdrop-blur-md">
           <p className="text-[9px] text-white/50">
-            By continuing, you agree to Wasgro mart's Terms of Service and Privacy Policy
+            By continuing, you agree to Wasgro mart's{" "}
+            <button
+              onClick={() => navigate("/terms-of-service")}
+              className="text-green-400 hover:text-green-300 hover:underline transition-colors"
+            >
+              Terms of Service
+            </button>{" "}
+            and{" "}
+            <button
+              onClick={() => navigate("/privacy-policy")}
+              className="text-green-400 hover:text-green-300 hover:underline transition-colors"
+            >
+              Privacy Policy
+            </button>
           </p>
         </div>
       </div>

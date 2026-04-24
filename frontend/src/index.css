@@ -2,11 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Prevent font flash for Rubik Doodle Shadow */
-@font-face {
-  font-family: 'Rubik Doodle Shadow';
-  font-display: swap;
-}
 
 @layer base {
   body {
@@ -92,5 +87,15 @@ video {
     opacity: 1;
     transform: translateX(-50%) translateY(0);
   }
+}
+
+/* Prevent browser autofill from changing input backgrounds */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 1000px rgba(0, 0, 0, 0.2) inset !important;
+  -webkit-text-fill-color: white !important;
+  transition: background-color 5000s ease-in-out 0s;
 }
 

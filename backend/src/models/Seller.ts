@@ -14,6 +14,7 @@ export interface ISeller extends Document {
   category: string;
   taxName?: string;
   address: string;
+  pincode?: string;
   taxNumber?: string;
   storeDescription?: string;
   storeBanner?: string;
@@ -151,6 +152,10 @@ const SellerSchema = new Schema<ISeller>(
     address: {
       type: String,
       required: false,
+      trim: true,
+    },
+    pincode: {
+      type: String,
       trim: true,
     },
     taxNumber: {
