@@ -202,7 +202,7 @@ export default function AdminManageCustomer() {
           customer.status,
           customer.refCode,
           customer.totalOrders,
-          customer.totalSpent.toFixed(2),
+          customer.totalSpent ? customer.totalSpent.toFixed(2) : "0.00",
         ].join(",")
       ),
     ].join("\n");
@@ -462,7 +462,7 @@ export default function AdminManageCustomer() {
                         {customer.totalOrders}
                       </td>
                       <td className="p-4 border border-neutral-200">
-                        ₹{customer.totalSpent.toFixed(2)}
+                        ₹{(customer.totalSpent || 0).toFixed(2)}
                       </td>
                       <td className="p-4 border border-neutral-200">
                         <div className="flex items-center gap-2">

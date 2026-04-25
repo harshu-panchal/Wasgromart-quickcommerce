@@ -42,7 +42,7 @@ export default function AdminLowestPrices() {
             setLoadingProducts(true);
             const response = await getLowestPricesProducts();
             if (response.success && Array.isArray(response.data)) {
-                setLowestPricesProducts(response.data);
+                setLowestPricesProducts(response.data.filter(Boolean));
             }
         } catch (err) {
             console.error("Error fetching lowest prices products:", err);
@@ -57,7 +57,7 @@ export default function AdminLowestPrices() {
             const response = await getProducts({ limit: 1000, status: "Active" });
             if (response.success && response.data) {
                 const productList = Array.isArray(response.data) ? response.data : [];
-                setAvailableProducts(productList);
+                setAvailableProducts(productList.filter(Boolean));
             }
         } catch (err) {
             console.error("Error fetching products:", err);
@@ -67,12 +67,14 @@ export default function AdminLowestPrices() {
     // Filter products based on search term and exclude already added products
     const filteredProducts = availableProducts.filter((product) => {
         // Get IDs of products already in lowest prices
-        const existingProductIds = lowestPricesProducts.map((lp) =>
-            typeof lp.product === "string" ? lp.product : lp.product._id
-        );
+        const existingProductIds = lowestPricesProducts
+            .filter(lp => lp && lp.product) // Filter out null items or items with deleted products
+            .map((lp) =>
+                typeof lp.product === "string" ? lp.product : lp.product._id
+            );
 
         // Exclude already added products
-        if (existingProductIds.includes(product._id)) {
+        if (!product || existingProductIds.includes(product._id)) {
             return false;
         }
 
@@ -137,7 +139,13 @@ export default function AdminLowestPrices() {
     const handleEdit = (lowestPricesProduct: LowestPricesProduct) => {
         const productId = typeof lowestPricesProduct.product === "string"
             ? lowestPricesProduct.product
-            : lowestPricesProduct.product._id;
+            : lowestPricesProduct.product?._id;
+        
+        if (!productId) {
+            setError("Cannot edit: Associated product not found (it may have been deleted)");
+            return;
+        }
+        
         setSelectedProduct(productId);
         setOrder(lowestPricesProduct.order);
         setIsActive(lowestPricesProduct.isActive);
@@ -411,6 +419,7 @@ export default function AdminLowestPrices() {
                                         </tr>
                                     ) : (
                                         displayedProducts.map((item) => {
+                                            if (!item) return null;
                                             const product =
                                                 typeof item.product === "string"
                                                     ? null
