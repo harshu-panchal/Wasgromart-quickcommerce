@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { createProduct, getShops, Shop, bulkCreateProducts } from "../../../services/api/productService";
+import * as XLSX from "xlsx";
+
 import { uploadImage } from "../../../services/api/uploadService";
 import {
   getCategories,
@@ -69,7 +71,12 @@ export default function SellerBulkUpload() {
   const [shops, setShops] = useState<Shop[]>([]);
   const [rows, setRows] = useState<ProductRow[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [mode, setMode] = useState<'select' | 'manual' | 'excel' | 'preview'>('select');
+  const [excelUploaded, setExcelUploaded] = useState(false);
   const fileInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
+
+
+
 
   // Initial Data Fetch
   useEffect(() => {
@@ -210,12 +217,229 @@ export default function SellerBulkUpload() {
             });
           }
         }
-
         return updatedRow;
       }
       return row;
     }));
   };
+
+  const downloadTemplate = () => {
+    const headers = [
+      "Product Name", "Header Category", "Category", "SubCategory", "Sub-SubCategory",
+      "Brand", "Price", "Discount Price", "Stock", "Variation Title", "Variation Type",
+      "Publish", "Popular", "DealOfDay", "Tax %", "Returnable", "Max Return Days",
+      "FSSAI No", "Max Allowed Quantity", "HSN Code", "Manufacturer", "Made In",
+      "Description", "Small Description", "Tags", "SEO Title", "SEO Keywords",
+      "SEO Image Alt", "SEO Description", "Image URL"
+    ];
+
+
+    const sampleData = [
+      {
+        "Product Name": "Sample Product",
+        "Header Category": headerCategories[0]?.name || "Electronics",
+        "Category": "Mobile Phones",
+        "SubCategory": "Android",
+        "Sub-SubCategory": "",
+        "Brand": brands[0]?.name || "Samsung",
+        "Price": "1000",
+        "Discount Price": "900",
+        "Stock": "50",
+        "Variation Title": "Default",
+        "Variation Type": "Size",
+        "Publish": "Yes",
+        "Popular": "No",
+        "DealOfDay": "No",
+        "Tax %": taxes[0]?.percentage || "18",
+        "Returnable": "No",
+        "Max Return Days": "7",
+        "FSSAI No": "",
+        "Max Allowed Quantity": "10",
+        "HSN Code": "",
+        "Manufacturer": "Manuf Name",
+        "Made In": "India",
+        "Description": "Detailed product description here",
+        "Small Description": "Short summary",
+        "Tags": "tag1, tag2",
+        "SEO Title": "SEO Title",
+        "SEO Keywords": "key1, key2",
+        "SEO Image Alt": "Alt text",
+        "SEO Description": "SEO Description",
+        "Image URL": "https://example.com/product-image.jpg"
+      }
+    ];
+
+
+    const ws = XLSX.utils.json_to_sheet(sampleData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Template");
+    XLSX.writeFile(wb, "WasgroMart_Bulk_Upload_Template.xlsx");
+  };
+
+  const handleExcelUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const dataBuffer = evt.target?.result;
+        const wb = XLSX.read(dataBuffer, { type: "array" });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        
+        // Get raw data as array of arrays
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][];
+        
+        if (rows.length < 2) {
+          showToast("Excel file is empty or missing data rows", "error");
+          return;
+        }
+
+        // Get headers and normalize them
+        // Robust Header Detection: Find the first row that actually looks like a header row
+        let headerRowIndex = 0;
+        for (let i = 0; i < Math.min(rows.length, 10); i++) {
+          const row = rows[i] || [];
+          if (row.some(cell => cell && cell.toString().toLowerCase().includes("product name"))) {
+            headerRowIndex = i;
+            break;
+          }
+        }
+
+        const fileHeaders = (rows[headerRowIndex] || []).map(h => 
+          (h || "").toString().trim().toLowerCase().replace(/[^a-z0-9]/g, "")
+        );
+
+        const getIdx = (name: string) => {
+          const target = name.toLowerCase().replace(/[^a-z0-9]/g, "");
+          return fileHeaders.indexOf(target);
+        };
+
+        const idx = {
+
+          productName: getIdx("Product Name"),
+          headerCategory: getIdx("Header Category"),
+          category: getIdx("Category"),
+          subCategory: getIdx("SubCategory"),
+          subSubCategory: getIdx("Sub-SubCategory"),
+          brand: getIdx("Brand"),
+          price: getIdx("Price"),
+          discPrice: getIdx("Discount Price"),
+          stock: getIdx("Stock"),
+          variationTitle: getIdx("Variation Title"),
+          variationType: getIdx("Variation Type"),
+          publish: getIdx("Publish"),
+          popular: getIdx("Popular"),
+          dealOfDay: getIdx("DealOfDay"),
+          tax: getIdx("Tax %"),
+          returnable: getIdx("Returnable"),
+          maxReturnDays: getIdx("Max Return Days"),
+          fssai: getIdx("FSSAI No"),
+          maxQty: getIdx("Max Allowed Quantity"),
+          hsn: getIdx("HSN Code"),
+          manufacturer: getIdx("Manufacturer"),
+          madeIn: getIdx("Made In"),
+          description: getIdx("Description"),
+          smallDesc: getIdx("Small Description"),
+          tags: getIdx("Tags"),
+          seoTitle: getIdx("SEO Title"),
+          seoKeywords: getIdx("SEO Keywords"),
+          seoAlt: getIdx("SEO Image Alt"),
+          seoDesc: getIdx("SEO Description"),
+          imageUrl: getIdx("Image URL")
+        };
+
+
+        const dataRows = rows.slice(headerRowIndex + 1).filter(r => r.length > 0 && r.some(cell => cell !== null && cell !== ""));
+
+        
+        const newRows = dataRows.map((r: any[]) => {
+          const getCell = (i: number) => (i !== -1 && r[i] !== undefined && r[i] !== null) ? r[i].toString() : "";
+
+          const row = createEmptyRow();
+          row.productName = getCell(idx.productName);
+          
+          // Map Header Category
+          const headerCatName = getCell(idx.headerCategory).toLowerCase();
+          const hCat = headerCategories.find(h => h.name.toLowerCase() === headerCatName);
+          
+          if (hCat) {
+            row.headerCategory = hCat._id;
+            row.categoriesList = allCategories.filter(cat => {
+              const hId = typeof cat.headerCategoryId === "string" ? cat.headerCategoryId : (cat.headerCategoryId as any)?._id;
+              return hId === hCat._id;
+            });
+
+            // Map Category
+            const catName = getCell(idx.category).toLowerCase();
+            const cat = row.categoriesList.find(c => c.name.toLowerCase() === catName);
+            if (cat) {
+              row.category = cat._id;
+              // Fetch subcategories
+              getSubcategories(cat._id).then(res => {
+                if (res.success) {
+                  setRows(current => current.map(currR => currR.id === row.id ? { ...currR, subcategoriesList: res.data } : currR));
+                }
+              });
+            }
+          }
+
+          row.brand = brands.find(b => b.name.toLowerCase() === getCell(idx.brand).toLowerCase())?._id || "";
+          row.price = getCell(idx.price);
+          row.discPrice = getCell(idx.discPrice) || "0";
+          row.stock = getCell(idx.stock) || "0";
+          row.variationTitle = getCell(idx.variationTitle) || "Default";
+          row.variationType = getCell(idx.variationType) || "Size";
+          row.publish = getCell(idx.publish).toLowerCase() === "no" ? "No" : "Yes";
+          row.popular = getCell(idx.popular).toLowerCase() === "yes" ? "Yes" : "No";
+          row.dealOfDay = getCell(idx.dealOfDay).toLowerCase() === "yes" ? "Yes" : "No";
+          
+          const taxVal = getCell(idx.tax);
+          row.tax = taxes.find(t => t.percentage.toString() === taxVal)?._id || "";
+
+          row.isReturnable = getCell(idx.returnable).toLowerCase() === "yes" ? "Yes" : "No";
+          row.maxReturnDays = getCell(idx.maxReturnDays);
+          row.fssaiLicNo = getCell(idx.fssai);
+          row.totalAllowedQuantity = getCell(idx.maxQty) || "10";
+          row.hsnCode = getCell(idx.hsn);
+          row.manufacturer = getCell(idx.manufacturer);
+          row.madeIn = getCell(idx.madeIn);
+          row.description = getCell(idx.description);
+          row.smallDescription = getCell(idx.smallDesc);
+          row.tags = getCell(idx.tags);
+          row.seoTitle = getCell(idx.seoTitle);
+          row.seoKeywords = getCell(idx.seoKeywords);
+          row.seoImageAlt = getCell(idx.seoAlt);
+          row.seoDescription = getCell(idx.seoDesc);
+          
+          // Handle External Image URL
+          const externalUrl = getCell(idx.imageUrl);
+          if (externalUrl && externalUrl.startsWith('http')) {
+            row.images = [externalUrl];
+            row.previewImages = [externalUrl];
+          }
+
+          return row;
+        });
+
+        setRows(newRows);
+        setExcelUploaded(true);
+        setMode('preview'); // Switch to preview mode
+        showToast(`Successfully imported ${newRows.length} products. Please review before publishing.`, "success");
+
+
+      } catch (err) {
+        console.error("Excel parse error:", err);
+        showToast("Failed to parse Excel file. Please ensure it follows the template.", "error");
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    // Reset input
+    e.target.value = "";
+  };
+
+
 
   const handleImageChange = (id: string, file: File | null) => {
     if (!file) return;
@@ -258,9 +482,18 @@ export default function SellerBulkUpload() {
 
       try {
         let mainImageUrl = "";
+        
+        // Use external URL if provided, otherwise upload the file
         if (row.mainImageFile) {
           const uploadRes = await uploadImage(row.mainImageFile, "Wasgro mart/products");
           mainImageUrl = uploadRes.secureUrl;
+        } else if (row.images && row.images.length > 0) {
+          mainImageUrl = row.images[0];
+        }
+
+        if (!mainImageUrl) {
+          setRows(prev => prev.map(r => r.id === row.id ? { ...r, status: "error", errorMsg: "Image required for publication" } : r));
+          continue;
         }
 
         const productData = {
@@ -288,7 +521,7 @@ export default function SellerBulkUpload() {
           seoKeywords: row.seoKeywords || undefined,
           seoImageAlt: row.seoImageAlt || undefined,
           seoDescription: row.seoDescription || undefined,
-          mainImageUrl: mainImageUrl || undefined,
+          mainImageUrl: mainImageUrl,
           variations: [
             {
               title: row.variationTitle || "Default",
@@ -342,8 +575,76 @@ export default function SellerBulkUpload() {
     setIsSubmitting(false);
   };
 
+  if (mode === 'select') {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[80vh] gap-8 p-4 bg-neutral-50">
+        <div className="text-center space-y-2">
+          <h2 className="text-3xl font-extrabold text-neutral-800">Bulk Product Entry</h2>
+          <p className="text-neutral-500">Choose how you want to add your products today</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 w-full max-w-5xl">
+          {/* Manual Card */}
+          <button
+            onClick={() => {
+              setRows([createEmptyRow()]);
+              setExcelUploaded(false);
+              setMode('manual');
+            }}
+            className="group relative bg-white p-10 rounded-3xl shadow-xl border-2 border-transparent hover:border-teal-600 transition-all duration-300 flex flex-col items-center text-center gap-6 hover:shadow-2xl hover:-translate-y-2"
+          >
+            <div className="w-24 h-24 bg-teal-50 text-teal-600 rounded-2xl flex items-center justify-center group-hover:bg-teal-600 group-hover:text-white transition-all duration-300 shadow-inner">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="3" y1="9" x2="21" y2="9"></line><line x1="9" y1="21" x2="9" y2="9"></line></svg>
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-2xl font-bold text-neutral-800">Manual Entry</h3>
+              <p className="text-neutral-500 max-w-xs">Spreadsheet-style horizontal grid. Best for adding a few products with full control.</p>
+            </div>
+            <div className="mt-4 px-6 py-2 bg-teal-600 text-white rounded-full font-semibold opacity-0 group-hover:opacity-100 transition-opacity">
+              Get Started
+            </div>
+          </button>
+
+          {/* Excel Card */}
+          <button
+            onClick={() => {
+              setRows([]);
+              setExcelUploaded(false);
+              setMode('excel');
+            }}
+            className="group relative bg-white p-10 rounded-3xl shadow-xl border-2 border-transparent hover:border-orange-500 transition-all duration-300 flex flex-col items-center text-center gap-6 hover:shadow-2xl hover:-translate-y-2"
+          >
+
+            <div className="w-24 h-24 bg-orange-50 text-orange-500 rounded-2xl flex items-center justify-center group-hover:bg-orange-500 group-hover:text-white transition-all duration-300 shadow-inner">
+              <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+            </div>
+            <div className="space-y-2">
+              <h3 className="text-2xl font-bold text-neutral-800">Excel Upload</h3>
+              <p className="text-neutral-500 max-w-xs">Upload an existing Excel or CSV file. Best for large inventories and bulk updates.</p>
+            </div>
+            <div className="mt-4 px-6 py-2 bg-orange-500 text-white rounded-full font-semibold opacity-0 group-hover:opacity-100 transition-opacity">
+              Start Upload
+            </div>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col gap-6 p-2 sm:p-4 bg-neutral-50 min-h-screen w-full max-w-full overflow-hidden box-border">
+      
+      {/* Back Button and Context */}
+      <div className="flex items-center gap-4">
+        <button 
+          onClick={() => setMode('select')}
+          className="flex items-center gap-2 text-neutral-600 hover:text-teal-700 font-medium transition-colors"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+          Back to Selection
+        </button>
+      </div>
+
       {/* Outer Card - Hard Constrained to prevent horizontal stretching */}
       <div className="w-full bg-white rounded-xl shadow-md border border-neutral-200 overflow-hidden flex flex-col min-w-0 max-w-full relative">
         
@@ -351,32 +652,112 @@ export default function SellerBulkUpload() {
         <div className="w-full bg-teal-700 text-white shrink-0 z-30">
           <div className="px-3 sm:px-6 py-4 flex flex-col md:flex-row justify-between md:items-center gap-3 sm:gap-4 w-full box-border max-w-full overflow-hidden">
             <div className="min-w-0 flex-1">
-              <h2 className="text-base sm:text-xl font-bold truncate">Bulk Manual Product Entry</h2>
-              <p className="text-teal-100 text-[10px] sm:text-sm truncate">Add multiple products at once in a horizontal format</p>
+              <h2 className="text-base sm:text-xl font-bold truncate">
+                {mode === 'manual' ? 'Manual Horizontal Entry' : mode === 'preview' ? 'Review & Publish' : 'Excel Bulk Upload'}
+              </h2>
+              <p className="text-teal-100 text-[10px] sm:text-sm truncate">
+                {mode === 'manual' 
+                  ? 'Add multiple products at once in a horizontal format' 
+                  : mode === 'preview'
+                  ? `Verify ${rows.length} products before instant publication`
+                  : 'Import products from an Excel/CSV file'
+                }
+              </p>
             </div>
             <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-              <button
-                onClick={addNewRow}
-                className="bg-white/20 hover:bg-white/30 text-white px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg border border-white/30 transition-all flex items-center justify-center gap-1 sm:gap-2 font-medium text-xs sm:text-sm whitespace-nowrap"
-              >
-                <svg width="14" height="14" className="sm:w-[18px] sm:h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-                Add New Row
-              </button>
+              {mode === 'excel' && (
+                <>
+                  <button
+                    onClick={downloadTemplate}
+                    className="bg-white/10 hover:bg-white/20 text-white px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg border border-white/20 transition-all flex items-center justify-center gap-1 sm:gap-2 font-medium text-xs sm:text-sm whitespace-nowrap"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                    Template
+                  </button>
+                  <label className="bg-orange-500 hover:bg-orange-600 text-white px-3 sm:px-6 py-1.5 sm:py-2 rounded-lg shadow-lg transition-all flex items-center justify-center gap-1 sm:gap-2 font-bold text-xs sm:text-sm whitespace-nowrap cursor-pointer">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                    Choose Excel File
+                    <input type="file" accept=".xlsx, .xls, .csv" className="hidden" onChange={handleExcelUpload} />
+                  </label>
+                </>
+              )}
+              
+              {mode === 'manual' && (
+                <button
+                  onClick={addNewRow}
+                  className="bg-white/20 hover:bg-white/30 text-white px-2 sm:px-4 py-1.5 sm:py-2 rounded-lg border border-white/30 transition-all flex items-center justify-center gap-1 sm:gap-2 font-medium text-xs sm:text-sm whitespace-nowrap"
+                >
+                  <svg width="14" height="14" className="sm:w-[18px] sm:h-[18px]" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                  Add Row
+                </button>
+              )}
+
               <button
                 onClick={handleSubmitAll}
-                disabled={isSubmitting}
+                disabled={isSubmitting || rows.length === 0 || (rows.length === 1 && !rows[0].productName)}
                 className={`px-3 sm:px-6 py-1.5 sm:py-2 rounded-lg font-bold shadow-lg transition-all flex items-center justify-center gap-1 sm:gap-2 text-xs sm:text-sm whitespace-nowrap ${
-                  isSubmitting ? "bg-neutral-400 cursor-not-allowed" : "bg-orange-500 hover:bg-orange-600 text-white animate-pulse-subtle"
+                  isSubmitting || rows.length === 0 || (rows.length === 1 && !rows[0].productName)
+                    ? "bg-neutral-400 cursor-not-allowed" 
+                    : "bg-teal-600 hover:bg-teal-700 text-white animate-pulse-subtle"
                 }`}
               >
-                {isSubmitting ? "Processing..." : "Save All Products"}
+                {isSubmitting ? "Publishing..." : mode === 'preview' ? "Confirm & Publish All" : "Save All"}
               </button>
+
             </div>
           </div>
         </div>
 
-        {/* SCROLLABLE BODY: Only this part is allowed to scroll horizontally */}
-        <div className="flex-1 overflow-x-auto custom-scrollbar w-full border-t border-neutral-100 bg-white min-w-0">
+        {mode === 'excel' && !excelUploaded ? (
+          <div className="flex-1 flex flex-col items-center justify-center py-20 bg-neutral-50/50">
+            <div className="w-full max-w-xl p-12 bg-white rounded-3xl shadow-sm border-2 border-dashed border-neutral-300 flex flex-col items-center gap-6 text-center">
+              <div className="w-20 h-20 bg-orange-100 text-orange-600 rounded-full flex items-center justify-center">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+              </div>
+              <div className="space-y-2">
+                <h3 className="text-xl font-bold text-neutral-800">Upload your product list</h3>
+                <p className="text-neutral-500">First, download the template, fill it with your product details (including Image URLs), and then upload it here.</p>
+              </div>
+              <div className="flex flex-col sm:flex-row gap-4 w-full">
+                <button
+                  onClick={downloadTemplate}
+                  className="flex-1 px-6 py-3 border-2 border-neutral-200 rounded-xl font-bold text-neutral-600 hover:bg-neutral-50 transition-all flex items-center justify-center gap-2"
+                >
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                  Download Template
+                </button>
+                <label className="flex-1 px-6 py-3 bg-teal-600 text-white rounded-xl font-bold hover:bg-teal-700 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-lg shadow-teal-600/20">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                  Select File
+                  <input type="file" accept=".xlsx, .xls, .csv" className="hidden" onChange={handleExcelUpload} />
+                </label>
+              </div>
+              <p className="text-xs text-neutral-400 mt-4">Supported formats: .xlsx, .xls, .csv</p>
+            </div>
+          </div>
+        ) : (
+          <>
+            {mode === 'preview' && (
+              <div className="bg-teal-50 border-b border-teal-100 px-6 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-teal-100 text-teal-600 rounded-full flex items-center justify-center font-bold">
+                    {rows.length}
+                  </div>
+                  <div>
+                    <h4 className="font-bold text-teal-900 text-sm">Bulk Review Summary</h4>
+                    <p className="text-teal-700 text-xs">Verify details and ensure each product has an image before publishing.</p>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                   <div className="px-3 py-1 bg-white border border-teal-200 rounded-full text-[10px] font-bold text-teal-600 uppercase tracking-wider">
+                     Excel Source: Active
+                   </div>
+                </div>
+              </div>
+            )}
+            {/* SCROLLABLE BODY: Only this part is allowed to scroll horizontally */}
+            <div className="flex-1 overflow-x-auto custom-scrollbar w-full border-t border-neutral-100 bg-white min-w-0">
+
           <table className="text-sm text-left border-collapse min-w-[5000px] w-full table-fixed">
             <thead>
               <tr className="bg-neutral-100 text-neutral-700 border-b border-neutral-200">
@@ -842,7 +1223,9 @@ export default function SellerBulkUpload() {
             </div>
           </div>
         </div>
-      </div>
+      </>
+      )}
+    </div>
       
       <style>{`
         .custom-scrollbar::-webkit-scrollbar {
