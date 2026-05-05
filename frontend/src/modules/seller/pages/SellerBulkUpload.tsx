@@ -53,6 +53,8 @@ interface ProductRow {
   seoDescription: string;
   mainImageFile: File | null;
   mainImagePreview: string;
+  galleryFiles: (File | null)[];
+  galleryPreviews: string[];
   images: string[];
   previewImages: string[];
   status: "idle" | "uploading" | "success" | "error";
@@ -161,6 +163,8 @@ export default function SellerBulkUpload() {
     seoDescription: "",
     mainImageFile: null,
     mainImagePreview: "",
+    galleryFiles: [null, null, null, null, null],
+    galleryPreviews: ["", "", "", "", ""],
     images: [],
     previewImages: [],
     status: "idle",
@@ -457,6 +461,24 @@ export default function SellerBulkUpload() {
     reader.readAsDataURL(file);
   };
 
+  const handleGalleryImageChange = (rowId: string, index: number, file: File | null) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setRows(prev => prev.map(row => {
+        if (row.id === rowId) {
+          const newFiles = [...row.galleryFiles];
+          const newPreviews = [...row.galleryPreviews];
+          newFiles[index] = file;
+          newPreviews[index] = reader.result as string;
+          return { ...row, galleryFiles: newFiles, galleryPreviews: newPreviews };
+        }
+        return row;
+      }));
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleSubmitAll = async () => {
     if (isSubmitting) return;
 
@@ -487,8 +509,9 @@ export default function SellerBulkUpload() {
 
       try {
         let mainImageUrl = "";
+        const galleryUrls: string[] = [];
         
-        // Use external URL if provided, otherwise upload the file
+        // 1. Upload Main Image
         if (row.mainImageFile) {
           const uploadRes = await uploadImage(row.mainImageFile, "Wasgro mart/products");
           mainImageUrl = uploadRes.secureUrl;
@@ -497,8 +520,27 @@ export default function SellerBulkUpload() {
         }
 
         if (!mainImageUrl) {
-          setRows(prev => prev.map(r => r.id === row.id ? { ...r, status: "error", errorMsg: "Image required for publication" } : r));
+          setRows(prev => prev.map(r => r.id === row.id ? { ...r, status: "error", errorMsg: "Main Image required" } : r));
           continue;
+        }
+
+        // 2. Upload Gallery Images
+        for (const file of row.galleryFiles) {
+          if (file) {
+            try {
+              const res = await uploadImage(file, "Wasgro mart/products");
+              galleryUrls.push(res.secureUrl);
+            } catch (err) {
+              console.error("Gallery image upload failed", err);
+            }
+          }
+        }
+
+        // Add any existing external URLs if they weren't the main image
+        if (row.images && row.images.length > 1) {
+           row.images.slice(1).forEach(url => {
+             if (!galleryUrls.includes(url)) galleryUrls.push(url);
+           });
         }
 
         const productData = {
@@ -527,16 +569,19 @@ export default function SellerBulkUpload() {
           seoImageAlt: row.seoImageAlt || undefined,
           seoDescription: row.seoDescription || undefined,
           mainImageUrl: mainImageUrl,
+          galleryImageUrls: galleryUrls,
           variations: [
             {
               title: row.variationTitle || "Default",
               price: parseFloat(row.price),
               discPrice: parseFloat(row.discPrice || "0"),
               stock: parseInt(row.stock || "0"),
-              status: parseInt(row.stock || "0") > 0 ? "Available" : "Sold out" as any
+              // 0 means Unlimited, so it should be "Available"
+              status: (parseInt(row.stock || "0") >= 0) ? "Available" : "Sold out" as any
             }
           ],
-          variationType: row.variationType || "Size"
+          variationType: row.variationType || "Size",
+          isShopByStoreOnly: false // Ensure it's not restricted by default
         };
 
         preparedProducts.push(productData);
@@ -791,11 +836,8 @@ export default function SellerBulkUpload() {
                 <th className="px-4 py-4 font-bold w-[300px]">Description</th>
                 <th className="px-4 py-4 font-bold w-[250px]">Small Description</th>
                 <th className="px-4 py-4 font-bold w-[200px]">Tags</th>
-                <th className="px-4 py-4 font-bold w-[150px]">SEO Title</th>
-                <th className="px-4 py-4 font-bold w-[150px]">SEO Keywords</th>
-                <th className="px-4 py-4 font-bold w-[150px]">SEO Alt</th>
-                <th className="px-4 py-4 font-bold w-[200px]">SEO Desc</th>
-                <th className="px-4 py-4 font-bold w-[250px]">Main Image</th>
+                <th className="px-4 py-4 font-bold w-[200px]">Main Image</th>
+                <th className="px-4 py-4 font-bold w-[450px]">Gallery Images (Max 5)</th>
                 <th className="px-4 py-4 font-bold w-[150px]">Status</th>
                 <th className="px-4 py-4 font-bold w-[80px] sticky right-0 bg-neutral-100 z-10 border-l shadow-sm text-center">Action</th>
               </tr>
@@ -1105,46 +1147,6 @@ export default function SellerBulkUpload() {
                     />
                   </td>
 
-                  {/* SEO Title */}
-                  <td className="px-4 py-3">
-                    <input
-                      type="text"
-                      value={row.seoTitle}
-                      onChange={(e) => updateRow(row.id, "seoTitle", e.target.value)}
-                      className="w-full px-3 py-2 border rounded-lg"
-                    />
-                  </td>
-
-                  {/* SEO Keywords */}
-                  <td className="px-4 py-3">
-                    <input
-                      type="text"
-                      value={row.seoKeywords}
-                      onChange={(e) => updateRow(row.id, "seoKeywords", e.target.value)}
-                      className="w-full px-3 py-2 border rounded-lg"
-                    />
-                  </td>
-
-                  {/* SEO Alt */}
-                  <td className="px-4 py-3">
-                    <input
-                      type="text"
-                      value={row.seoImageAlt}
-                      onChange={(e) => updateRow(row.id, "seoImageAlt", e.target.value)}
-                      className="w-full px-3 py-2 border rounded-lg"
-                    />
-                  </td>
-
-                  {/* SEO Desc */}
-                  <td className="px-4 py-3">
-                    <input
-                      type="text"
-                      value={row.seoDescription}
-                      onChange={(e) => updateRow(row.id, "seoDescription", e.target.value)}
-                      className="w-full px-3 py-2 border rounded-lg"
-                    />
-                  </td>
-
                   {/* Main Image */}
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-2">
@@ -1157,7 +1159,7 @@ export default function SellerBulkUpload() {
                       )}
                       <button
                         onClick={() => fileInputRefs.current[row.id]?.click()}
-                        className="text-xs text-teal-700 hover:underline font-medium"
+                        className="text-xs text-teal-700 hover:underline font-medium whitespace-nowrap"
                       >
                         {row.mainImageFile ? "Change" : "Upload"}
                       </button>
@@ -1168,6 +1170,37 @@ export default function SellerBulkUpload() {
                         accept="image/*"
                         onChange={(e) => handleImageChange(row.id, e.target.files?.[0] || null)}
                       />
+                    </div>
+                  </td>
+
+                  {/* Gallery Images */}
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      {[0, 1, 2, 3, 4].map((idx) => (
+                        <div key={idx} className="relative group">
+                          <div 
+                            onClick={() => fileInputRefs.current[`${row.id}-gallery-${idx}`]?.click()}
+                            className={`w-12 h-12 rounded-lg border-2 border-dashed flex items-center justify-center cursor-pointer overflow-hidden transition-all ${
+                              row.galleryPreviews[idx] 
+                                ? "border-teal-500 bg-teal-50" 
+                                : "border-neutral-200 hover:border-teal-400 hover:bg-neutral-50"
+                            }`}
+                          >
+                            {row.galleryPreviews[idx] ? (
+                              <img src={row.galleryPreviews[idx]} alt={`G${idx}`} className="w-full h-full object-cover" />
+                            ) : (
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-neutral-400"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+                            )}
+                          </div>
+                          <input
+                            type="file"
+                            ref={el => fileInputRefs.current[`${row.id}-gallery-${idx}`] = el}
+                            className="hidden"
+                            accept="image/*"
+                            onChange={(e) => handleGalleryImageChange(row.id, idx, e.target.files?.[0] || null)}
+                          />
+                        </div>
+                      ))}
                     </div>
                   </td>
 

@@ -144,6 +144,7 @@ export const bulkCreateProducts = asyncHandler(
           status: "Active",
           requiresApproval: false,
           publish: p.publish !== undefined ? p.publish : true,
+          isShopByStoreOnly: false, // Default to false for bulk creation
         };
 
         // Handle Variations
@@ -811,9 +812,10 @@ export const bulkUpload = asyncHandler(async (req: Request, res: Response) => {
             value: "Standard",
             price: price,
             stock: stock,
-            status: stock > 0 ? "Available" : "Sold out",
+            status: (stock >= 0) ? "Available" : "Sold out",
           },
         ],
+        isShopByStoreOnly: false,
       });
     }
 
