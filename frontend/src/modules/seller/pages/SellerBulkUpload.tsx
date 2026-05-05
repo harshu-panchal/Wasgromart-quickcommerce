@@ -53,6 +53,8 @@ interface ProductRow {
   seoDescription: string;
   mainImageFile: File | null;
   mainImagePreview: string;
+  images: string[];
+  previewImages: string[];
   status: "idle" | "uploading" | "success" | "error";
   errorMsg?: string;
   // Row-specific lists
@@ -159,6 +161,8 @@ export default function SellerBulkUpload() {
     seoDescription: "",
     mainImageFile: null,
     mainImagePreview: "",
+    images: [],
+    previewImages: [],
     status: "idle",
     categoriesList: [],
     subcategoriesList: [],
@@ -418,6 +422,7 @@ export default function SellerBulkUpload() {
           if (externalUrl && externalUrl.startsWith('http')) {
             row.images = [externalUrl];
             row.previewImages = [externalUrl];
+            row.mainImagePreview = externalUrl;
           }
 
           return row;
