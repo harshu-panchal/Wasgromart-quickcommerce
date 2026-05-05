@@ -172,28 +172,21 @@ async function verifyOtpFromDb(mobile: string, otp: string, userType: UserType):
   });
 
   if (!record) {
-    console.error('OTP verification failed - record not found:', {
-      mobile: normalizedMobile,
-      userType,
-      otp: otp.trim(),
-      availableRecords: await Otp.find({ mobile: normalizedMobile, userType }).select('otp expiresAt')
-    });
+    console.log(`❌ OTP Verification Failed for ${mobile} (${userType}). No record found for OTP: ${otp.trim()}`);
     return false;
   }
 
   if (record.expiresAt < new Date()) {
     await Otp.deleteOne({ _id: record._id });
-    console.error('OTP verification failed - expired:', {
-      mobile: normalizedMobile,
-      expiresAt: record.expiresAt,
-      now: new Date()
-    });
+    console.log(`❌ OTP Verification Failed for ${mobile} (${userType}). OTP ${otp.trim()} has expired.`);
     return false;
   }
 
   await Otp.deleteOne({ _id: record._id });
+  console.log(`✅ OTP Verification Successful for ${mobile} (${userType})`);
   return true;
 }
+
 
 /**
  * Check if special bypass should be used
@@ -215,8 +208,9 @@ function isMockMode(): boolean {
  */
 function isDeveloperBypass(otp: string): boolean {
   const defaultOtp = process.env.DEFAULT_OTP || '1234';
-  return (process.env.NODE_ENV !== 'production' || process.env.USE_MOCK_OTP === 'true') && (otp === defaultOtp || otp === '999999');
+  return (process.env.NODE_ENV !== 'production' || process.env.USE_MOCK_OTP === 'true') && (otp === defaultOtp || otp === '999999' || otp === '0000');
 }
+
 
 // ==========================================
 // SMS OTP (Customer / Delivery)
@@ -364,8 +358,9 @@ export async function sendOTP(
 
     return {
       success: true,
-      message: 'OTP sent successfully',
+      message: process.env.NODE_ENV !== 'production' ? `OTP sent successfully: ${otp}` : 'OTP sent successfully',
     };
+
   } catch (error: any) {
     const errorMessage = error.message || 'Failed to send OTP. Please try again.';
     console.error('SMS OTP Error (sendOTP):', {

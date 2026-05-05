@@ -404,11 +404,12 @@ export default function SellerStockManagement() {
                                     <td className="p-4 align-middle border border-neutral-200">
                                         <div className="flex items-center gap-2">
                                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${item.stock === 0
-                                                ? 'bg-red-50 text-red-600'
+                                                ? 'bg-green-50 text-green-600'
                                                 : 'bg-green-50 text-green-600'
                                                 }`}>
-                                                {item.stock}
+                                                {item.stock === 0 ? 'Unlimited' : item.stock}
                                             </span>
+
                                         </div>
                                     </td>
                                     <td className="p-4 align-middle border border-neutral-200">

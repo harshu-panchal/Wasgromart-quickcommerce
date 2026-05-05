@@ -169,36 +169,54 @@ export const createOrder = async (req: Request, res: Response) => {
 
             if (variationValue) {
                 // Try to decrement stock for the specific variation first
-                // We check variations._id, variations.value, variations.title, or variations.pack
-                product = session
-                    ? await Product.findOneAndUpdate(
+                product = await Product.findOneAndUpdate(
+                    {
+                        _id: item.product.id,
+                        $or: [
+                            { "variations._id": mongoose.isValidObjectId(variationValue) ? variationValue : new mongoose.Types.ObjectId() },
+                            { "variations.value": variationValue },
+                            { "variations.title": variationValue },
+                            { "variations.pack": variationValue }
+                        ],
+                        $or: [
+                            { "variations.stock": 0 },
+                            { "variations.stock": { $gte: qty } }
+                        ]
+                    },
+                    [
                         {
-                            _id: item.product.id,
-                            $or: [
-                                { "variations._id": mongoose.isValidObjectId(variationValue) ? variationValue : new mongoose.Types.ObjectId() },
-                                { "variations.value": variationValue },
-                                { "variations.title": variationValue },
-                                { "variations.pack": variationValue }
-                            ],
-                            "variations.stock": { $gte: qty }
-                        },
-                        { $inc: { "variations.$.stock": -qty, stock: -qty } },
-                        { session, new: true }
-                    )
-                    : await Product.findOneAndUpdate(
-                        {
-                            _id: item.product.id,
-                            $or: [
-                                { "variations._id": mongoose.isValidObjectId(variationValue) ? variationValue : new mongoose.Types.ObjectId() },
-                                { "variations.value": variationValue },
-                                { "variations.title": variationValue },
-                                { "variations.pack": variationValue }
-                            ],
-                            "variations.stock": { $gte: qty }
-                        },
-                        { $inc: { "variations.$.stock": -qty, stock: -qty } },
-                        { new: true }
-                    );
+                            $set: {
+                                variations: {
+                                    $map: {
+                                        input: "$variations",
+                                        as: "v",
+                                        in: {
+                                            $cond: {
+                                                if: {
+                                                    $or: [
+                                                        { $eq: ["$$v._id", mongoose.isValidObjectId(variationValue) ? new mongoose.Types.ObjectId(variationValue) : null] },
+                                                        { $eq: ["$$v.value", variationValue] },
+                                                        { $eq: ["$$v.title", variationValue] },
+                                                        { $eq: ["$$v.pack", variationValue] }
+                                                    ]
+                                                },
+                                                then: {
+                                                    $mergeObjects: [
+                                                        "$$v",
+                                                        { stock: { $cond: { if: { $eq: ["$$v.stock", 0] }, then: 0, else: { $subtract: ["$$v.stock", qty] } } } }
+                                                    ]
+                                                },
+                                                else: "$$v"
+                                            }
+                                        }
+                                    }
+                                },
+                                stock: { $cond: { if: { $eq: ["$stock", 0] }, then: 0, else: { $subtract: ["$stock", qty] } } }
+                            }
+                        }
+                    ],
+                    { session, new: true }
+                );
             }
 
             if (!product) {
@@ -208,45 +226,61 @@ export const createOrder = async (req: Request, res: Response) => {
 
                 if (checkProduct && checkProduct.variations && checkProduct.variations.length > 0) {
                     // Product has variations, but we didn't match one.
-                    // If a variation was provided, it means that specific variation is out of stock.
-                    if (variationValue) {
-                        throw new Error(`Insufficient stock for variation: ${variationValue}`);
-                    }
-
-                    // No variation was provided, but the product has them.
                     // To maintain data consistency, we'll try to decrement from the first variation.
-                    product = session
-                        ? await Product.findOneAndUpdate(
+                    product = await Product.findOneAndUpdate(
+                        {
+                            _id: item.product.id,
+                            $or: [
+                                { "variations.0.stock": 0 },
+                                { "variations.0.stock": { $gte: qty } }
+                            ]
+                        },
+                        [
                             {
-                                _id: item.product.id,
-                                "variations.0.stock": { $gte: qty }
-                            },
-                            { $inc: { "variations.0.stock": -qty, stock: -qty } },
-                            { session, new: true }
-                        )
-                        : await Product.findOneAndUpdate(
-                            {
-                                _id: item.product.id,
-                                "variations.0.stock": { $gte: qty }
-                            },
-                            { $inc: { "variations.0.stock": -qty, stock: -qty } },
-                            { new: true }
-                        );
+                                $set: {
+                                    "variations": {
+                                        $map: {
+                                            input: "$variations",
+                                            as: "v",
+                                            in: {
+                                                $cond: {
+                                                    if: { $eq: ["$$v._id", { $arrayElemAt: ["$variations._id", 0] }] },
+                                                    then: {
+                                                        $mergeObjects: [
+                                                            "$$v",
+                                                            { stock: { $cond: { if: { $eq: ["$$v.stock", 0] }, then: 0, else: { $subtract: ["$$v.stock", qty] } } } }
+                                                        ]
+                                                    },
+                                                    else: "$$v"
+                                                }
+                                            }
+                                        }
+                                    },
+                                    stock: { $cond: { if: { $eq: ["$stock", 0] }, then: 0, else: { $subtract: ["$stock", qty] } } }
+                                }
+                            }
+                        ],
+                        { session, new: true }
+                    );
                 } else {
                     // No variations, just decrement top-level stock
-                    product = session
-                        ? await Product.findOneAndUpdate(
-                            { _id: item.product.id, stock: { $gte: qty } },
-                            { $inc: { stock: -qty } },
-                            { session, new: true }
-                        )
-                        : await Product.findOneAndUpdate(
-                            { _id: item.product.id, stock: { $gte: qty } },
-                            { $inc: { stock: -qty } },
-                            { new: true }
-                        );
+                    product = await Product.findOneAndUpdate(
+                        { 
+                            _id: item.product.id, 
+                            $or: [{ stock: 0 }, { stock: { $gte: qty } }] 
+                        },
+                        [
+                            {
+                                $set: {
+                                    stock: { $cond: { if: { $eq: ["$stock", 0] }, then: 0, else: { $subtract: ["$stock", qty] } } }
+                                }
+                            }
+                        ],
+                        { session, new: true }
+                    );
                 }
             }
+
 
             if (!product) {
                 throw new Error(`Insufficient stock or product not found: ${item.product.name || 'ID: ' + item.product.id}${variationValue ? ' (' + variationValue + ')' : ''}`);

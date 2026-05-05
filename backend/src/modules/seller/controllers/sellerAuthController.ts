@@ -31,11 +31,14 @@ export const sendOTP = asyncHandler(async (req: Request, res: Response) => {
 
   // Send OTP - for login, always use default OTP
   const result = await sendOTPService(mobile, "Seller", true);
+  
+  console.log(`🔑 Login OTP for Seller (${mobile}): ${result.message}`);
 
   return res.status(200).json({
     success: true,
     message: result.message,
   });
+
 });
 
 /**

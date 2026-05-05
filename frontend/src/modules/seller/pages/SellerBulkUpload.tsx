@@ -913,7 +913,9 @@ export default function SellerBulkUpload() {
                       placeholder="0"
                       className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none"
                     />
+                    <div className="text-[10px] text-green-600 mt-1 font-medium">0 = Unlimited</div>
                   </td>
+
 
                   {/* Variation Title */}
                   <td className="px-4 py-3">
