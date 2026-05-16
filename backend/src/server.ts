@@ -1,12 +1,16 @@
 
-
-import dotenv from "dotenv";
 import dns from "dns";
+import path from "path";
+import { ensureEnvLoaded, getEnvLoadedFrom } from "./config/env";
 
 // Load environment variables as early as possible
-dotenv.config();
+ensureEnvLoaded();
 
 console.log('--- SERVER STARTING ---');
+const envFrom = getEnvLoadedFrom();
+if (envFrom && process.env.NODE_ENV !== "production") {
+  console.log("Env file:", path.relative(process.cwd(), envFrom));
+}
 console.log('RAZORPAY_KEY_ID exists:', !!process.env.RAZORPAY_KEY_ID);
 
 // Force public DNS resolvers for SRV lookups (MongoDB Atlas)

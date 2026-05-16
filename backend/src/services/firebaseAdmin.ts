@@ -1,7 +1,7 @@
 import admin from 'firebase-admin';
-import dotenv from 'dotenv';
+import { ensureEnvLoaded } from "../config/env";
 
-dotenv.config();
+ensureEnvLoaded();
 
 let isFirebaseInitialized = false;
 

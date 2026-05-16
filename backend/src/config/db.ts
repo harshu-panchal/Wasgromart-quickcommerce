@@ -1,8 +1,8 @@
 import mongoose from 'mongoose';
-import dotenv from 'dotenv';
 import axios from 'axios';
+import { ensureEnvLoaded } from "./env";
 
-dotenv.config();
+ensureEnvLoaded();
 
 // Resolve MongoDB SRV via DNS-over-HTTPS (port 443) to bypass corporate DNS/firewall blocks
 async function resolveMongoSRV(uri: string): Promise<string> {
