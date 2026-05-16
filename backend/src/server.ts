@@ -38,6 +38,11 @@ const allowedOrigins = [
   "https://kosil-frontend.onrender.com",
   "https://kosil.biz",
   "https://kosil.biz/",
+  // Production VPS domains for wasgromart.com
+  "https://wasgromart.com",
+  "https://www.wasgromart.com",
+  "http://wasgromart.com",
+  "http://www.wasgromart.com",
   // Add more origins from environment variable if needed
   ...(process.env.FRONTEND_URL
     ? process.env.FRONTEND_URL.split(",").map((url) => url.trim())

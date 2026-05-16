@@ -60,12 +60,10 @@ export const sendOTP = async (mobile: string): Promise<SendOTPResponse> => {
  */
 export const verifyOTP = async (mobile: string, otp: string): Promise<VerifyOTPResponse> => {
   const response = await api.post<VerifyOTPResponse>('/auth/admin/verify-otp', { mobile, otp });
-
-  if (response.data.success && response.data.data.token) {
-    setAuthToken(response.data.data.token);
-    localStorage.setItem('userData', JSON.stringify(response.data.data.user));
-  }
-
+  // NOTE: Do NOT write authToken or userData to localStorage here.
+  // AdminLogin.tsx calls AuthContext.login() with { ...user, userType: 'Admin' },
+  // which is the single source of truth. Writing here without userType causes
+  // Admin users to lose their role on page reload → kicked out of /admin/* routes.
   return response.data;
 };
 
@@ -74,12 +72,8 @@ export const verifyOTP = async (mobile: string, otp: string): Promise<VerifyOTPR
  */
 export const register = async (data: RegisterData): Promise<RegisterResponse> => {
   const response = await api.post<RegisterResponse>('/auth/admin/register', data);
-
-  if (response.data.success && response.data.data.token) {
-    setAuthToken(response.data.data.token);
-    localStorage.setItem('userData', JSON.stringify(response.data.data.user));
-  }
-
+  // NOTE: Do NOT write authToken or userData to localStorage here.
+  // AdminRegister.tsx handles calling AuthContext.login() with the correct userType.
   return response.data;
 };
 
