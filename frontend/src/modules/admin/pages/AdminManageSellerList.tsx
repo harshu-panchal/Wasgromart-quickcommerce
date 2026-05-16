@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { getAllSellers, updateSellerStatus, deleteSeller, Seller as SellerType, updateSeller } from '../../../services/api/sellerService';
 import SellerServiceMap from '../components/SellerServiceMap';
+import GoogleMapsAutocomplete from '../../../components/GoogleMapsAutocomplete';
+import LocationPickerMap from '../../../components/LocationPickerMap';
 
 interface Seller {
     _id: string;
@@ -108,6 +110,14 @@ export default function AdminManageSellerList() {
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isUpdatingRadius, setIsUpdatingRadius] = useState(false);
     const [newRadius, setNewRadius] = useState<number>(10);
+    const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
+    const [isLocationEditMode, setIsLocationEditMode] = useState(false);
+    const [tempLocation, setTempLocation] = useState({
+        address: '',
+        lat: '',
+        lng: '',
+        searchLocation: ''
+    });
 
     // Fetch sellers from backend
     useEffect(() => {
@@ -241,6 +251,13 @@ export default function AdminManageSellerList() {
         if (seller) {
             setEditingSeller(seller);
             setNewRadius(seller.serviceRadiusKm || 10);
+            setTempLocation({
+                address: seller.address || '',
+                lat: seller.latitude || '',
+                lng: seller.longitude || '',
+                searchLocation: seller.searchLocation || ''
+            });
+            setIsLocationEditMode(false);
             setIsEditModalOpen(true);
         }
     };
@@ -264,6 +281,42 @@ export default function AdminManageSellerList() {
             setTimeout(() => setError(''), 3000);
         } finally {
             setIsUpdatingRadius(false);
+        }
+    };
+
+    const handleUpdateLocation = async () => {
+        if (!editingSeller) return;
+
+        try {
+            setIsUpdatingLocation(true);
+            const response = await updateSeller(editingSeller._id, {
+                address: tempLocation.address,
+                latitude: tempLocation.lat,
+                longitude: tempLocation.lng,
+                searchLocation: tempLocation.searchLocation
+            });
+            
+            if (response.success) {
+                const updatedSeller = { 
+                    ...editingSeller, 
+                    address: tempLocation.address,
+                    latitude: tempLocation.lat,
+                    longitude: tempLocation.lng,
+                    searchLocation: tempLocation.searchLocation
+                };
+                setEditingSeller(updatedSeller);
+                // Also update the seller in the main list
+                setSellers(sellers.map(s => s._id === editingSeller._id ? updatedSeller : s));
+                setSuccessMessage('Location updated successfully');
+                setIsLocationEditMode(false);
+                setTimeout(() => setSuccessMessage(''), 3000);
+            }
+        } catch (error) {
+            console.error('Error updating location:', error);
+            setError('Failed to update location');
+            setTimeout(() => setError(''), 3000);
+        } finally {
+            setIsUpdatingLocation(false);
         }
     };
 
@@ -772,10 +825,14 @@ export default function AdminManageSellerList() {
                         </div>
 
                         {/* Modal Body */}
-                        <div className="p-6 overflow-y-auto flex-1" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                        <div className="p-6 overflow-y-auto flex-1 edit-seller-modal">
                             <style>{`
                                 .edit-seller-modal::-webkit-scrollbar {
-                                    display: none;
+                                    width: 8px;
+                                }
+                                .edit-seller-modal::-webkit-scrollbar-thumb {
+                                    background-color: rgba(0, 0, 0, 0.1);
+                                    border-radius: 10px;
                                 }
                             `}</style>
 
@@ -850,39 +907,120 @@ export default function AdminManageSellerList() {
 
                                 {/* Address Information */}
                                 <div className="bg-neutral-50 rounded-lg p-4">
-                                    <h4 className="text-sm font-semibold text-neutral-700 mb-3">Address Information</h4>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        <div className="md:col-span-2">
-                                            <label className="text-xs text-neutral-500">Address</label>
-                                            <p className="text-sm font-medium text-neutral-900">{editingSeller.address || 'N/A'}</p>
-                                        </div>
-                                        <div>
-                                            <label className="text-xs text-neutral-500">City</label>
-                                            <p className="text-sm font-medium text-neutral-900">{editingSeller.city || 'N/A'}</p>
-                                        </div>
-                                        <div>
-                                            <label className="text-xs text-neutral-500">Serviceable Area</label>
-                                            <p className="text-sm font-medium text-neutral-900">{editingSeller.serviceableArea || 'N/A'}</p>
-                                        </div>
-                                        {editingSeller.searchLocation && (
-                                            <div className="md:col-span-2">
-                                                <label className="text-xs text-neutral-500">Location</label>
-                                                <p className="text-sm font-medium text-neutral-900">{editingSeller.searchLocation}</p>
-                                            </div>
-                                        )}
-                                        {(editingSeller.latitude || editingSeller.longitude) && (
-                                            <div className="md:col-span-2 grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <label className="text-xs text-neutral-500">Latitude</label>
-                                                    <p className="text-sm font-medium text-neutral-900">{editingSeller.latitude || 'N/A'}</p>
-                                                </div>
-                                                <div>
-                                                    <label className="text-xs text-neutral-500">Longitude</label>
-                                                    <p className="text-sm font-medium text-neutral-900">{editingSeller.longitude || 'N/A'}</p>
-                                                </div>
-                                            </div>
-                                        )}
+                                    <div className="flex items-center justify-between mb-3">
+                                        <h4 className="text-sm font-semibold text-neutral-700">Address Information</h4>
+                                        <button 
+                                            onClick={() => setIsLocationEditMode(!isLocationEditMode)}
+                                            className="text-xs text-teal-600 hover:text-teal-700 font-medium"
+                                        >
+                                            {isLocationEditMode ? 'Cancel Edit' : 'Edit Location'}
+                                        </button>
                                     </div>
+
+                                    {!isLocationEditMode ? (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="md:col-span-2">
+                                                <label className="text-xs text-neutral-500">Address</label>
+                                                <p className="text-sm font-medium text-neutral-900">{editingSeller.address || 'N/A'}</p>
+                                            </div>
+                                            <div>
+                                                <label className="text-xs text-neutral-500">City</label>
+                                                <p className="text-sm font-medium text-neutral-900">{editingSeller.city || 'N/A'}</p>
+                                            </div>
+                                            <div>
+                                                <label className="text-xs text-neutral-500">Serviceable Area</label>
+                                                <p className="text-sm font-medium text-neutral-900">{editingSeller.serviceableArea || 'N/A'}</p>
+                                            </div>
+                                            {editingSeller.searchLocation && (
+                                                <div className="md:col-span-2">
+                                                    <label className="text-xs text-neutral-500">Location</label>
+                                                    <p className="text-sm font-medium text-neutral-900">{editingSeller.searchLocation}</p>
+                                                </div>
+                                            )}
+                                            {(editingSeller.latitude || editingSeller.longitude) && (
+                                                <div className="md:col-span-2 grid grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="text-xs text-neutral-500">Latitude</label>
+                                                        <p className="text-sm font-medium text-neutral-900">{editingSeller.latitude || 'N/A'}</p>
+                                                    </div>
+                                                    <div>
+                                                        <label className="text-xs text-neutral-500">Longitude</label>
+                                                        <p className="text-sm font-medium text-neutral-900">{editingSeller.longitude || 'N/A'}</p>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-4">
+                                            <div>
+                                                <label className="text-xs text-neutral-500 mb-1 block">Search Location / Address</label>
+                                                <GoogleMapsAutocomplete
+                                                    value={tempLocation.searchLocation}
+                                                    onChange={(address, lat, lng) => {
+                                                        setTempLocation(prev => ({
+                                                            ...prev,
+                                                            searchLocation: address,
+                                                            address: address,
+                                                            lat: lat !== undefined ? lat.toString() : prev.lat,
+                                                            lng: lng !== undefined ? lng.toString() : prev.lng
+                                                        }));
+                                                    }}
+                                                    placeholder="Search for store location..."
+                                                />
+                                            </div>
+                                            
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div>
+                                                    <label className="text-xs text-neutral-500 mb-1 block">Latitude</label>
+                                                    <input 
+                                                        type="text" 
+                                                        value={tempLocation.lat}
+                                                        readOnly
+                                                        className="w-full px-3 py-2 border border-neutral-300 rounded text-sm bg-neutral-100"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-xs text-neutral-500 mb-1 block">Longitude</label>
+                                                    <input 
+                                                        type="text" 
+                                                        value={tempLocation.lng}
+                                                        readOnly
+                                                        className="w-full px-3 py-2 border border-neutral-300 rounded text-sm bg-neutral-100"
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            <div className="h-[250px] w-full rounded border overflow-hidden">
+                                                <LocationPickerMap
+                                                    initialLat={parseFloat(tempLocation.lat)}
+                                                    initialLng={parseFloat(tempLocation.lng)}
+                                                    onLocationSelect={(lat, lng) => {
+                                                        setTempLocation(prev => ({
+                                                            ...prev,
+                                                            lat: lat.toString(),
+                                                            lng: lng.toString()
+                                                        }));
+                                                    }}
+                                                />
+                                            </div>
+
+                                            <div className="flex justify-end gap-2 pt-2">
+                                                <button
+                                                    onClick={() => setIsLocationEditMode(false)}
+                                                    className="px-3 py-1 text-xs text-neutral-600 hover:bg-neutral-200 rounded"
+                                                >
+                                                    Cancel
+                                                </button>
+                                                <button
+                                                    onClick={handleUpdateLocation}
+                                                    disabled={isUpdatingLocation}
+                                                    className="px-4 py-1 text-xs bg-teal-600 text-white rounded hover:bg-teal-700 disabled:opacity-50"
+                                                >
+                                                    {isUpdatingLocation ? 'Saving...' : 'Save Location'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Service Area Map */}

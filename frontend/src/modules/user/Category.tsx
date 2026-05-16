@@ -14,7 +14,7 @@ export default function CategoryPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { location: userLocation } = useLocationContext();
+  const { location: userLocation, requestLocation } = useLocationContext();
 
   const [category, setCategory] = useState<ApiCategory | null>(null);
   const [subcategories, setSubcategories] = useState<ApiCategory[]>([]);
@@ -27,6 +27,7 @@ export default function CategoryPage() {
   const [loading, setLoading] = useState(true);
   const [categoryLoading, setCategoryLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [backendMessage, setBackendMessage] = useState<string | null>(null);
 
   // Fetch Category Details
   useEffect(() => {
@@ -84,6 +85,7 @@ export default function CategoryPage() {
     const fetchProducts = async () => {
       setLoading(true);
       setError(null);
+      setBackendMessage(null);
       try {
         // If the ID in the URL is actually for a subcategory, we should use the parent category ID
         // which we fetch in the other useEffect and store in 'category'.
@@ -103,14 +105,18 @@ export default function CategoryPage() {
         const response = await getProducts(params);
         if (response.success) {
           // Ensure products have default tags/name array for filtering logic if missing
-          const safeProducts = response.data.map((p: any) => ({
+          const safeProducts = (response.data || []).map((p: any) => ({
             ...p,
             tags: Array.isArray(p.tags) ? p.tags : [],
             nameParts: p.name ? p.name.toLowerCase().split(" ") : [],
           }));
           setProducts(safeProducts);
+          
+          if (safeProducts.length === 0 && response.message) {
+            setBackendMessage(response.message);
+          }
         } else {
-          setError("Failed to fetch products for this category.");
+          setError(response.message || "Failed to fetch products for this category.");
         }
       } catch (error) {
         console.error("Error fetching products:", error);
@@ -488,10 +494,23 @@ export default function CategoryPage() {
               </div>
             </div>
           ) : (
-            <div className="px-4 md:px-6 lg:px-8 py-8 md:py-12 text-center">
-              <p className="text-neutral-500 md:text-lg">
-                No products found in this category.
+            <div className="px-4 md:px-6 lg:px-8 py-8 md:py-12 text-center flex flex-col items-center justify-center min-h-[40vh]">
+              <div className="w-16 h-16 bg-neutral-50 rounded-full flex items-center justify-center mb-4">
+                <svg className="w-8 h-8 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                </svg>
+              </div>
+              <p className="text-neutral-500 md:text-lg max-w-sm">
+                {backendMessage || "No products found in this category."}
               </p>
+              {backendMessage?.includes("location") && (
+                <button 
+                  onClick={() => requestLocation()}
+                  className="mt-4 px-6 py-2 bg-green-600 text-white rounded-full text-sm font-medium hover:bg-green-700 transition-colors"
+                >
+                  Update My Location
+                </button>
+              )}
             </div>
           )}
         </div>

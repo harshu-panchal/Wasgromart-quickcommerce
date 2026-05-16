@@ -32,6 +32,7 @@ export interface GetProductsParams {
 
 export interface ProductListResponse {
     success: boolean;
+    message?: string;
     data: Product[];
     pagination: {
         page: number;

@@ -44,6 +44,7 @@ const FAQ = lazy(() => import("./modules/user/FAQ"));
 const Wishlist = lazy(() => import("./modules/user/Wishlist"));
 const Addresses = lazy(() => import("./modules/user/Addresses"));
 const AddressBook = lazy(() => import("./modules/user/AddressBook"));
+const TermsOfService = lazy(() => import("./TermsOfService"));
 const SpiritualStore = lazy(() => import("./modules/user/SpiritualStore"));
 const PharmaStore = lazy(() => import("./modules/user/PharmaStore"));
 const EGiftStore = lazy(() => import("./modules/user/EGiftStore"));
@@ -292,6 +293,9 @@ const AdminSellerSubscriptions = lazy(
 const AdminSupportInbox = lazy(
   () => import("./modules/admin/pages/AdminSupportInbox"),
 );
+const AdminEditProduct = lazy(
+  () => import("./modules/admin/pages/AdminEditProduct"),
+);
 
 import ProtectedAdminRoute from "./components/ProtectedAdminRoute";
 
@@ -353,7 +357,22 @@ function AppContent() {
                       }}>
                       <RouteLoaderTrigger />
                       <Routes>
-                        {/* ... (rest of the routes) */}
+                        <Route
+                          path="/terms-of-service"
+                          element={
+                            <Suspense fallback={<IconLoader forceShow />}>
+                              <TermsOfService />
+                            </Suspense>
+                          }
+                        />
+                        <Route
+                          path="/privacy-policy"
+                          element={
+                            <Suspense fallback={<IconLoader forceShow />}>
+                              <TermsOfService />
+                            </Suspense>
+                          }
+                        />
                         {/* Public Routes */}
                         <Route
                           path="/login"
@@ -653,6 +672,10 @@ function AppContent() {
                                       <Route
                                         path="product/list"
                                         element={<AdminStockManagement />}
+                                      />
+                                      <Route
+                                        path="product/edit/:id"
+                                        element={<AdminEditProduct />}
                                       />
                                       <Route
                                         path="manage-seller/list"

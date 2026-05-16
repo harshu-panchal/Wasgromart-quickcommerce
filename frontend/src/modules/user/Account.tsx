@@ -4,8 +4,10 @@ import { useAuth } from "../../context/AuthContext";
 import {
   getProfile,
   CustomerProfile,
+  updateProfile,
 } from "../../services/api/customerService";
-import api from "../../services/api/config";
+import { uploadImage } from "../../services/api/uploadService";
+
 
 export default function Account() {
   const navigate = useNavigate();
@@ -15,6 +17,23 @@ export default function Account() {
   const [error, setError] = useState("");
   const [showGstModal, setShowGstModal] = useState(false);
   const [gstNumber, setGstNumber] = useState("");
+  const [showProfileModal, setShowProfileModal] = useState(false);
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [editFormData, setEditFormData] = useState({
+    name: "",
+    email: "",
+    phone: "",
+    dateOfBirth: "",
+    address: "",
+    city: "",
+    state: "",
+    pincode: "",
+    profilePhoto: "",
+    gstNumber: "",
+  });
+  const [updateError, setUpdateError] = useState("");
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -24,6 +43,19 @@ export default function Account() {
         const response = await getProfile();
         if (response.success) {
           setProfile(response.data);
+          setEditFormData({
+            name: response.data.name || "",
+            email: response.data.email || "",
+            phone: response.data.phone || "",
+            dateOfBirth: response.data.dateOfBirth ? response.data.dateOfBirth.split('T')[0] : "",
+            address: response.data.address || "",
+            city: response.data.city || "",
+            state: response.data.state || "",
+            pincode: response.data.pincode || "",
+            profilePhoto: response.data.profilePhoto || "",
+            gstNumber: response.data.gstNumber || "",
+          });
+          setGstNumber(response.data.gstNumber || "");
         } else {
           setError("Failed to load profile");
         }
@@ -64,32 +96,85 @@ export default function Account() {
     return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
   };
 
-  const handleLogout = () => {
+  const confirmLogout = () => {
     authLogout();
     navigate("/login");
   };
 
-  const handleGstSubmit = (e: React.FormEvent) => {
+  const handleGstSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setShowGstModal(false);
-  };
+    // GST Validation: 15 characters alphanumeric
+    if (gstNumber.length !== 15) {
+      setUpdateError("GST number must be 15 characters long");
+      return;
+    }
 
-  const [sendingWelcome, setSendingWelcome] = useState(false);
-  const [welcomeStatus, setWelcomeStatus] = useState<"idle" | "sent" | "error">("idle");
-
-  const handleSendWelcomeNotification = async () => {
-    setSendingWelcome(true);
-    setWelcomeStatus("idle");
     try {
-      await api.post("/customer/notifications/welcome");
-      setWelcomeStatus("sent");
-    } catch {
-      setWelcomeStatus("error");
+      setEditingProfile(true);
+      const response = await updateProfile({ gstNumber: gstNumber.toUpperCase() });
+      if (response.success) {
+        setProfile(response.data);
+        setShowGstModal(false);
+        setUpdateError("");
+      }
+    } catch (err: any) {
+      setUpdateError(err.response?.data?.message || "Failed to update GST");
     } finally {
-      setSendingWelcome(false);
-      setTimeout(() => setWelcomeStatus("idle"), 3000);
+      setEditingProfile(false);
     }
   };
+
+  const handleProfileUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setEditingProfile(true);
+    setUpdateError("");
+
+    try {
+      // Basic validation
+      if (!editFormData.name.trim()) {
+        setUpdateError("Name is required");
+        setEditingProfile(false);
+        return;
+      }
+
+      if (editFormData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editFormData.email)) {
+        setUpdateError("Invalid email format");
+        setEditingProfile(false);
+        return;
+      }
+
+      if (editFormData.phone && !/^[0-9]{10}$/.test(editFormData.phone)) {
+        setUpdateError("Phone number must be 10 digits");
+        setEditingProfile(false);
+        return;
+      }
+
+      const response = await updateProfile({
+        name: editFormData.name,
+        email: editFormData.email,
+        phone: editFormData.phone,
+        dateOfBirth: editFormData.dateOfBirth,
+        address: editFormData.address,
+        city: editFormData.city,
+        state: editFormData.state,
+        pincode: editFormData.pincode,
+        profilePhoto: editFormData.profilePhoto,
+      });
+
+      if (response.success) {
+        setProfile(response.data);
+        setShowProfileModal(false);
+      } else {
+        setUpdateError(response.message || "Failed to update profile");
+      }
+    } catch (err: any) {
+      setUpdateError(err.response?.data?.message || "Something went wrong");
+    } finally {
+      setEditingProfile(false);
+    }
+  };
+
+
 
   // Show login/signup prompt for unregistered users
   if (!user) {
@@ -209,56 +294,54 @@ export default function Account() {
                 />
               </svg>
             </button>
-            <button
-              onClick={handleSendWelcomeNotification}
-              disabled={sendingWelcome}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-all shadow-sm
-                ${welcomeStatus === "sent" ? "bg-green-500 text-white" :
-                  welcomeStatus === "error" ? "bg-red-500 text-white" :
-                  "bg-white text-teal-700 border border-teal-300 hover:bg-teal-50"}
-                ${sendingWelcome ? "opacity-60 cursor-not-allowed" : ""}`}
-              aria-label="Send welcome notification">
-              {sendingWelcome ? (
-                <svg className="animate-spin w-3.5 h-3.5" viewBox="0 0 24 24" fill="none">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/>
-                </svg>
-              ) : (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  <path d="M13.73 21a2 2 0 0 1-3.46 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                </svg>
-              )}
-              {welcomeStatus === "sent" ? "Sent!" : welcomeStatus === "error" ? "Failed" : "Send Welcome"}
-            </button>
           </div>
-          <div className="flex flex-col items-center mb-4 md:mb-6">
-            <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-neutral-200 flex items-center justify-center mb-3 md:mb-4 border-2 border-white shadow-sm">
-              <svg
-                width="40"
-                height="40"
-                viewBox="0 0 24 24"
-                fill="none"
-                className="text-neutral-500 md:w-12 md:h-12">
-                <path
-                  d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <circle
-                  cx="12"
-                  cy="7"
-                  r="4"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
+          <button
+            onClick={() => setShowProfileModal(true)}
+            className="w-full flex flex-col items-center mb-4 md:mb-6 group cursor-pointer outline-none active:scale-95 transition-transform">
+            <div className="relative">
+              <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-neutral-200 flex items-center justify-center mb-3 md:mb-4 border-2 border-white shadow-sm overflow-hidden group-hover:border-teal-400/50 transition-colors">
+                {profile?.profilePhoto ? (
+                  <img src={profile.profilePhoto} alt={displayName} className="w-full h-full object-cover" />
+                ) : (
+                  <svg
+                    width="40"
+                    height="40"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    className="text-neutral-500 md:w-12 md:h-12">
+                    <path
+                      d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <circle
+                      cx="12"
+                      cy="7"
+                      r="4"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                )}
+                <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="text-white">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+              </div>
+              <div className="absolute -right-1 -bottom-1 bg-white p-1.5 rounded-full shadow-md border border-neutral-100 md:p-2">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" className="text-teal-600 md:w-4 md:h-4">
+                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              </div>
             </div>
-            <h1 className="text-xl md:text-2xl font-bold text-neutral-900 mb-2">
+            <h1 className="text-xl md:text-2xl font-bold text-neutral-900 mb-1 group-hover:text-teal-700 transition-colors">
               {displayName}
             </h1>
             <div className="flex flex-col items-center gap-1.5 md:gap-2 text-xs md:text-sm text-neutral-600">
@@ -320,8 +403,11 @@ export default function Account() {
                   <span>{formatDate(displayDateOfBirth)}</span>
                 </div>
               )}
+              <span className="mt-1 text-[10px] text-teal-600 font-medium bg-teal-50 px-2 py-0.5 rounded-full border border-teal-100 opacity-0 group-hover:opacity-100 transition-opacity">
+                Click to Edit
+              </span>
             </div>
-          </div>
+          </button>
         </div>
       </div>
 
@@ -480,7 +566,7 @@ export default function Account() {
             <span className="text-neutral-400">›</span>
           </button>
           <button
-            onClick={() => (window.location.href = "https://about.wasgromart.com")}
+            onClick={() => navigate("/about-us")}
             className="w-full flex items-center justify-between px-3 py-3 hover:bg-neutral-50 transition-colors">
             <div className="flex items-center gap-3">
               <svg
@@ -520,7 +606,7 @@ export default function Account() {
             <span className="text-neutral-400">›</span>
           </button>
           <button
-            onClick={handleLogout}
+            onClick={() => setShowLogoutModal(true)}
             className="w-full flex items-center justify-between px-3 py-3 hover:bg-neutral-50 transition-colors">
             <div className="flex items-center gap-3">
               <svg
@@ -565,11 +651,11 @@ export default function Account() {
       {showGstModal && (
         <>
           <div
-            className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm animate-in fade-in duration-300"
+            className="fixed inset-0 z-[100] bg-black/40 backdrop-blur-sm animate-in fade-in duration-300"
             onClick={() => setShowGstModal(false)}
           />
-          <div className="fixed inset-x-0 bottom-0 z-50 animate-in slide-in-from-bottom duration-500 ease-out">
-            <div className="bg-white rounded-t-[32px] shadow-2xl max-w-lg mx-auto p-6 pt-10 relative">
+          <div className="fixed inset-x-0 bottom-0 z-[101] animate-in slide-in-from-bottom duration-500 ease-out">
+            <div className="bg-white rounded-t-[32px] shadow-2xl max-w-lg mx-auto p-6 pt-10 pb-24 relative">
               <button
                 onClick={() => setShowGstModal(false)}
                 className="absolute -top-12 right-4 w-10 h-10 rounded-full bg-neutral-900 flex items-center justify-center text-white">
@@ -604,25 +690,295 @@ export default function Account() {
                   Identify your business to get a GST invoice on your business
                   purchases.
                 </p>
-                <form onSubmit={handleGstSubmit} className="space-y-4">
+
+                {updateError && (
+                  <div className="mb-6 p-3 bg-red-50 border border-red-100 text-red-600 text-[11px] rounded-lg flex items-center gap-2 animate-shake mx-4 text-left">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
+                      <path d="M12 8v4M12 16h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                    </svg>
+                    {updateError}
+                  </div>
+                )}
+
+                <form onSubmit={handleGstSubmit} className="space-y-4 px-4">
                   <input
                     type="text"
                     value={gstNumber}
-                    onChange={(e) => setGstNumber(e.target.value)}
-                    placeholder="Enter GST Number"
-                    className="w-full rounded-xl border border-neutral-200 px-4 py-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
+                    onChange={(e) => {
+                      setGstNumber(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 15));
+                      if (updateError) setUpdateError("");
+                    }}
+                    placeholder="Enter 15-digit GST Number"
+                    className="w-full rounded-xl border border-neutral-200 px-4 py-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all font-mono"
+                    maxLength={15}
                   />
                   <button
                     type="submit"
-                    disabled={!gstNumber.trim()}
+                    disabled={gstNumber.length !== 15 || editingProfile}
                     className="w-full rounded-xl bg-teal-600 text-white font-bold py-4 hover:bg-teal-700 disabled:opacity-50 transition-colors shadow-lg shadow-teal-500/20 uppercase tracking-wider text-sm">
-                    Save Details
+                    {editingProfile ? "Saving..." : "Save Details"}
                   </button>
                 </form>
                 <p className="mt-6 text-[11px] text-neutral-400">
                   By continuing, you agree to our{" "}
                   <span className="underline">Terms & Conditions</span>
                 </p>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Edit Profile Modal */}
+      {showProfileModal && (
+        <>
+          <div
+            className="fixed inset-0 z-[100] bg-black/40 backdrop-blur-sm animate-in fade-in duration-300"
+            onClick={() => setShowProfileModal(false)}
+          />
+          <div className="fixed inset-x-0 bottom-0 z-[101] animate-in slide-in-from-bottom duration-500 ease-out">
+            <div className="bg-white rounded-t-[32px] shadow-2xl max-w-lg mx-auto p-6 pt-10 pb-24 relative">
+              <button
+                onClick={() => setShowProfileModal(false)}
+                className="absolute -top-12 right-4 w-10 h-10 rounded-full bg-neutral-900 flex items-center justify-center text-white">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+                  <path
+                    d="M18 6L6 18M6 6L18 18"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                </svg>
+              </button>
+              <div>
+                <h3 className="text-xl font-bold text-neutral-900 mb-6 px-2">
+                  Edit Profile
+                </h3>
+                
+                {updateError && (
+                  <div className="mb-4 p-3 bg-red-50 border border-red-100 text-red-600 text-xs rounded-lg flex items-center gap-2 animate-shake">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
+                      <path d="M12 8v4M12 16h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                    </svg>
+                    {updateError}
+                  </div>
+                )}
+
+                <form onSubmit={handleProfileUpdate} className="space-y-5 max-h-[60vh] overflow-y-auto px-2 pb-4 scrollbar-hide">
+                  {/* Profile Photo Upload */}
+                  <div className="flex flex-col items-center gap-3 mb-2">
+                    <div className="relative group/photo">
+                      <div className="w-20 h-20 rounded-full bg-neutral-100 border-2 border-dashed border-neutral-300 flex items-center justify-center overflow-hidden">
+                        {editFormData.profilePhoto ? (
+                          <img src={editFormData.profilePhoto} alt="Preview" className="w-full h-full object-cover" />
+                        ) : (
+                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="text-neutral-400">
+                            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                            <circle cx="12" cy="13" r="4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          </svg>
+                        )}
+                        {uploadingImage && (
+                          <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                          </div>
+                        )}
+                      </div>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (file) {
+                            setUploadingImage(true);
+                            try {
+                              const result = await uploadImage(file, 'customer_profiles');
+                              setEditFormData({ ...editFormData, profilePhoto: result.secureUrl });
+                            } catch (err: any) {
+                              setUpdateError("Image upload failed");
+                            } finally {
+                              setUploadingImage(false);
+                            }
+                          }
+                        }}
+                        className="absolute inset-0 opacity-0 cursor-pointer"
+                        disabled={uploadingImage}
+                      />
+                      <div className="absolute -right-1 -bottom-1 bg-teal-600 text-white p-1.5 rounded-full shadow-lg border-2 border-white group-hover/photo:scale-110 transition-transform">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+                          <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        </svg>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-medium text-neutral-500 uppercase tracking-wider">Change Photo</span>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-neutral-500 ml-1">Full Name</label>
+                      <input
+                        type="text"
+                        value={editFormData.name}
+                        onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value.replace(/[^a-zA-Z\s]/g, "") })}
+                        placeholder="Enter your name"
+                        className="w-full rounded-xl border border-neutral-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-neutral-500 ml-1">Phone Number</label>
+                      <div className="relative">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs text-neutral-500 font-medium">+91</span>
+                        <input
+                          type="tel"
+                          value={editFormData.phone}
+                          onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value.replace(/\D/g, "").slice(0, 10) })}
+                          placeholder="10-digit number"
+                          className="w-full rounded-xl border border-neutral-200 pl-12 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
+                          maxLength={10}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-neutral-500 ml-1">Email Address</label>
+                      <input
+                        type="email"
+                        value={editFormData.email}
+                        onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                        placeholder="Enter your email"
+                        className="w-full rounded-xl border border-neutral-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-neutral-500 ml-1">Date of Birth</label>
+                      <input
+                        type="date"
+                        value={editFormData.dateOfBirth}
+                        onChange={(e) => setEditFormData({ ...editFormData, dateOfBirth: e.target.value })}
+                        className="w-full rounded-xl border border-neutral-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold text-neutral-500 ml-1">Flat / House No. / Building</label>
+                      <input
+                        type="text"
+                        value={editFormData.address}
+                        onChange={(e) => setEditFormData({ ...editFormData, address: e.target.value })}
+                        placeholder="Enter your address"
+                        className="w-full rounded-xl border border-neutral-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-neutral-500 ml-1">City</label>
+                        <input
+                          type="text"
+                          value={editFormData.city}
+                          onChange={(e) => setEditFormData({ ...editFormData, city: e.target.value })}
+                          placeholder="City"
+                          className="w-full rounded-xl border border-neutral-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-semibold text-neutral-500 ml-1">Pincode</label>
+                        <input
+                          type="text"
+                          value={editFormData.pincode}
+                          onChange={(e) => setEditFormData({ ...editFormData, pincode: e.target.value.replace(/\D/g, "").slice(0, 6) })}
+                          placeholder="6 digits"
+                          className="w-full rounded-xl border border-neutral-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
+                          maxLength={6}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-2">
+                    <button
+                      type="submit"
+                      disabled={editingProfile || !editFormData.name.trim()}
+                      className="w-full rounded-xl bg-teal-600 text-white font-bold py-4 hover:bg-teal-700 disabled:opacity-50 transition-all shadow-lg shadow-teal-500/20 uppercase tracking-wider text-sm flex items-center justify-center gap-2">
+                      {editingProfile ? (
+                        <>
+                          <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24" fill="none">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                          </svg>
+                          Saving...
+                        </>
+                      ) : (
+                        "Update Profile"
+                      )}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+      {/* Logout Confirmation Modal */}
+      {showLogoutModal && (
+        <>
+          <div
+            className="fixed inset-0 z-[110] bg-black/40 backdrop-blur-sm animate-in fade-in duration-300"
+            onClick={() => setShowLogoutModal(false)}
+          />
+          <div className="fixed inset-0 z-[111] flex items-center justify-center px-4 pointer-events-none">
+            <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-xs p-6 pt-8 animate-in zoom-in-95 duration-200 pointer-events-auto">
+              <div className="flex flex-col items-center text-center">
+                <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center mb-4">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" className="text-red-500">
+                    <path
+                      d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <polyline
+                      points="16 17 21 12 16 7"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <line
+                      x1="21"
+                      y1="12"
+                      x2="9"
+                      y2="12"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-bold text-neutral-900 mb-2">
+                  Logout Confirmation
+                </h3>
+                <p className="text-sm text-neutral-500 mb-8 px-2 leading-relaxed">
+                  Are you sure you want to log out of your account?
+                </p>
+                <div className="grid grid-cols-2 gap-3 w-full">
+                  <button
+                    onClick={() => setShowLogoutModal(false)}
+                    className="w-full py-3.5 rounded-xl font-bold text-sm text-neutral-600 bg-neutral-50 hover:bg-neutral-100 transition-colors">
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmLogout}
+                    className="w-full py-3.5 rounded-xl font-bold text-sm text-white bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/20 transition-colors">
+                    Logout
+                  </button>
+                </div>
               </div>
             </div>
           </div>

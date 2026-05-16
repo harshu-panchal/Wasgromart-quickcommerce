@@ -39,8 +39,12 @@ export default function LocationPickerMap({
 
   // Update center when props change
   useEffect(() => {
-    if (initialLat && initialLng) {
-      setCenter({ lat: initialLat, lng: initialLng });
+    // Only update center if we have valid, non-zero coordinates
+    const lat = typeof initialLat === 'number' ? initialLat : parseFloat(initialLat);
+    const lng = typeof initialLng === 'number' ? initialLng : parseFloat(initialLng);
+    
+    if (lat && lng && (lat !== 0 || lng !== 0)) {
+      setCenter({ lat, lng });
     }
   }, [initialLat, initialLng]);
 

@@ -14,37 +14,103 @@ import {
 } from "../../../services/api/headerCategoryService";
 import LocationPickerMap from "../../../components/LocationPickerMap";
 import { useEffect } from "react";
+import { useJsApiLoader } from "@react-google-maps/api";
 import logo from "@assets/wasgromart-black-text-removebg-preview.png";
+
+interface SellerSignUpFormData {
+  sellerName: string;
+  mobile: string;
+  email: string;
+  storeName: string;
+  category: string;
+  categories: string[];
+  address: string;
+  city: string;
+  pincode: string;
+  panCard: string;
+  taxName: string;
+  taxNumber: string;
+  searchLocation: string;
+  latitude: string;
+  longitude: string;
+  serviceRadiusKm: string;
+  accountName: string;
+  bankName: string;
+  branch: string;
+  accountNumber: string;
+  ifsc: string;
+}
 
 export default function SellerSignUp() {
   const navigate = useNavigate();
   const { login } = useAuth();
-  const [formData, setFormData] = useState({
-    sellerName: "",
-    mobile: "",
-    email: "",
-    storeName: "",
-    category: "",
-    categories: [] as string[],
-    address: "",
-    city: "",
-    panCard: "",
-    taxName: "",
-    taxNumber: "",
-    searchLocation: "",
-    latitude: "",
-    longitude: "",
-    serviceRadiusKm: "10", // Default 10km
-    accountName: "",
-    bankName: "",
-    branch: "",
-    accountNumber: "",
-    ifsc: "",
+
+  const { isLoaded } = useJsApiLoader({
+    id: "google-map-script",
+    googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
+    libraries: ["places"] as any,
   });
+  const [formData, setFormData] = useState<SellerSignUpFormData>(() => {
+    const saved = localStorage.getItem("seller_signup_draft");
+    const defaultData: SellerSignUpFormData = {
+      sellerName: "",
+      mobile: "",
+      email: "",
+      storeName: "",
+      category: "",
+      categories: [],
+      address: "",
+      city: "",
+      pincode: "",
+      panCard: "",
+      taxName: "",
+      taxNumber: "",
+      searchLocation: "",
+      latitude: "",
+      longitude: "",
+      serviceRadiusKm: "10", // Default 10km
+      accountName: "",
+      bankName: "",
+      branch: "",
+      accountNumber: "",
+      ifsc: "",
+    };
+    if (saved) {
+      try {
+        return { ...defaultData, ...JSON.parse(saved) };
+      } catch {
+        return defaultData;
+      }
+    }
+    return defaultData;
+  });
+
+  useEffect(() => {
+    localStorage.setItem("seller_signup_draft", JSON.stringify(formData));
+  }, [formData]);
   const [showOTP, setShowOTP] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [categories, setCategories] = useState<HeaderCategory[]>([]);
+  const [timer, setTimer] = useState(0);
+  const [canResend, setCanResend] = useState(true);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (timer > 0) {
+      interval = setInterval(() => {
+        setTimer((prev) => prev - 1);
+      }, 1000);
+    } else {
+      setCanResend(true);
+    }
+    return () => clearInterval(interval);
+  }, [timer]);
+
+  const startTimer = () => {
+    setTimer(30);
+    setCanResend(false);
+  };
 
   useEffect(() => {
     const fetchCats = async () => {
@@ -96,9 +162,30 @@ export default function SellerSignUp() {
   ) => {
     const { name, value } = e.target;
     if (name === "mobile") {
-      setFormData((prev) => ({
+      setFormData((prev: SellerSignUpFormData) => ({
         ...prev,
         [name]: value.replace(/\D/g, "").slice(0, 10),
+      }));
+    } else if (name === "sellerName") {
+      setFormData((prev: SellerSignUpFormData) => ({
+        ...prev,
+        [name]: value.replace(/[^a-zA-Z\s]/g, ""),
+      }));
+    } else if (name === "city") {
+      const sanitized = value.replace(/[^a-zA-Z\s]/g, "");
+      setFormData((prev: SellerSignUpFormData) => ({
+        ...prev,
+        city: sanitized,
+      }));
+    } else if (name === "pincode") {
+      setFormData((prev: SellerSignUpFormData) => ({
+        ...prev,
+        [name]: value.replace(/\D/g, "").slice(0, 6),
+      }));
+    } else if (name === "panCard") {
+      setFormData((prev: SellerSignUpFormData) => ({
+        ...prev,
+        [name]: value.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 10),
       }));
     } else if (name === "serviceRadiusKm") {
       // Allow only numbers and a single decimal point
@@ -108,23 +195,77 @@ export default function SellerSignUp() {
       const finalValue =
         parts.length > 2 ? `${parts[0]}.${parts[1]}` : cleanedValue;
 
-      setFormData((prev) => ({
+      setFormData((prev: SellerSignUpFormData) => ({
         ...prev,
         [name]: finalValue,
       }));
+    } else if (name === "taxName") {
+      setFormData((prev: SellerSignUpFormData) => ({
+        ...prev,
+        [name]: value.replace(/[^a-zA-Z\s]/g, ""),
+      }));
+    } else if (name === "ifsc") {
+      setFormData((prev: SellerSignUpFormData) => ({
+        ...prev,
+        [name]: value.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 11),
+      }));
+    } else if (name === "taxNumber") {
+      setFormData((prev: SellerSignUpFormData) => ({
+        ...prev,
+        [name]: value.replace(/[^a-zA-Z0-9]/g, "").toUpperCase().slice(0, 15),
+      }));
+    } else if (name === "accountName") {
+      setFormData((prev: SellerSignUpFormData) => ({
+        ...prev,
+        [name]: value.replace(/[^a-zA-Z\s]/g, ""),
+      }));
+    } else if (name === "accountNumber") {
+      setFormData((prev: SellerSignUpFormData) => ({
+        ...prev,
+        [name]: value.replace(/\D/g, "").slice(0, 15),
+      }));
     } else {
-      setFormData((prev) => ({
+      setFormData((prev: SellerSignUpFormData) => ({
         ...prev,
         [name]: value,
       }));
     }
   };
 
+  const blockNonAlphabets = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const char = e.key;
+    if (!/^[a-zA-Z\s]$/.test(char) && char !== "Backspace" && char !== "Tab" && char !== "Delete" && char !== "ArrowLeft" && char !== "ArrowRight") {
+      e.preventDefault();
+    }
+  };
+
+  const blockNonDigits = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    // Allow: Backspace, Tab, End, Home, Left, Right, Delete, and Ctrl/Meta shortcuts
+    const allowedKeys = [
+      "Backspace",
+      "Tab",
+      "End",
+      "Home",
+      "ArrowLeft",
+      "ArrowRight",
+      "Delete",
+      "Enter",
+    ];
+    if (
+      !/^\d$/.test(e.key) &&
+      !allowedKeys.includes(e.key) &&
+      !e.ctrlKey &&
+      !e.metaKey
+    ) {
+      e.preventDefault();
+    }
+  };
+
   const toggleCategory = (cat: string) => {
-    setFormData((prev) => {
+    setFormData((prev: SellerSignUpFormData) => {
       const exists = prev.categories.includes(cat);
       const nextCategories = exists
-        ? prev.categories.filter((c) => c !== cat)
+        ? prev.categories.filter((c: string) => c !== cat)
         : [...prev.categories, cat];
       return {
         ...prev,
@@ -150,6 +291,12 @@ export default function SellerSignUp() {
       setError("Please enter your email address");
       return;
     }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      setError("Please enter a valid email address");
+      return;
+    }
     if (!formData.storeName) {
       setError("Please enter your store name");
       return;
@@ -166,9 +313,29 @@ export default function SellerSignUp() {
       setError("Please enter your city");
       return;
     }
+    if (!formData.pincode || formData.pincode.length !== 6) {
+      setError("Please enter a valid 6-digit pincode");
+      return;
+    }
 
     if (formData.mobile.length !== 10) {
       setError("Please enter a valid 10-digit mobile number");
+      return;
+    }
+
+    // PAN Card validation if provided
+    if (formData.panCard && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(formData.panCard)) {
+      setError("Invalid PAN Card Number");
+      return;
+    }
+
+    // Account Number validation
+    if (!formData.accountNumber) {
+      setError("Please enter your account number");
+      return;
+    }
+    if (formData.accountNumber.length < 9 || formData.accountNumber.length > 15) {
+      setError("Account number must be between 9 and 15 digits");
       return;
     }
 
@@ -202,10 +369,19 @@ export default function SellerSignUp() {
         categories: formData.categories,
         address: formData.address || formData.searchLocation,
         city: formData.city,
+        pincode: formData.pincode,
         searchLocation: formData.searchLocation,
         latitude: formData.latitude,
         longitude: formData.longitude,
         serviceRadiusKm: formData.serviceRadiusKm,
+        panCard: formData.panCard,
+        taxName: formData.taxName,
+        taxNumber: formData.taxNumber,
+        accountName: formData.accountName,
+        bankName: formData.bankName,
+        branch: formData.branch,
+        accountNumber: formData.accountNumber,
+        ifsc: formData.ifsc,
       });
 
       if (response.success) {
@@ -216,6 +392,7 @@ export default function SellerSignUp() {
         try {
           await sendOTP(formData.mobile);
           setShowOTP(true);
+          startTimer();
         } catch (otpErr: any) {
           setError(
             otpErr.response?.data?.message ||
@@ -251,6 +428,7 @@ export default function SellerSignUp() {
           address: response.data.user.address,
           city: response.data.user.city,
         });
+        localStorage.removeItem("seller_signup_draft");
         // Navigate to seller dashboard
         navigate("/seller", { replace: true });
       }
@@ -299,7 +477,7 @@ export default function SellerSignUp() {
               <img
                 src={logo}
                 alt="Wasgro mart"
-                className="h-40 w-auto object-contain relative z-10 drop-shadow-lg transform hover:scale-105 transition-transform duration-300"
+                className="h-32 w-auto object-contain relative z-10 drop-shadow-lg transform hover:scale-105 transition-transform duration-300"
               />
             </div>
             {!showOTP && (
@@ -319,14 +497,18 @@ export default function SellerSignUp() {
         <div
           className="px-6 pb-6 space-y-4 seller-signup-form"
           style={{
-            maxHeight: "70vh",
+            maxHeight: "85vh",
             overflowY: "auto",
             scrollbarWidth: "none",
             msOverflowStyle: "none",
           }}>
           <style>{`
             .seller-signup-form::-webkit-scrollbar {
-              display: none;
+              width: 6px;
+            }
+            .seller-signup-form::-webkit-scrollbar-thumb {
+              background-color: rgba(255, 255, 255, 0.2);
+              border-radius: 10px;
             }
           `}</style>
           {!showOTP ? (
@@ -346,10 +528,12 @@ export default function SellerSignUp() {
                     name="sellerName"
                     value={formData.sellerName}
                     onChange={handleInputChange}
+                    onKeyPress={blockNonAlphabets}
                     placeholder="Enter your name"
                     required
                     className="w-full px-3 py-2.5 text-sm rounded-lg bg-black/20 border border-white/10 text-white placeholder:text-white/30 focus:outline-none focus:border-green-400/50 focus:bg-black/30 transition-all font-medium shadow-inner"
                     disabled={loading}
+                    autoComplete="off"
                   />
                 </div>
 
@@ -371,6 +555,7 @@ export default function SellerSignUp() {
                       maxLength={10}
                       className="flex-1 px-3 py-2.5 text-sm bg-transparent text-white placeholder:text-white/30 focus:outline-none font-medium"
                       disabled={loading}
+                      autoComplete="off"
                     />
                   </div>
                 </div>
@@ -388,6 +573,7 @@ export default function SellerSignUp() {
                     required
                     className="w-full px-3 py-2.5 text-sm rounded-lg bg-black/20 border border-white/10 text-white placeholder:text-white/30 focus:outline-none focus:border-green-400/50 focus:bg-black/30 transition-all font-medium shadow-inner"
                     disabled={loading}
+                    autoComplete="off"
                   />
                 </div>
 
@@ -404,6 +590,7 @@ export default function SellerSignUp() {
                     required
                     className="w-full px-3 py-2.5 text-sm rounded-lg bg-black/20 border border-white/10 text-white placeholder:text-white/30 focus:outline-none focus:border-green-400/50 focus:bg-black/30 transition-all font-medium shadow-inner"
                     disabled={loading}
+                    autoComplete="off"
                   />
                 </div>
 
@@ -457,15 +644,16 @@ export default function SellerSignUp() {
                           lat: number,
                           lng: number,
                           placeName: string,
-                          components?: { city?: string; state?: string }
+                          components?: { city?: string; state?: string; pincode?: string }
                         ) => {
-                          setFormData((prev) => ({
+                          setFormData((prev: SellerSignUpFormData) => ({
                             ...prev,
                             searchLocation: address,
-                            latitude: lat.toString(),
-                            longitude: lng.toString(),
+                            latitude: lat !== undefined ? lat.toString() : prev.latitude,
+                            longitude: lng !== undefined ? lng.toString() : prev.longitude,
                             address: address,
-                            city: components?.city || prev.city,
+                            city: components?.city?.replace(/[^a-zA-Z\s]/g, "") || prev.city,
+                            pincode: components?.pincode || prev.pincode,
                           }));
                         }}
                         placeholder="Search your store location..."
@@ -474,41 +662,99 @@ export default function SellerSignUp() {
                         className="!bg-black/20 !border-white/10 !text-white !placeholder-white/30 !rounded-lg focus:!border-green-400/50 focus:!bg-black/30"
                       />
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (navigator.geolocation) {
-                          setLoading(true);
-                          navigator.geolocation.getCurrentPosition(
-                            (position) => {
-                              const lat = position.coords.latitude;
-                              const lng = position.coords.longitude;
-                              const locationStr = `${lat.toFixed(
-                                6
-                              )}, ${lng.toFixed(6)}`;
-                              setFormData((prev) => ({
-                                ...prev,
-                                latitude: lat.toString(),
-                                longitude: lng.toString(),
-                                searchLocation: locationStr,
-                                address: prev.address || locationStr, // Ensure address is not empty
-                              }));
-                              setLoading(false);
-                            },
-                            (error) => {
-                              console.error(error);
-                              setError("Unable to retrieve your location");
-                              setLoading(false);
-                            }
-                          );
-                        } else {
-                          setError(
-                            "Geolocation is not supported by your browser"
-                          );
-                        }
-                      }}
-                      className="p-2.5 bg-white/10 text-white rounded-lg border border-white/10 hover:bg-white/20 transition-colors"
-                      title="Use Current Location">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (navigator.geolocation) {
+                            setLoading(true);
+                            navigator.geolocation.getCurrentPosition(
+                              (position) => {
+                                const lat = position.coords.latitude;
+                                const lng = position.coords.longitude;
+                                const locationStr = `${lat.toFixed(
+                                  6
+                                )}, ${lng.toFixed(6)}`;
+
+                                // Perform reverse geocoding to get city and address
+                                if (isLoaded && window.google) {
+                                  const geocoder = new google.maps.Geocoder();
+                                  geocoder.geocode(
+                                    { location: { lat, lng } },
+                                    (results, status) => {
+                                        if (status === "OK" && results && results.length > 0) {
+                                          let city = "";
+                                          let pincode = "";
+
+                                          // Iterate through results to find missing components
+                                          for (const result of results) {
+                                            for (const component of result.address_components) {
+                                              const types = component.types;
+                                              if (!city && (types.includes("locality") || types.includes("sublocality_level_1") || types.includes("administrative_area_level_2") || types.includes("administrative_area_level_3"))) {
+                                                city = component.long_name;
+                                              }
+                                              if (!pincode && types.includes("postal_code")) {
+                                                pincode = component.long_name;
+                                              }
+                                            }
+                                            if (city && pincode) break;
+                                          }
+
+                                          // Fallback for pincode from formatted address if still missing
+                                          if (!pincode && results[0].formatted_address) {
+                                            const match = results[0].formatted_address.match(/\b\d{6}\b/);
+                                            if (match) pincode = match[0];
+                                          }
+
+                                          const formattedAddress = results[0].formatted_address;
+
+                                          setFormData((prev: SellerSignUpFormData) => ({
+                                            ...prev,
+                                            latitude: lat.toString(),
+                                            longitude: lng.toString(),
+                                            searchLocation: formattedAddress || locationStr,
+                                            address: formattedAddress || locationStr,
+                                            city: (city.replace(/[^a-zA-Z\s]/g, "") || prev.city),
+                                            pincode: (pincode.replace(/\D/g, "").slice(0, 6) || prev.pincode),
+                                          }));
+                                        } else {
+                                        // Fallback to coordinates if geocoding fails
+                                        setFormData((prev: SellerSignUpFormData) => ({
+                                          ...prev,
+                                          latitude: lat.toString(),
+                                          longitude: lng.toString(),
+                                          searchLocation: locationStr,
+                                          address: prev.address || locationStr,
+                                        }));
+                                      }
+                                      setLoading(false);
+                                    }
+                                  );
+                                } else {
+                                  // Script not loaded, just set coordinates
+                                  setFormData((prev: SellerSignUpFormData) => ({
+                                    ...prev,
+                                    latitude: lat.toString(),
+                                    longitude: lng.toString(),
+                                    searchLocation: locationStr,
+                                    address: prev.address || locationStr,
+                                  }));
+                                  setLoading(false);
+                                }
+                              },
+                              (error) => {
+                                console.error(error);
+                                setError("Unable to retrieve your location");
+                                setLoading(false);
+                              }
+                            );
+                          } else {
+                            setError(
+                              "Geolocation is not supported by your browser"
+                            );
+                          }
+                        }}
+                        className="p-2.5 bg-white/10 text-white rounded-lg border border-white/10 hover:bg-white/20 transition-colors"
+                        title="Use Current Location">
                       <svg
                         width="20"
                         height="20"
@@ -539,7 +785,7 @@ export default function SellerSignUp() {
                           initialLat={parseFloat(formData.latitude)}
                           initialLng={parseFloat(formData.longitude)}
                           onLocationSelect={(lat, lng) => {
-                            setFormData((prev) => ({
+                            setFormData((prev: SellerSignUpFormData) => ({
                               ...prev,
                               latitude: lat.toString(),
                               longitude: lng.toString(),
@@ -578,7 +824,7 @@ export default function SellerSignUp() {
                         e.preventDefault();
                       }
                     }}
-                    placeholder="Enter service radius in KM (e.g. 10)"
+                    placeholder="Enter service radius in KM"
                     required
                     min="0.1"
                     max="100"
@@ -592,20 +838,61 @@ export default function SellerSignUp() {
                   </p>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-medium text-white/80 mb-1.5">
-                    City <span className="text-red-400">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    name="city"
-                    value={formData.city}
-                    onChange={handleInputChange}
-                    placeholder="Enter city"
-                    required
-                    className="w-full px-3 py-2.5 text-sm rounded-lg bg-black/20 border border-white/10 text-white placeholder:text-white/30 focus:outline-none focus:border-green-400/50 focus:bg-black/30 transition-all font-medium shadow-inner"
-                    disabled={loading}
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-white/80 mb-1.5">
+                      City <span className="text-red-400">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      name="city"
+                      value={formData.city}
+                      onChange={handleInputChange}
+                      onKeyPress={blockNonAlphabets}
+                      onInput={(e) => {
+                        const target = e.target as HTMLInputElement;
+                        target.value = target.value.replace(/[^a-zA-Z\s]/g, "");
+                      }}
+                      placeholder="City"
+                      required
+                      className="w-full px-3 py-2.5 text-sm rounded-lg bg-black/20 border border-white/10 text-white placeholder:text-white/30 focus:outline-none focus:border-green-400/50 focus:bg-black/30 transition-all font-medium shadow-inner"
+                      disabled={loading}
+                      autoComplete="off"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-white/80 mb-1.5">
+                      Pin Code <span className="text-red-400">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      name="pincode"
+                      value={formData.pincode}
+                      onChange={handleInputChange}
+                      onKeyDown={blockNonDigits}
+                      onInput={(e) => {
+                        const target = e.target as HTMLInputElement;
+                        target.value = target.value.replace(/\D/g, "").slice(0, 6);
+                      }}
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      placeholder="6-digit Pin Code"
+                      required
+                      maxLength={6}
+                      className={`w-full px-3 py-2.5 text-sm rounded-lg bg-black/20 border text-white placeholder:text-white/30 focus:outline-none focus:bg-black/30 transition-all font-medium shadow-inner ${formData.pincode && formData.pincode.length !== 6
+                          ? "border-red-400/50 focus:border-red-400"
+                          : "border-white/10 focus:border-green-400/50"
+                        }`}
+                      disabled={loading}
+                      autoComplete="off"
+                    />
+                    {formData.pincode && formData.pincode.length !== 6 && (
+                      <p className="text-[10px] text-red-300 mt-1">
+                        Pin code must be 6 digits
+                      </p>
+                    )}
+                  </div>
                 </div>
 
                 {/* Hidden fields for coordinates */}
@@ -638,9 +925,19 @@ export default function SellerSignUp() {
                       value={formData.panCard}
                       onChange={handleInputChange}
                       placeholder="PAN Card Number"
-                      className="w-full px-3 py-2.5 text-sm rounded-lg bg-black/20 border border-white/10 text-white placeholder:text-white/30 focus:outline-none focus:border-green-400/50 focus:bg-black/30 transition-all font-medium shadow-inner"
+                      maxLength={10}
+                      className={`w-full px-3 py-2.5 text-sm rounded-lg bg-black/20 border text-white placeholder:text-white/30 focus:outline-none focus:bg-black/30 transition-all font-medium shadow-inner ${formData.panCard && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(formData.panCard)
+                        ? "border-red-400/50 focus:border-red-400"
+                        : "border-white/10 focus:border-green-400/50"
+                        }`}
                       disabled={loading}
+                      autoComplete="off"
                     />
+                    {formData.panCard && !/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(formData.panCard) && (
+                      <p className="text-[10px] text-red-300 mt-1">
+                        Invalid PAN Card Number
+                      </p>
+                    )}
                   </div>
 
                   <div>
@@ -655,6 +952,7 @@ export default function SellerSignUp() {
                       placeholder="Tax Name"
                       className="w-full px-3 py-2.5 text-sm rounded-lg bg-black/20 border border-white/10 text-white placeholder:text-white/30 focus:outline-none focus:border-green-400/50 focus:bg-black/30 transition-all font-medium shadow-inner"
                       disabled={loading}
+                      autoComplete="off"
                     />
                   </div>
 
@@ -668,9 +966,98 @@ export default function SellerSignUp() {
                       value={formData.taxNumber}
                       onChange={handleInputChange}
                       placeholder="Tax Number"
+                      maxLength={15}
                       className="w-full px-3 py-2.5 text-sm rounded-lg bg-black/20 border border-white/10 text-white placeholder:text-white/30 focus:outline-none focus:border-green-400/50 focus:bg-black/30 transition-all font-medium shadow-inner"
                       disabled={loading}
+                      autoComplete="off"
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-white/80 mb-1.5">
+                      Bank Name
+                    </label>
+                    <input
+                      type="text"
+                      name="bankName"
+                      value={formData.bankName}
+                      onChange={handleInputChange}
+                      placeholder="Bank Name"
+                      className="w-full px-3 py-2.5 text-sm rounded-lg bg-black/20 border border-white/10 text-white placeholder:text-white/30 focus:outline-none focus:border-green-400/50 focus:bg-black/30 transition-all font-medium shadow-inner"
+                      disabled={loading}
+                      autoComplete="off"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-white/80 mb-1.5">
+                      Branch Name
+                    </label>
+                    <input
+                      type="text"
+                      name="branch"
+                      value={formData.branch}
+                      onChange={handleInputChange}
+                      placeholder="Branch Name"
+                      className="w-full px-3 py-2.5 text-sm rounded-lg bg-black/20 border border-white/10 text-white placeholder:text-white/30 focus:outline-none focus:border-green-400/50 focus:bg-black/30 transition-all font-medium shadow-inner"
+                      disabled={loading}
+                      autoComplete="off"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-white/80 mb-1.5">
+                      Account Holder Name
+                    </label>
+                    <input
+                      type="text"
+                      name="accountName"
+                      value={formData.accountName}
+                      onChange={handleInputChange}
+                      onKeyDown={blockNonAlphabets}
+                      onInput={(e) => {
+                        const target = e.target as HTMLInputElement;
+                        target.value = target.value.replace(/[^a-zA-Z\s]/g, "");
+                      }}
+                      placeholder="Name as per Bank"
+                      className="w-full px-3 py-2.5 text-sm rounded-lg bg-black/20 border border-white/10 text-white placeholder:text-white/30 focus:outline-none focus:border-green-400/50 focus:bg-black/30 transition-all font-medium shadow-inner"
+                      disabled={loading}
+                      autoComplete="off"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-white/80 mb-1.5">
+                      Account Number <span className="text-red-400">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      name="accountNumber"
+                      value={formData.accountNumber}
+                      onChange={handleInputChange}
+                      onKeyDown={blockNonDigits}
+                      onInput={(e) => {
+                        const target = e.target as HTMLInputElement;
+                        target.value = target.value.replace(/\D/g, "").slice(0, 15);
+                      }}
+                      inputMode="numeric"
+                      pattern="[0-9]{9,15}"
+                      minLength={9}
+                      maxLength={15}
+                      placeholder="9-15 digit Account No."
+                      required
+                      className={`w-full px-3 py-2.5 text-sm rounded-lg bg-black/20 border text-white placeholder:text-white/30 focus:outline-none focus:bg-black/30 transition-all font-medium shadow-inner ${formData.accountNumber && (formData.accountNumber.length < 9 || formData.accountNumber.length > 15)
+                          ? "border-red-400/50 focus:border-red-400"
+                          : "border-white/10 focus:border-green-400/50"
+                        }`}
+                      disabled={loading}
+                      autoComplete="off"
+                    />
+                    {formData.accountNumber && (formData.accountNumber.length < 9 || formData.accountNumber.length > 15) && (
+                      <p className="text-[10px] text-red-300 mt-1">
+                        Account number must be 9-15 digits
+                      </p>
+                    )}
                   </div>
 
                   <div>
@@ -683,8 +1070,10 @@ export default function SellerSignUp() {
                       value={formData.ifsc}
                       onChange={handleInputChange}
                       placeholder="IFSC Code"
+                      maxLength={11}
                       className="w-full px-3 py-2.5 text-sm rounded-lg bg-black/20 border border-white/10 text-white placeholder:text-white/30 focus:outline-none focus:border-green-400/50 focus:bg-black/30 transition-all font-medium shadow-inner"
                       disabled={loading}
+                      autoComplete="off"
                     />
                   </div>
                 </div>
@@ -773,6 +1162,7 @@ export default function SellerSignUp() {
                     setError("");
                     try {
                       await sendOTP(formData.mobile);
+                      startTimer();
                     } catch (err: any) {
                       setError(
                         err.response?.data?.message || "Failed to resend OTP."
@@ -781,9 +1171,13 @@ export default function SellerSignUp() {
                       setLoading(false);
                     }
                   }}
-                  disabled={loading}
-                  className="py-2.5 rounded-lg text-xs font-semibold text-green-400 hover:text-green-300 hover:bg-green-500/10 border border-green-500/20 transition-all active:scale-95">
-                  {loading ? "Sending..." : "Resend OTP"}
+                  disabled={loading || !canResend}
+                  className={`py-2.5 rounded-lg text-xs font-semibold border transition-all active:scale-95 ${canResend && !loading
+                    ? "text-green-400 hover:text-green-300 hover:bg-green-500/10 border-green-500/20"
+                    : "text-white/30 border-white/5 cursor-not-allowed"
+                    }`}
+                >
+                  {loading ? "Sending..." : timer > 0 ? `Resend in ${timer}s` : "Resend OTP"}
                 </button>
               </div>
             </div>
@@ -793,7 +1187,20 @@ export default function SellerSignUp() {
         {/* Footer */}
         <div className="px-6 py-3 bg-black/20 border-t border-white/10 text-center backdrop-blur-md">
           <p className="text-[9px] text-white/50">
-            By continuing, you agree to Wasgro mart's Terms of Service and Privacy Policy
+            By continuing, you agree to Wasgro mart's{" "}
+            <button
+              onClick={() => navigate("/terms-of-service")}
+              className="text-green-400 hover:text-green-300 hover:underline transition-colors"
+            >
+              Terms of Service
+            </button>{" "}
+            and{" "}
+            <button
+              onClick={() => navigate("/privacy-policy")}
+              className="text-green-400 hover:text-green-300 hover:underline transition-colors"
+            >
+              Privacy Policy
+            </button>
           </p>
         </div>
       </div>

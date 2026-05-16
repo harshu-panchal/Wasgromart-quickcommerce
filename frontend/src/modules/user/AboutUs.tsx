@@ -37,13 +37,7 @@ export default function AboutUs() {
       <div className="px-4 md:px-6 lg:px-8 py-6 max-w-3xl mx-auto">
         {/* Logo/Brand Section */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-24 h-24 mb-4">
-            <img
-              src="/assets/wasgromart-logo.png"
-              alt="Wasgro-mart Logo"
-              className="w-full h-full object-contain"
-            />
-          </div>
+          {/* Logo removed as requested */}
           <h2 className="text-3xl font-bold text-neutral-900 mb-2">Wasgro-mart</h2>
           <p className="text-sm text-neutral-600">
             Your Trusted Delivery Partner

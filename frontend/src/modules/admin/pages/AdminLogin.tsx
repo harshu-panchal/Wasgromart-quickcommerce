@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   sendOTP,
@@ -15,6 +15,25 @@ export default function AdminLogin() {
   const [showOTP, setShowOTP] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [timer, setTimer] = useState(0);
+  const [canResend, setCanResend] = useState(true);
+
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (timer > 0) {
+      interval = setInterval(() => {
+        setTimer((prev) => prev - 1);
+      }, 1000);
+    } else {
+      setCanResend(true);
+    }
+    return () => clearInterval(interval);
+  }, [timer]);
+
+  const startTimer = () => {
+    setTimer(30);
+    setCanResend(false);
+  };
 
   const handleMobileLogin = async () => {
     if (mobileNumber.length !== 10) return;
@@ -25,6 +44,7 @@ export default function AdminLogin() {
     try {
       await sendOTP(mobileNumber);
       setShowOTP(true);
+      startTimer();
     } catch (err: any) {
       setError(
         err.response?.data?.message || "Failed to send OTP. Please try again."
@@ -131,6 +151,7 @@ export default function AdminLogin() {
                     className="w-full pl-12 pr-4 py-2.5 rounded-xl bg-black/20 border border-white/10 text-white placeholder:text-white/30 focus:outline-none focus:border-green-400/50 focus:bg-black/30 transition-all font-medium text-sm tracking-wide shadow-inner"
                     maxLength={10}
                     disabled={loading}
+                    autoComplete="off"
                     autoFocus
                   />
                 </div>
@@ -224,10 +245,13 @@ export default function AdminLogin() {
                 </button>
                 <button
                   onClick={handleMobileLogin}
-                  disabled={loading}
-                  className="py-2.5 rounded-lg text-xs font-semibold text-green-400 hover:text-green-300 hover:bg-green-500/10 border border-green-500/20 transition-all active:scale-95"
+                  disabled={loading || !canResend}
+                  className={`py-2.5 rounded-lg text-xs font-semibold border transition-all active:scale-95 ${canResend && !loading
+                    ? "text-green-400 hover:text-green-300 hover:bg-green-500/10 border-green-500/20"
+                    : "text-white/30 border-white/5 cursor-not-allowed"
+                    }`}
                 >
-                  {loading ? "Resending..." : "Resend OTP"}
+                  {loading ? "Resending..." : timer > 0 ? `Resend in ${timer}s` : "Resend OTP"}
                 </button>
               </div>
             </div>
@@ -237,7 +261,20 @@ export default function AdminLogin() {
         {/* Footer */}
         <div className="px-6 py-3 bg-black/20 border-t border-white/10 text-center backdrop-blur-md">
           <p className="text-[9px] text-white/50">
-            By continuing, you agree to Wasgro mart's Terms of Service and Privacy Policy
+            By continuing, you agree to Wasgro mart's{" "}
+            <button
+              onClick={() => navigate("/terms-of-service")}
+              className="text-green-400 hover:text-green-300 hover:underline transition-colors"
+            >
+              Terms of Service
+            </button>{" "}
+            and{" "}
+            <button
+              onClick={() => navigate("/privacy-policy")}
+              className="text-green-400 hover:text-green-300 hover:underline transition-colors"
+            >
+              Privacy Policy
+            </button>
           </p>
         </div>
       </div>

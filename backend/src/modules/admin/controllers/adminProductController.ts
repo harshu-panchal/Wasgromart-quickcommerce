@@ -343,35 +343,25 @@ export const deleteCategory = asyncHandler(
   async (req: Request, res: Response) => {
     const { id } = req.params;
 
-    // Check if category has child categories (using parentId)
-    const childrenCount = await Category.countDocuments({ parentId: id });
-    if (childrenCount > 0) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Cannot delete category with subcategories. Please delete or move subcategories first.",
-      });
+    // --- CASCADING DELETION ---
+    // 1. Delete all products in this category
+    const productsToDelete = await Product.find({ category: id });
+    const productIds = productsToDelete.map(p => p._id);
+
+    if (productIds.length > 0) {
+      // 2. Delete inventory records for these products
+      await Inventory.deleteMany({ product: { $in: productIds } });
+      // 3. Delete the products themselves
+      await Product.deleteMany({ _id: { $in: productIds } });
     }
 
-    // Check if category has old-style subcategories (backward compatibility)
-    const subcategoryCount = await SubCategory.countDocuments({ category: id });
-    if (subcategoryCount > 0) {
-      return res.status(400).json({
-        success: false,
-        message:
-          "Cannot delete category with subcategories. Please delete or move subcategories first.",
-      });
-    }
+    // 4. Delete child categories (subcategories in new system)
+    await Category.deleteMany({ parentId: id });
 
-    // Check if category has products
-    const productCount = await Product.countDocuments({ category: id });
-    if (productCount > 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Cannot delete category with products",
-      });
-    }
+    // 5. Delete old-style subcategories
+    await SubCategory.deleteMany({ category: id });
 
+    // 6. Delete the target category
     const category = await Category.findByIdAndDelete(id);
 
     if (!category) {
@@ -489,43 +479,25 @@ export const bulkDeleteCategories = asyncHandler(
 
     for (const categoryId of categoryIds) {
       try {
-        // Check for child categories
-        const childrenCount = await Category.countDocuments({
-          parentId: categoryId,
-        });
-        if (childrenCount > 0) {
-          results.failed.push({
-            id: categoryId,
-            reason: "Category has child categories",
-          });
-          continue;
+        // --- CASCADING DELETION ---
+        // 1. Delete all products in this category
+        const productsToDelete = await Product.find({ category: categoryId });
+        const productIds = productsToDelete.map(p => p._id);
+
+        if (productIds.length > 0) {
+          // 2. Delete inventory records for these products
+          await Inventory.deleteMany({ product: { $in: productIds } });
+          // 3. Delete the products themselves
+          await Product.deleteMany({ _id: { $in: productIds } });
         }
 
-        // Check for old-style subcategories
-        const subcategoryCount = await SubCategory.countDocuments({
-          category: categoryId,
-        });
-        if (subcategoryCount > 0) {
-          results.failed.push({
-            id: categoryId,
-            reason: "Category has subcategories",
-          });
-          continue;
-        }
+        // 4. Delete child categories (subcategories in new system)
+        await Category.deleteMany({ parentId: categoryId });
 
-        // Check for products
-        const productCount = await Product.countDocuments({
-          category: categoryId,
-        });
-        if (productCount > 0) {
-          results.failed.push({
-            id: categoryId,
-            reason: "Category has associated products",
-          });
-          continue;
-        }
+        // 5. Delete old-style subcategories
+        await SubCategory.deleteMany({ category: categoryId });
 
-        // Delete category
+        // 6. Delete the target category
         const category = await Category.findByIdAndDelete(categoryId);
         if (category) {
           results.deleted.push(categoryId);

@@ -3,7 +3,7 @@ import { useJsApiLoader } from '@react-google-maps/api';
 
 interface GoogleMapsAutocompleteProps {
   value: string;
-  onChange: (address: string, lat: number, lng: number, placeName: string, components?: { city?: string; state?: string }) => void;
+  onChange: (address: string, lat: number, lng: number, placeName: string, components?: { city?: string; state?: string; pincode?: string }) => void;
   placeholder?: string;
   className?: string;
   disabled?: boolean;
@@ -109,21 +109,35 @@ export default function GoogleMapsAutocomplete({
 
         let city = '';
         let state = '';
+        let pincode = '';
 
         if (place.address_components) {
           for (const component of place.address_components) {
-            if (component.types.includes('locality')) {
+            const types = component.types;
+            if (types.includes("locality")) {
               city = component.long_name;
-            } else if (component.types.includes('administrative_area_level_3') && !city) {
+            } else if (types.includes("sublocality_level_1") && !city) {
               city = component.long_name;
-            } else if (component.types.includes('administrative_area_level_1')) {
+            } else if (types.includes("administrative_area_level_2") && !city) {
+              city = component.long_name;
+            } else if (types.includes("administrative_area_level_3") && !city) {
+              city = component.long_name;
+            } else if (types.includes("administrative_area_level_1")) {
               state = component.long_name;
+            } else if (types.includes("postal_code")) {
+              pincode = component.long_name;
             }
           }
         }
 
+        // Fallback for pincode from formatted address
+        if (!pincode && place.formatted_address) {
+          const match = place.formatted_address.match(/\b\d{6}\b/);
+          if (match) pincode = match[0];
+        }
+
         setInputValue(address);
-        onChange(address, lat, lng, placeName, { city, state });
+        onChange(address, lat, lng, placeName, { city, state, pincode });
         setError('');
       });
     } catch (err: unknown) {
@@ -157,7 +171,10 @@ export default function GoogleMapsAutocomplete({
         value={inputValue}
         onChange={(e) => {
           setInputValue(e.target.value);
-          onChange(e.target.value, 0, 0, e.target.value);
+          // When typing manually, only update the address/searchLocation string.
+          // Do NOT trigger coordinate updates (passed as undefined) so the parent can keep existing ones.
+          // @ts-ignore - passing undefined for lat/lng to signal no change
+          onChange(e.target.value, undefined, undefined, e.target.value);
         }}
         placeholder={placeholder}
         className={`w-full px-3 py-2 border border-neutral-300 rounded-lg placeholder:text-neutral-400 focus:outline-none focus:border-orange-500 bg-white ${className}`}

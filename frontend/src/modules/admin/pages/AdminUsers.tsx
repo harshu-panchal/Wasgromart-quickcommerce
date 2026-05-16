@@ -116,11 +116,11 @@ export default function AdminUsers() {
                 `"${user.name}"`,
                 `"${user.email}"`,
                 `"${user.phone || ''}"`,
-                `"${new Date(user.registrationDate).toLocaleString()}"`,
+                `"${user.registrationDate ? new Date(user.registrationDate).toLocaleString() : ''}"`,
                 user.status,
-                user.walletAmount.toFixed(2),
-                user.totalOrders,
-                user.totalSpent.toFixed(2),
+                (user.walletAmount || 0).toFixed(2),
+                user.totalOrders || 0,
+                (user.totalSpent || 0).toFixed(2),
             ].join(','))
         ].join('\n');
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -329,7 +329,7 @@ export default function AdminUsers() {
                                                     )}
                                                 </div>
                                             </td>
-                                            <td className="p-4 align-middle">{new Date(user.registrationDate).toLocaleString()}</td>
+                                            <td className="p-4 align-middle">{user.registrationDate ? new Date(user.registrationDate).toLocaleString() : '-'}</td>
                                             <td className="p-4 align-middle">
                                                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${user.status === 'Active'
                                                     ? 'bg-green-100 text-green-800'
@@ -341,9 +341,9 @@ export default function AdminUsers() {
                                                 </span>
                                             </td>
                                             <td className="p-4 align-middle">{user.refCode || '-'}</td>
-                                            <td className="p-4 align-middle">₹{user.walletAmount.toFixed(2)}</td>
-                                            <td className="p-4 align-middle">{user.totalOrders}</td>
-                                            <td className="p-4 align-middle">₹{user.totalSpent.toFixed(2)}</td>
+                                            <td className="p-4 align-middle">₹{(user.walletAmount || 0).toFixed(2)}</td>
+                                            <td className="p-4 align-middle">{user.totalOrders || 0}</td>
+                                            <td className="p-4 align-middle">₹{(user.totalSpent || 0).toFixed(2)}</td>
                                             <td className="p-4 align-middle">
                                                 <div className="flex items-center gap-2">
                                                     <button

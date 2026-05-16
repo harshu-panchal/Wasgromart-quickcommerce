@@ -45,6 +45,8 @@ export const getProfile = asyncHandler(async (req: Request, res: Response) => {
       city: customer.city,
       state: customer.state,
       pincode: customer.pincode,
+      profilePhoto: customer.profilePhoto,
+      gstNumber: customer.gstNumber,
       locationUpdatedAt: customer.locationUpdatedAt,
     },
   });
@@ -56,7 +58,20 @@ export const getProfile = asyncHandler(async (req: Request, res: Response) => {
 export const updateProfile = asyncHandler(
   async (req: Request, res: Response) => {
     const userId = req.user?.userId;
-    const { name, email, dateOfBirth, notificationPreferences, accountPrivacy } = req.body;
+    const { 
+      name, 
+      email, 
+      phone,
+      dateOfBirth, 
+      address,
+      city,
+      state,
+      pincode,
+      profilePhoto,
+      gstNumber,
+      notificationPreferences, 
+      accountPrivacy 
+    } = req.body;
 
 
     if (!userId || (req as any).user?.userType !== "Customer") {
@@ -94,6 +109,13 @@ export const updateProfile = asyncHandler(
       customer.email = email;
     }
     if (dateOfBirth) customer.dateOfBirth = new Date(dateOfBirth);
+    if (phone) customer.phone = phone;
+    if (address) customer.address = address;
+    if (city) customer.city = city;
+    if (state) customer.state = state;
+    if (pincode) customer.pincode = pincode;
+    if (profilePhoto) customer.profilePhoto = profilePhoto;
+    if (gstNumber) customer.gstNumber = gstNumber;
     if (notificationPreferences) customer.notificationPreferences = { ...customer.notificationPreferences, ...notificationPreferences };
     if (accountPrivacy) customer.accountPrivacy = { ...customer.accountPrivacy, ...accountPrivacy };
 
@@ -121,6 +143,8 @@ export const updateProfile = asyncHandler(
         city: customer.city,
         state: customer.state,
         pincode: customer.pincode,
+        profilePhoto: customer.profilePhoto,
+        gstNumber: customer.gstNumber,
         notificationPreferences: customer.notificationPreferences,
         accountPrivacy: customer.accountPrivacy,
         donationStats: customer.donationStats,

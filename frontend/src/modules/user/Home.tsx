@@ -170,9 +170,6 @@ export default function Home() {
       {/* Hero Header with Gradient and Tabs */}
       <HomeHero activeTab={activeTab} onTabChange={setActiveTab} />
 
-      {/* Promo Strip */}
-      <PromoStrip activeTab={activeTab} />
-
       {/* Static Banners Carousel */}
       <HomeBannerCarousel banners={homeData.promoBanners} />
 

@@ -408,8 +408,8 @@ const SellerAccountSettings = () => {
                                     setSellerData(prev => ({
                                       ...prev,
                                       searchLocation: address,
-                                      latitude: lat.toString(),
-                                      longitude: lng.toString(),
+                                      latitude: lat !== undefined ? lat.toString() : prev.latitude,
+                                      longitude: lng !== undefined ? lng.toString() : prev.longitude,
                                       address: address,
                                       city: components?.city || prev.city,
                                     }));

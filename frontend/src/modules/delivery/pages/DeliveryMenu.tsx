@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DeliveryHeader from '../components/DeliveryHeader';
 import DeliveryBottomNav from '../components/DeliveryBottomNav';
@@ -6,6 +7,7 @@ import { useAuth } from '../../../context/AuthContext';
 export default function DeliveryMenu() {
   const navigate = useNavigate();
   const { logout } = useAuth();
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   const menuItems = [
     { id: 'menu-1', title: 'Profile', route: '/delivery/profile' },
@@ -112,13 +114,16 @@ export default function DeliveryMenu() {
 
   const handleMenuClick = (route: string) => {
     if (route === '/delivery/login') {
-      // Properly logout using AuthContext to clear all auth state
-      logout();
-      navigate(route);
+      setShowLogoutModal(true);
     } else {
       // Navigate to the selected route
       navigate(route);
     }
+  };
+
+  const confirmLogout = () => {
+    logout();
+    navigate('/delivery/login');
   };
 
   return (
@@ -170,6 +175,68 @@ export default function DeliveryMenu() {
         )}
       </div>
       <DeliveryBottomNav />
+
+      {/* Logout Confirmation Modal */}
+      {showLogoutModal && (
+        <>
+          <div
+            className="fixed inset-0 z-[110] bg-black/40 backdrop-blur-sm animate-in fade-in duration-300"
+            onClick={() => setShowLogoutModal(false)}
+          />
+          <div className="fixed inset-0 z-[111] flex items-center justify-center px-4 pointer-events-none">
+            <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-xs p-6 pt-8 animate-in zoom-in-95 duration-200 pointer-events-auto">
+              <div className="flex flex-col items-center text-center">
+                <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center mb-4">
+                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" className="text-red-500">
+                    <path
+                      d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <polyline
+                      points="16 17 21 12 16 7"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <line
+                      x1="21"
+                      y1="12"
+                      x2="9"
+                      y2="12"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </div>
+                <h3 className="text-lg font-bold text-neutral-900 mb-2">
+                  Logout Confirmation
+                </h3>
+                <p className="text-sm text-neutral-500 mb-8 px-2 leading-relaxed">
+                  Are you sure you want to log out from Delivery Partner account?
+                </p>
+                <div className="grid grid-cols-2 gap-3 w-full">
+                  <button
+                    onClick={() => setShowLogoutModal(false)}
+                    className="w-full py-3.5 rounded-xl font-bold text-sm text-neutral-600 bg-neutral-50 hover:bg-neutral-100 transition-colors">
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmLogout}
+                    className="w-full py-3.5 rounded-xl font-bold text-sm text-white bg-red-500 hover:bg-red-600 shadow-lg shadow-red-500/20 transition-colors">
+                    Logout
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

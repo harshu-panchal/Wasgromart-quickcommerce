@@ -7,14 +7,33 @@ import { register, getPublicRoles, PublicRole } from "../../../services/api/auth
 export default function AdminRegister() {
     const navigate = useNavigate();
     const { login } = useAuth();
-    const [formData, setFormData] = useState({
-        firstName: "",
-        lastName: "",
-        mobile: "",
-        email: "",
-        password: "",
-        roleId: "",
+    const [formData, setFormData] = useState(() => {
+        const saved = localStorage.getItem("admin_register_draft");
+        const defaultData = {
+            firstName: "",
+            lastName: "",
+            mobile: "",
+            email: "",
+            password: "",
+            roleId: "",
+        };
+        if (saved) {
+            try {
+                const parsed = JSON.parse(saved);
+                // Ensure password is not stored/restored
+                return { ...defaultData, ...parsed, password: "" };
+            } catch {
+                return defaultData;
+            }
+        }
+        return defaultData;
     });
+
+    useEffect(() => {
+        // Save draft excluding password
+        const { password, ...draftData } = formData;
+        localStorage.setItem("admin_register_draft", JSON.stringify(draftData));
+    }, [formData]);
     const [roles, setRoles] = useState<PublicRole[]>([]);
     const [rolesLoading, setRolesLoading] = useState(true);
     const [loading, setLoading] = useState(false);
@@ -27,7 +46,6 @@ export default function AdminRegister() {
                 const data = await getPublicRoles();
                 setRoles(data);
             } catch {
-                // Silently handle — dropdown will be empty and Staff will be default
                 console.error("Failed to fetch roles");
             } finally {
                 setRolesLoading(false);
@@ -41,12 +59,12 @@ export default function AdminRegister() {
     ) => {
         const { name, value } = e.target;
         if (name === "mobile") {
-            setFormData((prev) => ({
+            setFormData((prev: typeof formData) => ({
                 ...prev,
                 [name]: value.replace(/\D/g, "").slice(0, 10),
             }));
         } else {
-            setFormData((prev) => ({
+            setFormData((prev: typeof formData) => ({
                 ...prev,
                 [name]: value,
             }));
@@ -64,6 +82,13 @@ export default function AdminRegister() {
             return;
         }
 
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(formData.email)) {
+            setError("Please enter a valid email address");
+            setLoading(false);
+            return;
+        }
+
         try {
             const { roleId, ...rest } = formData;
             const payload = {
@@ -73,12 +98,12 @@ export default function AdminRegister() {
 
             const response = await register(payload);
             if (response.success && response.data) {
-                // Login the user
                 const userData = response.data.user;
                 login(response.data.token, {
                     ...userData,
                     userType: "Admin",
                 });
+                localStorage.removeItem("admin_register_draft");
                 navigate("/admin");
             } else {
                 setError(response.message || "Registration failed");
@@ -182,6 +207,7 @@ export default function AdminRegister() {
                                     placeholder="Mobile Number"
                                     required
                                     maxLength={10}
+                                    autoComplete="off"
                                     className="w-full pl-12 pr-4 py-3 rounded-xl bg-black/20 border border-white/10 text-white placeholder:text-white/30 focus:outline-none focus:border-green-400/50 focus:bg-black/30 transition-all font-medium text-sm shadow-inner"
                                 />
                             </div>
@@ -303,7 +329,20 @@ export default function AdminRegister() {
                 {/* Footer */}
                 <div className="px-6 py-3 bg-black/20 border-t border-white/10 text-center backdrop-blur-md">
                     <p className="text-[9px] text-white/50">
-                        By continuing, you agree to Wasgro mart's Terms of Service and Privacy Policy
+                        By continuing, you agree to Wasgro mart's{" "}
+                        <button
+                            onClick={() => navigate("/terms-of-service")}
+                            className="text-green-400 hover:text-green-300 hover:underline transition-colors"
+                        >
+                            Terms of Service
+                        </button>{" "}
+                        and{" "}
+                        <button
+                            onClick={() => navigate("/privacy-policy")}
+                            className="text-green-400 hover:text-green-300 hover:underline transition-colors"
+                        >
+                            Privacy Policy
+                        </button>
                     </p>
                 </div>
             </div>
