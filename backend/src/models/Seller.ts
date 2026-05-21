@@ -335,6 +335,16 @@ const SellerSchema = new Schema<ISeller>(
   }
 );
 
+// Clean up incomplete/invalid location objects before validation to prevent Mongoose/MongoDB errors
+SellerSchema.pre('validate', function (next) {
+  if (this.location) {
+    if (!this.location.coordinates || !Array.isArray(this.location.coordinates) || this.location.coordinates.length !== 2) {
+      this.location = undefined;
+    }
+  }
+  next();
+});
+
 // Hash password before saving (only if password is provided)
 SellerSchema.pre('save', async function (next) {
   // Update GeoJSON location from latitude/longitude strings if they've changed
@@ -347,6 +357,13 @@ SellerSchema.pre('save', async function (next) {
         type: 'Point' as const,
         coordinates: [lng, lat] // MongoDB expects [longitude, latitude]
       };
+    }
+  }
+
+  // Clean up incomplete/invalid location objects before save to prevent MongoDB 2dsphere indexing errors
+  if (this.location) {
+    if (!this.location.coordinates || !Array.isArray(this.location.coordinates) || this.location.coordinates.length !== 2) {
+      this.location = undefined;
     }
   }
 

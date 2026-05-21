@@ -87,9 +87,9 @@ export async function sendPushNotification(tokens: string[], payload: PushNotifi
                 notification: {
                     title: String(payload.title),
                     body: String(payload.body),
-                    // Use custom sound channel for seller alerts, default otherwise
-                    // The channel must be pre-created in Flutter with the matching sound
-                    channelId: payload.sound ? `wasgromart_${payload.sound}` : 'wasgromart_notifications',
+                    // Use custom sound channel for seller alerts (which is pre-registered in native app), default otherwise
+                    // This prevents Android from blocking notifications on unregistered channels (e.g. wasgromart_delivery_alert)
+                    channelId: payload.sound === 'seller_alert' ? 'wasgromart_seller_alert' : 'wasgromart_notifications',
                     sound: payload.sound ? `${payload.sound}.mp3` : 'default',
                     clickAction: 'FLUTTER_NOTIFICATION_CLICK',
                 },
@@ -107,6 +107,20 @@ export async function sendPushNotification(tokens: string[], payload: PushNotifi
                         contentAvailable: true,
                     },
                 },
+            },
+            webpush: {
+                notification: {
+                    title: String(payload.title),
+                    body: String(payload.body),
+                    icon: '/favicon.ico',
+                    badge: '/favicon.ico',
+                    tag: payload.data?.type || 'kosil-general',
+                    data: messageData,
+                    requireInteraction: true,
+                },
+                headers: {
+                    Urgency: 'high'
+                }
             },
         };
 

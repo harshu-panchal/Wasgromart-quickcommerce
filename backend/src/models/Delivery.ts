@@ -210,6 +210,26 @@ const DeliverySchema = new Schema<IDelivery>(
   }
 );
 
+// Clean up incomplete/invalid location objects before validation to prevent Mongoose/MongoDB errors
+DeliverySchema.pre('validate', function (next) {
+  if (this.location) {
+    if (!this.location.coordinates || !Array.isArray(this.location.coordinates) || this.location.coordinates.length !== 2) {
+      this.location = undefined;
+    }
+  }
+  next();
+});
+
+// Clean up incomplete/invalid location objects before save to prevent MongoDB 2dsphere indexing errors
+DeliverySchema.pre('save', function (next) {
+  if (this.location) {
+    if (!this.location.coordinates || !Array.isArray(this.location.coordinates) || this.location.coordinates.length !== 2) {
+      this.location = undefined;
+    }
+  }
+  next();
+});
+
 // Hash password before saving
 DeliverySchema.pre('save', async function (next) {
   if (!this.isModified('password') || !this.password) {
