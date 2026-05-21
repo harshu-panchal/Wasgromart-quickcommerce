@@ -22,9 +22,9 @@ let swRegistrationPromise: Promise<ServiceWorkerRegistration | null> | null = nu
  * Flutter gets the native FCM token and passes it here → saved as platform='mobile'.
  */
 export function setupFlutterFCMBridge() {
-  (window as any).onFlutterFCMToken = async (token: string) => {
+  const handleFlutterToken = async (token: string) => {
     if (!token) return;
-    console.log('[FCM] Received native FCM token from Flutter bridge');
+    console.log('[FCM] Received native FCM token from Flutter bridge:', token.slice(0, 12) + '...');
 
     const cached = localStorage.getItem(LOCAL_FCM_TOKEN_MOBILE_KEY);
     if (cached === token) {
@@ -42,6 +42,19 @@ export function setupFlutterFCMBridge() {
       console.error('[FCM] Failed to save Flutter token:', err?.response?.data || err?.message);
     }
   };
+
+  // Replace the stub (or previous handler) with the real async handler
+  (window as any).onFlutterFCMToken = handleFlutterToken;
+
+  // Flush any tokens that Flutter sent before React mounted (queued by the index.html stub)
+  const queue: string[] = (window as any).__flutterFcmTokenQueue || [];
+  if (queue.length > 0) {
+    console.log(`[FCM] Flushing ${queue.length} queued Flutter FCM token(s) from early queue`);
+    // Process sequentially so we don't race on the same user record
+    queue.reduce((promise, token) => promise.then(() => handleFlutterToken(token)), Promise.resolve());
+    (window as any).__flutterFcmTokenQueue = [];
+  }
+
   console.log('[FCM] Flutter bridge ready: window.onFlutterFCMToken');
 }
 

@@ -2,6 +2,16 @@
 <html lang="en">
 
 <head>
+  <!-- Early Flutter FCM bridge stub:
+       Flutter WebView calls window.onFlutterFCMToken(token) as soon as it has the native
+       FCM token, which may happen BEFORE the React bundle loads. This stub queues those
+       calls so they are not lost. React's setupFlutterFCMBridge() will flush the queue. -->
+  <script>
+    window.__flutterFcmTokenQueue = [];
+    window.onFlutterFCMToken = function(token) {
+      if (token) window.__flutterFcmTokenQueue.push(token);
+    };
+  </script>
   <meta charset="UTF-8" />
   <link rel="icon" type="image/svg+xml" href="/vite.svg" />
   <meta name="viewport"

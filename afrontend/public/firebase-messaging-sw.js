@@ -26,16 +26,27 @@ try {
 
 if (messaging) {
     messaging.onBackgroundMessage((payload) => {
-        console.log('[firebase-messaging-sw.js] Received background message ', payload);
+        console.log('[firebase-messaging-sw.js] Background message received:', payload);
 
         const data = payload?.data || {};
-        const notificationTitle = data.title || payload.notification?.title || 'New Message';
+        const notification = payload?.notification || {};
+
+        // Prefer data fields (sent by backend) over notification block
+        const notificationTitle = data.title || notification.title || 'New Order arrived';
+        const notificationBody  = data.body  || notification.body  || data.msg || data.message || '';
+
+        const isDeliveryAlert = data.type === 'NEW_ORDER' || data.type === 'ORDER_ASSIGNED';
+
         const notificationOptions = {
-            body: data.body || payload.notification?.body || '',
+            body: notificationBody,
             icon: '/favicon.ico',
             badge: '/favicon.ico',
-            tag: data.type || 'kosil-general',
-            data: data
+            tag: data.type || 'wasgromart-general',
+            data: data,
+            // Keep delivery alerts on screen until the driver taps them
+            requireInteraction: isDeliveryAlert,
+            // Use vibration pattern for urgency on delivery alerts
+            vibrate: isDeliveryAlert ? [200, 100, 200, 100, 200] : [100],
         };
 
         self.registration.showNotification(notificationTitle, notificationOptions);
