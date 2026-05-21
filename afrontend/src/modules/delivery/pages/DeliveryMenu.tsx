@@ -34,42 +34,40 @@ export default function DeliveryMenu() {
     setNotifStep('requesting-permission');
     setNotifMsg('');
 
-    // Step 1 — ensure notification permission
-    const permitted = await requestNotificationPermission();
-    if (!permitted) {
-      setNotifStep('no-permission');
-      setNotifMsg('Please enable notifications in your browser/app settings, then try again.');
-      setTimeout(reset, 5000);
-      return;
-    }
+    // Detect Flutter WebView FIRST.
+    // Android WebView does NOT implement window.Notification — so Notification.permission
+    // is always 'denied' or undefined even when the Android system permission is granted.
+    // We must skip the web permission check entirely inside a WebView.
+    const inFlutterWebView =
+      !('Notification' in window) ||                           // Notification API absent (WebView)
+      !('serviceWorker' in navigator) ||                       // Service Workers absent (WebView)
+      /wv/.test(navigator.userAgent) ||                        // Android WebView UA flag
+      (window as any).flutter_inappwebview !== undefined ||
+      (window as any).FlutterChannel !== undefined;
 
-    // Step 2 — register / refresh FCM token (force = true so it always re-syncs)
-    setNotifStep('registering-token');
-    const token = await registerFCMToken(true);
+    if (!inFlutterWebView) {
+      // Regular browser: check web notification permission normally
+      const permitted = await requestNotificationPermission();
+      if (!permitted) {
+        setNotifStep('no-permission');
+        setNotifMsg('Please enable notifications in your browser settings, then try again.');
+        setTimeout(reset, 5000);
+        return;
+      }
 
-    if (!token) {
-      // Detect Flutter WebView: no service worker support → web FCM impossible
-      const inFlutterWebView =
-        !('serviceWorker' in navigator) ||
-        navigator.userAgent.includes('wv') ||
-        (window as any).flutter_inappwebview !== undefined ||
-        (window as any).FlutterChannel !== undefined;
-
-      if (inFlutterWebView) {
-        setNotifStep('no-token-flutter');
-        setNotifMsg(
-          'Web push is not supported inside a Flutter WebView. ' +
-          'Ask the Flutter developer to call window.onFlutterFCMToken(nativeToken) after the page loads.'
-        );
-      } else {
+      // Try to register a web FCM token and send
+      setNotifStep('registering-token');
+      const token = await registerFCMToken(true);
+      if (!token) {
         setNotifStep('no-token');
         setNotifMsg('Could not obtain an FCM token. Try refreshing, then press again.');
+        setTimeout(reset, 6000);
+        return;
       }
-      setTimeout(reset, 6000);
-      return;
     }
 
-    // Step 3 — send test push via backend
+    // Flutter WebView path (or web path after token obtained above):
+    // Go straight to the backend — it will use whatever native/web token is already saved.
     setNotifStep('sending');
     try {
       const res = await api.post('/fcm-tokens/test');
@@ -77,8 +75,13 @@ export default function DeliveryMenu() {
         setNotifStep('success');
         setNotifMsg('Push notification dispatched to your device(s).');
       } else {
-        setNotifStep('no-token');
-        setNotifMsg(res.data.message || 'Token saved but push delivery failed.');
+        // Backend found no token — Flutter bridge hasn't passed the native token yet
+        setNotifStep('no-token-flutter');
+        setNotifMsg(
+          inFlutterWebView
+            ? 'No native FCM token received yet. The Flutter app must call window.onFlutterFCMToken(token) after the page loads.'
+            : (res.data.message || 'Token saved but push delivery failed.')
+        );
       }
     } catch (err: any) {
       setNotifStep('error');
