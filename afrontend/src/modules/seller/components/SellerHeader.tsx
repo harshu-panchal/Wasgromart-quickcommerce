@@ -215,7 +215,7 @@ export default function SellerHeader({
             {/* Welcome Notification — mobile dropdown */}
             <button
               id="btn-seller-welcome-notif-mobile"
-              onClick={() => { setShowSettingsDropdown(false); sendWelcomeNotification(); }}
+              onClick={() => { sendWelcomeNotification(); }}
               disabled={notifStep !== 'idle'}
               className="w-full text-left px-4 py-2 text-sm hover:bg-green-50 transition-colors disabled:opacity-60
                 flex items-center gap-2
@@ -324,7 +324,7 @@ export default function SellerHeader({
                 {/* Welcome Notification — desktop dropdown */}
                 <button
                   id="btn-seller-welcome-notif-desktop"
-                  onClick={() => { setShowSettingsDropdown(false); sendWelcomeNotification(); }}
+                  onClick={() => { sendWelcomeNotification(); }}
                   disabled={notifStep !== 'idle'}
                   className="w-full text-left px-4 py-2 text-sm text-green-700 hover:bg-green-50 transition-colors
                     disabled:opacity-60 flex items-center gap-2">
