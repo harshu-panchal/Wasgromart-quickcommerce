@@ -266,6 +266,7 @@ export const assignDeliveryBoy = asyncHandler(
             orderNumber: order.orderNumber,
             link: `/delivery/orders/${order._id.toString()}`,
           },
+          sound: "delivery_alert",
         });
         console.log(
           `🔔 Manual Assignment FCM Push notification sent to delivery boy ${deliveryBoyId} (${tokens.length} token(s))`

@@ -553,6 +553,7 @@ export async function notifyNextDeliveryBoy(
           orderNumber: state.orderData.orderNumber,
           link: "/delivery/orders",
         },
+        sound: "delivery_alert",
       });
       console.log(
         `🔔 FCM Push notification sent to delivery boy ${nextDeliveryBoyId} (${tokens.length} token(s))`,
