@@ -4,27 +4,87 @@ import DeliveryHeader from '../components/DeliveryHeader';
 import DeliveryBottomNav from '../components/DeliveryBottomNav';
 import { useAuth } from '../../../context/AuthContext';
 import api from '../../../services/api/config';
+import {
+  registerFCMToken,
+  requestNotificationPermission,
+} from '../../../services/pushNotificationService';
 
 export default function DeliveryMenu() {
   const navigate = useNavigate();
   const { logout } = useAuth();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
-  const [notifStatus, setNotifStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
+
+  type NotifStep =
+    | 'idle'
+    | 'requesting-permission'
+    | 'registering-token'
+    | 'sending'
+    | 'success'
+    | 'no-permission'
+    | 'no-token'
+    | 'no-token-flutter'
+    | 'error';
+
+  const [notifStep, setNotifStep] = useState<NotifStep>('idle');
+  const [notifMsg, setNotifMsg] = useState('');
+
+  const reset = () => { setNotifStep('idle'); setNotifMsg(''); };
 
   const sendWelcomeNotification = async () => {
-    setNotifStatus('sending');
+    setNotifStep('requesting-permission');
+    setNotifMsg('');
+
+    // Step 1 — ensure notification permission
+    const permitted = await requestNotificationPermission();
+    if (!permitted) {
+      setNotifStep('no-permission');
+      setNotifMsg('Please enable notifications in your browser/app settings, then try again.');
+      setTimeout(reset, 5000);
+      return;
+    }
+
+    // Step 2 — register / refresh FCM token (force = true so it always re-syncs)
+    setNotifStep('registering-token');
+    const token = await registerFCMToken(true);
+
+    if (!token) {
+      // Detect Flutter WebView: no service worker support → web FCM impossible
+      const inFlutterWebView =
+        !('serviceWorker' in navigator) ||
+        navigator.userAgent.includes('wv') ||
+        (window as any).flutter_inappwebview !== undefined ||
+        (window as any).FlutterChannel !== undefined;
+
+      if (inFlutterWebView) {
+        setNotifStep('no-token-flutter');
+        setNotifMsg(
+          'Web push is not supported inside a Flutter WebView. ' +
+          'Ask the Flutter developer to call window.onFlutterFCMToken(nativeToken) after the page loads.'
+        );
+      } else {
+        setNotifStep('no-token');
+        setNotifMsg('Could not obtain an FCM token. Try refreshing, then press again.');
+      }
+      setTimeout(reset, 6000);
+      return;
+    }
+
+    // Step 3 — send test push via backend
+    setNotifStep('sending');
     try {
       const res = await api.post('/fcm-tokens/test');
       if (res.data.success) {
-        setNotifStatus('success');
+        setNotifStep('success');
+        setNotifMsg('Push notification dispatched to your device(s).');
       } else {
-        setNotifStatus('error');
+        setNotifStep('no-token');
+        setNotifMsg(res.data.message || 'Token saved but push delivery failed.');
       }
-    } catch {
-      setNotifStatus('error');
-    } finally {
-      setTimeout(() => setNotifStatus('idle'), 3000);
+    } catch (err: any) {
+      setNotifStep('error');
+      setNotifMsg(err?.response?.data?.message || 'Server error. Please try again.');
     }
+    setTimeout(reset, 5000);
   };
 
   const menuItems = [
@@ -197,63 +257,127 @@ export default function DeliveryMenu() {
           <button
             id="btn-send-welcome-notif"
             onClick={sendWelcomeNotification}
-            disabled={notifStatus === 'sending'}
-            className="w-full bg-white rounded-xl p-4 shadow-sm border border-green-200 flex items-center gap-3
-              hover:shadow-md hover:bg-green-50 active:scale-[0.98] transition-all duration-150
-              disabled:opacity-60 disabled:cursor-not-allowed"
+            disabled={notifStep !== 'idle'}
+            className={`w-full bg-white rounded-xl p-4 shadow-sm flex items-center gap-3
+              active:scale-[0.98] transition-all duration-150
+              disabled:opacity-70 disabled:cursor-not-allowed
+              ${
+                notifStep === 'success'
+                  ? 'border border-green-400 hover:bg-green-50'
+                  : notifStep === 'no-token-flutter' || notifStep === 'no-token' || notifStep === 'no-permission' || notifStep === 'error'
+                  ? 'border border-red-200 hover:bg-red-50'
+                  : 'border border-green-200 hover:shadow-md hover:bg-green-50'
+              }`}
           >
-            {/* Bell icon */}
-            <span className="flex-shrink-0 text-green-600">
-              {notifStatus === 'sending' ? (
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="animate-spin text-green-500">
-                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeDasharray="40" strokeDashoffset="15" strokeLinecap="round" />
+            {/* Dynamic icon */}
+            <span className={`flex-shrink-0 ${
+              notifStep === 'success' ? 'text-green-600'
+              : notifStep === 'no-token-flutter' || notifStep === 'no-token' || notifStep === 'no-permission' || notifStep === 'error' ? 'text-red-500'
+              : 'text-green-600'
+            }`}>
+              {/* Spinner */}
+              {(notifStep === 'requesting-permission' || notifStep === 'registering-token' || notifStep === 'sending') && (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="animate-spin">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"
+                    strokeDasharray="40" strokeDashoffset="15" strokeLinecap="round" />
                 </svg>
-              ) : notifStatus === 'success' ? (
+              )}
+              {/* Success checkmark */}
+              {notifStep === 'success' && (
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                   <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none" />
-                  <path d="M8 12l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                  <path d="M8 12l3 3 5-5" stroke="currentColor" strokeWidth="2"
+                    strokeLinecap="round" strokeLinejoin="round" fill="none" />
                 </svg>
-              ) : notifStatus === 'error' ? (
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="text-red-500">
-                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none" />
-                  <path d="M12 8v4M12 16h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
-                </svg>
-              ) : (
+              )}
+              {/* Error / warning */}
+              {(notifStep === 'no-token' || notifStep === 'no-token-flutter' || notifStep === 'no-permission' || notifStep === 'error') && (
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
-                  <path d="M13.73 21a2 2 0 0 1-3.46 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none" />
+                  <path d="M12 8v4M12 16h.01" stroke="currentColor" strokeWidth="2"
+                    strokeLinecap="round" fill="none" />
+                </svg>
+              )}
+              {/* Default bell */}
+              {notifStep === 'idle' && (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"
+                    stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+                    strokeLinejoin="round" fill="none" />
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0"
+                    stroke="currentColor" strokeWidth="2" strokeLinecap="round"
+                    strokeLinejoin="round" fill="none" />
                 </svg>
               )}
             </span>
 
+            {/* Label */}
             <span className={`text-sm font-medium flex-1 text-left ${
-              notifStatus === 'error' ? 'text-red-600' : 'text-green-700'
+              notifStep === 'success' ? 'text-green-700'
+              : notifStep === 'no-token-flutter' || notifStep === 'no-token' || notifStep === 'no-permission' || notifStep === 'error' ? 'text-red-600'
+              : 'text-green-700'
             }`}>
-              {notifStatus === 'sending'
-                ? 'Sending…'
-                : notifStatus === 'success'
-                ? 'Notification sent!'
-                : notifStatus === 'error'
-                ? 'Failed — no FCM token saved'
-                : 'Send Welcome Notification'}
+              {notifStep === 'idle'              && 'Send Welcome Notification'}
+              {notifStep === 'requesting-permission' && 'Checking permission…'}
+              {notifStep === 'registering-token' && 'Registering device…'}
+              {notifStep === 'sending'           && 'Sending notification…'}
+              {notifStep === 'success'           && '✅ Notification sent!'}
+              {notifStep === 'no-permission'     && '🔕 Notifications blocked'}
+              {notifStep === 'no-token'          && '⚠️ Token registration failed'}
+              {notifStep === 'no-token-flutter'  && '⚠️ Native bridge required'}
+              {notifStep === 'error'             && '❌ Server error'}
             </span>
 
-            {notifStatus === 'idle' && (
+            {notifStep === 'idle' && (
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="text-green-400">
-                <path d="M9 18L15 12L9 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M9 18L15 12L9 6" stroke="currentColor" strokeWidth="2"
+                  strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             )}
           </button>
 
-          {/* Inline status hint */}
-          {notifStatus === 'success' && (
-            <p className="text-xs text-green-600 text-center mt-2 animate-in fade-in duration-300">
-              ✅ Push notification dispatched to your registered device(s).
-            </p>
+          {/* Step progress pills */}
+          {notifStep !== 'idle' && notifStep !== 'success' &&
+            notifStep !== 'no-permission' && notifStep !== 'no-token' &&
+            notifStep !== 'no-token-flutter' && notifStep !== 'error' && (
+            <div className="flex items-center gap-1.5 mt-3 px-1">
+              {[
+                { key: 'requesting-permission', label: 'Permission' },
+                { key: 'registering-token',     label: 'Token' },
+                { key: 'sending',               label: 'Send' },
+              ].map((step, i, arr) => {
+                const stepOrder = arr.map(s => s.key);
+                const currentIdx = stepOrder.indexOf(notifStep);
+                const stepIdx = i;
+                const done = stepIdx < currentIdx;
+                const active = stepIdx === currentIdx;
+                return (
+                  <div key={step.key} className="flex items-center gap-1.5 flex-1">
+                    <div className={`h-1.5 flex-1 rounded-full transition-all duration-300 ${
+                      done ? 'bg-green-500' : active ? 'bg-green-400' : 'bg-neutral-200'
+                    }`} />
+                    <span className={`text-[10px] whitespace-nowrap ${
+                      done ? 'text-green-600 font-semibold' : active ? 'text-green-500 font-semibold' : 'text-neutral-400'
+                    }`}>{step.label}</span>
+                  </div>
+                );
+              })}
+            </div>
           )}
-          {notifStatus === 'error' && (
-            <p className="text-xs text-red-500 text-center mt-2 animate-in fade-in duration-300">
-              ⚠️ Make sure your FCM token is registered. Try logging out and back in.
+
+          {/* Detail message */}
+          {notifMsg !== '' && (
+            <p className={`text-xs text-center mt-2 px-2 leading-relaxed animate-in fade-in duration-300 ${
+              notifStep === 'success' ? 'text-green-600'
+              : notifStep === 'no-token-flutter' ? 'text-orange-600'
+              : 'text-red-500'
+            }`}>
+              {notifMsg}
+              {notifStep === 'no-token-flutter' && (
+                <span className="block mt-1 font-mono text-[10px] bg-orange-50 rounded p-1 text-orange-700 border border-orange-200">
+                  Flutter: FirebaseMessaging.getToken() → webView.runJavaScript("window.onFlutterFCMToken('" + token + "')")
+                </span>
+              )}
             </p>
           )}
         </div>

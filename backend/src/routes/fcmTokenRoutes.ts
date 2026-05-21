@@ -380,12 +380,14 @@ router.post("/test", authenticate, async (req: Request, res: Response) => {
     }
 
     const response: any = await sendPushNotification(uniqueTokens as string[], {
-      title: "Test Notification",
-      body: "This is a test notification from Kosil Backend",
+      title: "Welcome to WasgroMart! 🎉",
+      body: "You're all set! New delivery orders will appear here.",
       data: {
-        type: "test",
-        link: "/",
+        type: "WELCOME",
+        link: "/delivery",
         timestamp: new Date().toISOString(),
+        title: "Welcome to WasgroMart! 🎉",
+        body: "You're all set! New delivery orders will appear here.",
       },
     });
 
