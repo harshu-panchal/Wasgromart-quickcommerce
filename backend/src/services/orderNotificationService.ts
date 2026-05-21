@@ -545,12 +545,17 @@ export async function notifyNextDeliveryBoy(
   if (tokens.length > 0) {
     try {
       await sendPushNotification(tokens, {
-        title: `🚴 New Delivery Order #${state.orderData.orderNumber}`,
-        body: `Pickup for ${state.orderData.customerName} • ₹${state.orderData.total}`,
+        title: "New Order arrived",
+        body: "New Order arrived",
         data: {
           type: "NEW_ORDER",
           orderId: state.orderData.orderId,
           orderNumber: state.orderData.orderNumber,
+          msg: "New Order arrived",
+          message: "New Order arrived",
+          title: "New Order arrived",
+          body: "New Order arrived",
+          pickupDetails: `Pickup for ${state.orderData.customerName} • ₹${state.orderData.total}`,
           link: "/delivery/orders",
         },
         sound: "delivery_alert",
