@@ -7,6 +7,7 @@ import DeliveryAssignment from "../../../models/DeliveryAssignment";
 import Return from "../../../models/Return";
 import { notifySellersOfOrderUpdate } from "../../../services/sellerNotificationService";
 import { Server as SocketIOServer } from "socket.io";
+import { sendPushNotification } from "../../../services/firebaseAdmin";
 
 /**
  * Get all orders with filters
@@ -247,6 +248,35 @@ export const assignDeliveryBoy = asyncHandler(
       .populate("customer", "name email phone")
       .populate("deliveryBoy", "name mobile email")
       .populate("items");
+
+    // Fetch delivery boy's FCM tokens (both web and mobile)
+    const tokens = [
+      ...(deliveryBoy.fcmTokens || []),
+      ...(deliveryBoy.fcmTokenMobile || []),
+    ].filter(Boolean);
+
+    if (tokens.length > 0) {
+      try {
+        await sendPushNotification(tokens, {
+          title: `🚴 Order Assigned #${order.orderNumber}`,
+          body: `Admin assigned order #${order.orderNumber} to you • ₹${order.total}`,
+          data: {
+            type: "ORDER_ASSIGNED",
+            orderId: order._id.toString(),
+            orderNumber: order.orderNumber,
+            link: `/delivery/orders/${order._id.toString()}`,
+          },
+        });
+        console.log(
+          `🔔 Manual Assignment FCM Push notification sent to delivery boy ${deliveryBoyId} (${tokens.length} token(s))`
+        );
+      } catch (pushErr) {
+        console.error(
+          `Failed to send manual assignment push notification to delivery boy ${deliveryBoyId}:`,
+          pushErr
+        );
+      }
+    }
 
     return res.status(200).json({
       success: true,

@@ -118,9 +118,6 @@ export const useDeliveryOrderNotifications = () => {
         socket.on('new-order', (orderData: OrderNotificationData) => {
             console.log('📦 New order notification received:', orderData);
             console.warn('🚨 [DIAGNOSTIC] Socket new-order event received!', orderData);
-            
-            // Add a temporary visual alert to prove WebSocket reception
-            window.alert(`📦 Socket NEW-ORDER Received!\nOrder Number: ${orderData.orderNumber}\nAmount: ₹${orderData.total}`);
 
             setState(prev => {
                 // If there's already a current notification, queue this one
