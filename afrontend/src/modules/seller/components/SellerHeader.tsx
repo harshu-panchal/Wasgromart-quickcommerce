@@ -2,6 +2,11 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../../context/AuthContext";
 import logo from "@assets/wasgromart-black-text-removebg-preview.png";
+import api from "../../../services/api/config";
+import {
+  registerFCMToken,
+  requestNotificationPermission,
+} from "../../../services/pushNotificationService";
 
 interface SellerHeaderProps {
   onMenuClick: () => void;
@@ -49,6 +54,59 @@ export default function SellerHeader({
     logout();
     navigate("/seller/login");
   };
+
+  // ── Welcome Notification ──────────────────────────────────────────
+  type NotifStep = 'idle' | 'working' | 'success' | 'error' | 'no-token';
+  const [notifStep, setNotifStep] = useState<NotifStep>('idle');
+  const [notifTip, setNotifTip]   = useState('');
+
+  const resetNotif = () => { setNotifStep('idle'); setNotifTip(''); };
+
+  const sendWelcomeNotification = async () => {
+    if (notifStep !== 'idle') return;
+    setNotifStep('working');
+    setNotifTip('');
+
+    // Detect Flutter/Android WebView — window.Notification absent there
+    const inWebView =
+      !('Notification' in window) ||
+      !('serviceWorker' in navigator) ||
+      /wv/.test(navigator.userAgent) ||
+      (window as any).flutter_inappwebview !== undefined;
+
+    if (!inWebView) {
+      const permitted = await requestNotificationPermission();
+      if (!permitted) {
+        setNotifStep('error');
+        setNotifTip('Notifications blocked in browser settings.');
+        setTimeout(resetNotif, 4000);
+        return;
+      }
+      const token = await registerFCMToken(true);
+      if (!token) {
+        setNotifStep('no-token');
+        setNotifTip('Could not get FCM token. Try refreshing.');
+        setTimeout(resetNotif, 4000);
+        return;
+      }
+    }
+
+    try {
+      const res = await api.post('/fcm-tokens/test');
+      if (res.data.success) {
+        setNotifStep('success');
+        setNotifTip('Notification sent!');
+      } else {
+        setNotifStep('no-token');
+        setNotifTip('No FCM token saved yet.');
+      }
+    } catch {
+      setNotifStep('error');
+      setNotifTip('Server error. Try again.');
+    }
+    setTimeout(resetNotif, 4000);
+  };
+  // ─────────────────────────────────────────────────────────────────
 
   const handleSettingsClick = () => {
     setShowSettingsDropdown(!showSettingsDropdown);
@@ -154,6 +212,23 @@ export default function SellerHeader({
               className="w-full text-left px-4 py-2 text-sm text-neutral-700 hover:bg-neutral-50 transition-colors">
               Account Settings
             </button>
+            {/* Welcome Notification — mobile dropdown */}
+            <button
+              id="btn-seller-welcome-notif-mobile"
+              onClick={() => { setShowSettingsDropdown(false); sendWelcomeNotification(); }}
+              disabled={notifStep !== 'idle'}
+              className="w-full text-left px-4 py-2 text-sm hover:bg-green-50 transition-colors disabled:opacity-60
+                flex items-center gap-2
+                text-green-700">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" className={notifStep === 'working' ? 'animate-spin' : ''}>
+                {notifStep === 'working'
+                  ? <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeDasharray="40" strokeDashoffset="15" strokeLinecap="round" />
+                  : notifStep === 'success'
+                  ? <><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none"/><path d="M8 12l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></>
+                  : <><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/><path d="M13.73 21a2 2 0 0 1-3.46 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none"/></>}
+              </svg>
+              {notifStep === 'working' ? 'Sending…' : notifStep === 'success' ? 'Sent!' : 'Send Welcome Notification'}
+            </button>
             <button
               onClick={() => {
                 setShowSettingsDropdown(false);
@@ -237,7 +312,7 @@ export default function SellerHeader({
               </svg>
             </button>
             {showSettingsDropdown && (
-              <div className="absolute right-0 mt-2 w-48 bg-white rounded-lg shadow-lg border border-neutral-200 py-2 z-50">
+              <div className="absolute right-0 mt-2 w-52 bg-white rounded-lg shadow-lg border border-neutral-200 py-2 z-50">
                 <button
                   onClick={() => {
                     setShowSettingsDropdown(false);
@@ -245,6 +320,22 @@ export default function SellerHeader({
                   }}
                   className="w-full text-left px-4 py-2 text-sm text-neutral-700 hover:bg-neutral-50 transition-colors">
                   Account Settings
+                </button>
+                {/* Welcome Notification — desktop dropdown */}
+                <button
+                  id="btn-seller-welcome-notif-desktop"
+                  onClick={() => { setShowSettingsDropdown(false); sendWelcomeNotification(); }}
+                  disabled={notifStep !== 'idle'}
+                  className="w-full text-left px-4 py-2 text-sm text-green-700 hover:bg-green-50 transition-colors
+                    disabled:opacity-60 flex items-center gap-2">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" className={notifStep === 'working' ? 'animate-spin' : ''}>
+                    {notifStep === 'working'
+                      ? <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeDasharray="40" strokeDashoffset="15" strokeLinecap="round" />
+                      : notifStep === 'success'
+                      ? <><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none"/><path d="M8 12l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></>
+                      : <><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/><path d="M13.73 21a2 2 0 0 1-3.46 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none"/></>}
+                  </svg>
+                  {notifStep === 'working' ? 'Sending…' : notifStep === 'success' ? 'Notification sent! ✅' : 'Send Welcome Notification'}
                 </button>
               </div>
             )}
@@ -290,6 +381,41 @@ export default function SellerHeader({
                       : "No location set"}
                   </p>
                 </div>
+              </div>
+            )}
+          </div>
+
+          {/* Welcome Notification icon button (desktop) */}
+          <div className="relative">
+            <button
+              id="btn-seller-welcome-notif-icon"
+              onClick={sendWelcomeNotification}
+              disabled={notifStep !== 'idle'}
+              title="Send Welcome Notification"
+              className={`p-2 transition-colors disabled:opacity-60 ${
+                notifStep === 'success' ? 'text-green-500'
+                : notifStep === 'error' || notifStep === 'no-token' ? 'text-red-400'
+                : 'text-neutral-600 hover:text-green-600'
+              }`}
+              aria-label="Send Welcome Notification">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none"
+                className={notifStep === 'working' ? 'animate-spin' : ''}>
+                {notifStep === 'working'
+                  ? <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeDasharray="40" strokeDashoffset="15" strokeLinecap="round" />
+                  : notifStep === 'success'
+                  ? <><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none"/><path d="M8 12l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/></>
+                  : notifStep === 'error' || notifStep === 'no-token'
+                  ? <><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none"/><path d="M12 8v4M12 16h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none"/></>
+                  : <><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none"/><path d="M13.73 21a2 2 0 0 1-3.46 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none"/></>}
+              </svg>
+            </button>
+            {/* Status tooltip */}
+            {notifTip && (
+              <div className={`absolute right-0 top-10 whitespace-nowrap text-xs px-2 py-1 rounded shadow z-50 ${
+                notifStep === 'success' ? 'bg-green-600 text-white'
+                : 'bg-red-500 text-white'
+              }`}>
+                {notifTip}
               </div>
             )}
           </div>
