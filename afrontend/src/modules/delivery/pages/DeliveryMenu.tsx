@@ -3,11 +3,29 @@ import { useNavigate } from 'react-router-dom';
 import DeliveryHeader from '../components/DeliveryHeader';
 import DeliveryBottomNav from '../components/DeliveryBottomNav';
 import { useAuth } from '../../../context/AuthContext';
+import api from '../../../services/api/config';
 
 export default function DeliveryMenu() {
   const navigate = useNavigate();
   const { logout } = useAuth();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [notifStatus, setNotifStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
+
+  const sendWelcomeNotification = async () => {
+    setNotifStatus('sending');
+    try {
+      const res = await api.post('/fcm-tokens/test');
+      if (res.data.success) {
+        setNotifStatus('success');
+      } else {
+        setNotifStatus('error');
+      }
+    } catch {
+      setNotifStatus('error');
+    } finally {
+      setTimeout(() => setNotifStatus('idle'), 3000);
+    }
+  };
 
   const menuItems = [
     { id: 'menu-1', title: 'Profile', route: '/delivery/profile' },
@@ -173,6 +191,72 @@ export default function DeliveryMenu() {
             <p className="text-neutral-500 text-sm">Menu options coming soon</p>
           </div>
         )}
+
+        {/* Send Welcome Notification button */}
+        <div className="mt-4">
+          <button
+            id="btn-send-welcome-notif"
+            onClick={sendWelcomeNotification}
+            disabled={notifStatus === 'sending'}
+            className="w-full bg-white rounded-xl p-4 shadow-sm border border-green-200 flex items-center gap-3
+              hover:shadow-md hover:bg-green-50 active:scale-[0.98] transition-all duration-150
+              disabled:opacity-60 disabled:cursor-not-allowed"
+          >
+            {/* Bell icon */}
+            <span className="flex-shrink-0 text-green-600">
+              {notifStatus === 'sending' ? (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="animate-spin text-green-500">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeDasharray="40" strokeDashoffset="15" strokeLinecap="round" />
+                </svg>
+              ) : notifStatus === 'success' ? (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none" />
+                  <path d="M8 12l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                </svg>
+              ) : notifStatus === 'error' ? (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="text-red-500">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none" />
+                  <path d="M12 8v4M12 16h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round" fill="none" />
+                </svg>
+              ) : (
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                  <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                  <path d="M13.73 21a2 2 0 0 1-3.46 0" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" fill="none" />
+                </svg>
+              )}
+            </span>
+
+            <span className={`text-sm font-medium flex-1 text-left ${
+              notifStatus === 'error' ? 'text-red-600' : 'text-green-700'
+            }`}>
+              {notifStatus === 'sending'
+                ? 'Sending…'
+                : notifStatus === 'success'
+                ? 'Notification sent!'
+                : notifStatus === 'error'
+                ? 'Failed — no FCM token saved'
+                : 'Send Welcome Notification'}
+            </span>
+
+            {notifStatus === 'idle' && (
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" className="text-green-400">
+                <path d="M9 18L15 12L9 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            )}
+          </button>
+
+          {/* Inline status hint */}
+          {notifStatus === 'success' && (
+            <p className="text-xs text-green-600 text-center mt-2 animate-in fade-in duration-300">
+              ✅ Push notification dispatched to your registered device(s).
+            </p>
+          )}
+          {notifStatus === 'error' && (
+            <p className="text-xs text-red-500 text-center mt-2 animate-in fade-in duration-300">
+              ⚠️ Make sure your FCM token is registered. Try logging out and back in.
+            </p>
+          )}
+        </div>
       </div>
       <DeliveryBottomNav />
 
