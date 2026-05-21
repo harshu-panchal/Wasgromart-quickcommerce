@@ -232,6 +232,8 @@ DeliverySchema.methods.comparePassword = async function (
   return bcrypt.compare(candidatePassword, this.password);
 };
 
+DeliverySchema.index({ location: '2dsphere' });
+
 const Delivery = mongoose.model<IDelivery>('Delivery', DeliverySchema);
 
 export default Delivery;

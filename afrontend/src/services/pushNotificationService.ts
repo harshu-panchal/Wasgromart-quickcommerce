@@ -299,7 +299,7 @@ export function setupForegroundNotificationHandler(handler?: (payload: any) => v
     foregroundUnsubscribe = null;
   }
 
-  foregroundUnsubscribe = onMessage(messaging, (payload) => {
+  foregroundUnsubscribe = onMessage(messaging, (payload: any) => {
     console.log('[FCM] Foreground message received:', payload);
     if (handler) handler(payload);
     if (!isNotificationPermissionGranted()) return;

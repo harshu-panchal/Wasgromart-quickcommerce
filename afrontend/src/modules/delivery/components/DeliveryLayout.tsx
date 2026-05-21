@@ -6,7 +6,6 @@ import { DeliveryUserProvider, useDeliveryUser } from '../context/DeliveryUserCo
 import { getDeliveryProfile } from '../../../services/api/delivery/deliveryService';
 import { useDeliveryOrderNotifications } from '../../../hooks/useDeliveryOrderNotifications';
 import OrderNotificationCard from './OrderNotificationCard';
-import { AnimatePresence } from 'framer-motion';
 
 interface DeliveryLayoutContentProps {
   children: ReactNode;
@@ -45,16 +44,14 @@ function DeliveryLayoutContent({ children }: DeliveryLayoutContentProps) {
       <DeliveryBottomNav />
 
       {/* Order Notification Card */}
-      <AnimatePresence>
-        {currentNotification && (
-          <OrderNotificationCard
-            key={currentNotification.orderId}
-            notification={currentNotification}
-            onAccept={(orderId) => acceptOrder(orderId, navigate)}
-            onReject={rejectOrder}
-          />
-        )}
-      </AnimatePresence>
+      {currentNotification && (
+        <OrderNotificationCard
+          key={currentNotification.orderId}
+          notification={currentNotification}
+          onAccept={(orderId) => acceptOrder(orderId, navigate)}
+          onReject={rejectOrder}
+        />
+      )}
     </div>
   );
 }

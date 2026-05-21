@@ -33,6 +33,7 @@
     "@types/jsonwebtoken": "^9.0.4",
     "@types/multer": "^1.4.10",
     "@types/node": "^20.8.9",
+    "socket.io-client": "^4.8.3",
     "tsx": "^3.14.0",
     "typescript": "^5.2.2"
   }

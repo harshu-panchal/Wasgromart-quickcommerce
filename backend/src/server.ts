@@ -139,6 +139,55 @@ app.get("/", (_req: Request, res: Response) => {
   });
 });
 
+app.get("/debug-sockets", (req: Request, res: Response) => {
+  try {
+    const io = req.app.get("io");
+    if (!io) {
+      return res.status(500).json({ error: "Socket.io server not initialized" });
+    }
+
+    // Import dynamically to avoid circular dependencies
+    const { notificationStates } = require("./services/orderNotificationService");
+
+    const sockets = Array.from(io.sockets.sockets.values()).map((s: any) => ({
+      id: s.id,
+      userId: s.user?.userId,
+      userType: s.user?.userType,
+      rooms: Array.from(s.rooms),
+    }));
+
+    const allRooms: any = {};
+    for (const [room, members] of io.sockets.adapter.rooms.entries()) {
+      allRooms[room] = {
+        size: members.size,
+        sockets: Array.from(members),
+      };
+    }
+
+    const activeNotifications = Array.from(notificationStates.entries()).map(([orderId, state]: [string, any]) => ({
+      orderId,
+      orderNumber: state.orderData?.orderNumber,
+      allNearbyDeliveryBoyIds: state.allNearbyDeliveryBoyIds,
+      currentIndex: state.currentIndex,
+      notifiedDeliveryBoys: Array.from(state.notifiedDeliveryBoys || []),
+      rejectedDeliveryBoys: Array.from(state.rejectedDeliveryBoys || []),
+      acceptedBy: state.acceptedBy,
+      hasActiveTimeout: !!state.timeoutId,
+    }));
+
+    res.json({
+      success: true,
+      totalConnections: sockets.length,
+      activeNotificationsCount: activeNotifications.length,
+      activeNotifications,
+      sockets,
+      allRooms,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Debug middleware - log all incoming requests
 app.use((req: Request, _res: Response, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);

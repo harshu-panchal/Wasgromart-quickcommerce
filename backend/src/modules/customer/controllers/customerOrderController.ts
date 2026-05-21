@@ -172,15 +172,21 @@ export const createOrder = async (req: Request, res: Response) => {
                 product = await Product.findOneAndUpdate(
                     {
                         _id: item.product.id,
-                        $or: [
-                            { "variations._id": mongoose.isValidObjectId(variationValue) ? variationValue : new mongoose.Types.ObjectId() },
-                            { "variations.value": variationValue },
-                            { "variations.title": variationValue },
-                            { "variations.pack": variationValue }
-                        ],
-                        $or: [
-                            { "variations.stock": 0 },
-                            { "variations.stock": { $gte: qty } }
+                        $and: [
+                            {
+                                $or: [
+                                    { "variations._id": mongoose.isValidObjectId(variationValue) ? variationValue : new mongoose.Types.ObjectId() },
+                                    { "variations.value": variationValue },
+                                    { "variations.title": variationValue },
+                                    { "variations.pack": variationValue }
+                                ]
+                            },
+                            {
+                                $or: [
+                                    { "variations.stock": 0 },
+                                    { "variations.stock": { $gte: qty } }
+                                ]
+                            }
                         ]
                     },
                     [

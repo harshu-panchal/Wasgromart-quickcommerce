@@ -87,6 +87,9 @@ export const useDeliveryOrderNotifications = () => {
 
         socket.on('joined-notifications-room', (data: any) => {
             console.log('✅ Successfully joined notifications room:', data);
+            console.warn('⚡ [DIAGNOSTIC] Successfully joined notifications room for user:', user.id);
+            // Optionally notify user via alert for connection confirmation
+            // window.alert('🔌 Connected to Delivery Notifications!');
         });
 
         socket.on('connect_error', (error) => {
@@ -114,6 +117,10 @@ export const useDeliveryOrderNotifications = () => {
 
         socket.on('new-order', (orderData: OrderNotificationData) => {
             console.log('📦 New order notification received:', orderData);
+            console.warn('🚨 [DIAGNOSTIC] Socket new-order event received!', orderData);
+            
+            // Add a temporary visual alert to prove WebSocket reception
+            window.alert(`📦 Socket NEW-ORDER Received!\nOrder Number: ${orderData.orderNumber}\nAmount: ₹${orderData.total}`);
 
             setState(prev => {
                 // If there's already a current notification, queue this one
