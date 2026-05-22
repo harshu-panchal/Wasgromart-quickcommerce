@@ -379,15 +379,25 @@ router.post("/test", authenticate, async (req: Request, res: Response) => {
       return;
     }
 
+    let notificationTitle = "Welcome to WasgroMart! 🎉";
+    let notificationBody = "You're all set! New delivery orders will appear here.";
+    let notificationLink = "/delivery";
+
+    if (userType === "Customer") {
+      notificationTitle = "Welcome to WasgroMart! 🛒";
+      notificationBody = "Happy shopping! Discover amazing products and deals just for you.";
+      notificationLink = "/";
+    }
+
     const response: any = await sendPushNotification(uniqueTokens as string[], {
-      title: "Welcome to WasgroMart! 🎉",
-      body: "You're all set! New delivery orders will appear here.",
+      title: notificationTitle,
+      body: notificationBody,
       data: {
         type: "WELCOME",
-        link: "/delivery",
+        link: notificationLink,
         timestamp: new Date().toISOString(),
-        title: "Welcome to WasgroMart! 🎉",
-        body: "You're all set! New delivery orders will appear here.",
+        title: notificationTitle,
+        body: notificationBody,
       },
     });
 

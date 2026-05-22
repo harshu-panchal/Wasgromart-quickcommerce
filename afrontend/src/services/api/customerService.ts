@@ -61,3 +61,11 @@ export const updateProfile = async (data: UpdateProfileData): Promise<UpdateProf
   return response.data;
 };
 
+/**
+ * Send welcome push notification
+ */
+export const sendWelcomeNotification = async (): Promise<{ success: boolean; message: string }> => {
+  const response = await api.post('/fcm-tokens/test');
+  return response.data;
+};
+

@@ -5,9 +5,9 @@ import {
   getProfile,
   CustomerProfile,
   updateProfile,
+  sendWelcomeNotification,
 } from "../../services/api/customerService";
 import { uploadImage } from "../../services/api/uploadService";
-
 
 export default function Account() {
   const navigate = useNavigate();
@@ -34,6 +34,8 @@ export default function Account() {
   });
   const [updateError, setUpdateError] = useState("");
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [sendingNotification, setSendingNotification] = useState(false);
+  const [notificationMessage, setNotificationMessage] = useState("");
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -47,7 +49,9 @@ export default function Account() {
             name: response.data.name || "",
             email: response.data.email || "",
             phone: response.data.phone || "",
-            dateOfBirth: response.data.dateOfBirth ? response.data.dateOfBirth.split('T')[0] : "",
+            dateOfBirth: response.data.dateOfBirth
+              ? response.data.dateOfBirth.split("T")[0]
+              : "",
             address: response.data.address || "",
             city: response.data.city || "",
             state: response.data.state || "",
@@ -101,6 +105,25 @@ export default function Account() {
     navigate("/login");
   };
 
+  const handleSendWelcomeNotification = async () => {
+    try {
+      setSendingNotification(true);
+      setNotificationMessage("");
+      const response = await sendWelcomeNotification();
+      if (response.success) {
+        setNotificationMessage("Welcome notification sent successfully! 🎉");
+      } else {
+        setNotificationMessage(response.message);
+      }
+    } catch (err: any) {
+      setNotificationMessage(
+        err.response?.data?.message || "Failed to send notification",
+      );
+    } finally {
+      setSendingNotification(false);
+    }
+  };
+
   const handleGstSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     // GST Validation: 15 characters alphanumeric
@@ -111,7 +134,9 @@ export default function Account() {
 
     try {
       setEditingProfile(true);
-      const response = await updateProfile({ gstNumber: gstNumber.toUpperCase() });
+      const response = await updateProfile({
+        gstNumber: gstNumber.toUpperCase(),
+      });
       if (response.success) {
         setProfile(response.data);
         setShowGstModal(false);
@@ -137,7 +162,10 @@ export default function Account() {
         return;
       }
 
-      if (editFormData.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editFormData.email)) {
+      if (
+        editFormData.email &&
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editFormData.email)
+      ) {
         setUpdateError("Invalid email format");
         setEditingProfile(false);
         return;
@@ -173,8 +201,6 @@ export default function Account() {
       setEditingProfile(false);
     }
   };
-
-
 
   // Show login/signup prompt for unregistered users
   if (!user) {
@@ -301,7 +327,11 @@ export default function Account() {
             <div className="relative">
               <div className="w-20 h-20 md:w-24 md:h-24 rounded-full bg-neutral-200 flex items-center justify-center mb-3 md:mb-4 border-2 border-white shadow-sm overflow-hidden group-hover:border-teal-400/50 transition-colors">
                 {profile?.profilePhoto ? (
-                  <img src={profile.profilePhoto} alt={displayName} className="w-full h-full object-cover" />
+                  <img
+                    src={profile.profilePhoto}
+                    alt={displayName}
+                    className="w-full h-full object-cover"
+                  />
                 ) : (
                   <svg
                     width="40"
@@ -328,16 +358,50 @@ export default function Account() {
                   </svg>
                 )}
                 <div className="absolute inset-0 bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="text-white">
-                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  <svg
+                    width="24"
+                    height="24"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    className="text-white">
+                    <path
+                      d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
                   </svg>
                 </div>
               </div>
               <div className="absolute -right-1 -bottom-1 bg-white p-1.5 rounded-full shadow-md border border-neutral-100 md:p-2">
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" className="text-teal-600 md:w-4 md:h-4">
-                  <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                  <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  className="text-teal-600 md:w-4 md:h-4">
+                  <path
+                    d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path
+                    d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
                 </svg>
               </div>
             </div>
@@ -412,7 +476,7 @@ export default function Account() {
       </div>
 
       <div className="px-4 md:px-6 lg:px-8 -mt-4 md:-mt-6 mb-4 md:mb-6">
-        <div className="grid grid-cols-2 md:grid-cols-2 gap-2.5 md:gap-6 max-w-2xl md:mx-auto">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5 md:gap-6 max-w-2xl md:mx-auto">
           <button
             onClick={() => navigate("/orders")}
             className="bg-white rounded-lg border border-neutral-200 p-3 md:p-4 hover:shadow-md transition-shadow text-center outline-none">
@@ -471,7 +535,46 @@ export default function Account() {
               Need help?
             </div>
           </button>
+          <button
+            onClick={handleSendWelcomeNotification}
+            disabled={sendingNotification}
+            className="bg-white rounded-lg border border-neutral-200 p-3 md:p-4 hover:shadow-md transition-shadow text-center outline-none disabled:opacity-50">
+            {sendingNotification ? (
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-teal-600 mx-auto mb-1.5 md:mb-2"></div>
+            ) : (
+              <svg
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                className="mx-auto mb-1.5 md:mb-2 text-neutral-700 md:w-6 md:h-6">
+                <path
+                  d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path
+                  d="M13.73 21a2 2 0 0 1-3.46 0"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            )}
+            <div className="text-[10px] md:text-xs font-semibold text-neutral-900">
+              {sendingNotification ? "Sending..." : "Welcome"}
+            </div>
+          </button>
         </div>
+        {notificationMessage && (
+          <div
+            className={`mt-4 p-3 rounded-lg text-center text-sm ${notificationMessage.includes("successfully") ? "bg-green-50 text-green-700 border border-green-200" : "bg-red-50 text-red-700 border border-red-200"}`}>
+            {notificationMessage}
+          </div>
+        )}
       </div>
 
       <div className="px-4 py-2.5">
@@ -694,8 +797,19 @@ export default function Account() {
                 {updateError && (
                   <div className="mb-6 p-3 bg-red-50 border border-red-100 text-red-600 text-[11px] rounded-lg flex items-center gap-2 animate-shake mx-4 text-left">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
-                      <path d="M12 8v4M12 16h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                      <circle
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      />
+                      <path
+                        d="M12 8v4M12 16h.01"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                      />
                     </svg>
                     {updateError}
                   </div>
@@ -706,7 +820,12 @@ export default function Account() {
                     type="text"
                     value={gstNumber}
                     onChange={(e) => {
-                      setGstNumber(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 15));
+                      setGstNumber(
+                        e.target.value
+                          .toUpperCase()
+                          .replace(/[^A-Z0-9]/g, "")
+                          .slice(0, 15),
+                      );
                       if (updateError) setUpdateError("");
                     }}
                     placeholder="Enter 15-digit GST Number"
@@ -756,28 +875,64 @@ export default function Account() {
                 <h3 className="text-xl font-bold text-neutral-900 mb-6 px-2">
                   Edit Profile
                 </h3>
-                
+
                 {updateError && (
                   <div className="mb-4 p-3 bg-red-50 border border-red-100 text-red-600 text-xs rounded-lg flex items-center gap-2 animate-shake">
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
-                      <path d="M12 8v4M12 16h.01" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+                      <circle
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      />
+                      <path
+                        d="M12 8v4M12 16h.01"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                      />
                     </svg>
                     {updateError}
                   </div>
                 )}
 
-                <form onSubmit={handleProfileUpdate} className="space-y-5 max-h-[60vh] overflow-y-auto px-2 pb-4 scrollbar-hide">
+                <form
+                  onSubmit={handleProfileUpdate}
+                  className="space-y-5 max-h-[60vh] overflow-y-auto px-2 pb-4 scrollbar-hide">
                   {/* Profile Photo Upload */}
                   <div className="flex flex-col items-center gap-3 mb-2">
                     <div className="relative group/photo">
                       <div className="w-20 h-20 rounded-full bg-neutral-100 border-2 border-dashed border-neutral-300 flex items-center justify-center overflow-hidden">
                         {editFormData.profilePhoto ? (
-                          <img src={editFormData.profilePhoto} alt="Preview" className="w-full h-full object-cover" />
+                          <img
+                            src={editFormData.profilePhoto}
+                            alt="Preview"
+                            className="w-full h-full object-cover"
+                          />
                         ) : (
-                          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="text-neutral-400">
-                            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                            <circle cx="12" cy="13" r="4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                          <svg
+                            width="24"
+                            height="24"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            className="text-neutral-400">
+                            <path
+                              d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                            <circle
+                              cx="12"
+                              cy="13"
+                              r="4"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
                           </svg>
                         )}
                         {uploadingImage && (
@@ -794,8 +949,14 @@ export default function Account() {
                           if (file) {
                             setUploadingImage(true);
                             try {
-                              const result = await uploadImage(file, 'customer_profiles');
-                              setEditFormData({ ...editFormData, profilePhoto: result.secureUrl });
+                              const result = await uploadImage(
+                                file,
+                                "customer_profiles",
+                              );
+                              setEditFormData({
+                                ...editFormData,
+                                profilePhoto: result.secureUrl,
+                              });
                             } catch (err: any) {
                               setUpdateError("Image upload failed");
                             } finally {
@@ -807,34 +968,64 @@ export default function Account() {
                         disabled={uploadingImage}
                       />
                       <div className="absolute -right-1 -bottom-1 bg-teal-600 text-white p-1.5 rounded-full shadow-lg border-2 border-white group-hover/photo:scale-110 transition-transform">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
-                          <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                        <svg
+                          width="12"
+                          height="12"
+                          viewBox="0 0 24 24"
+                          fill="none">
+                          <path
+                            d="M12 5v14M5 12h14"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
                         </svg>
                       </div>
                     </div>
-                    <span className="text-[10px] font-medium text-neutral-500 uppercase tracking-wider">Change Photo</span>
+                    <span className="text-[10px] font-medium text-neutral-500 uppercase tracking-wider">
+                      Change Photo
+                    </span>
                   </div>
 
                   <div className="grid grid-cols-1 gap-4">
                     <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-neutral-500 ml-1">Full Name</label>
+                      <label className="text-xs font-semibold text-neutral-500 ml-1">
+                        Full Name
+                      </label>
                       <input
                         type="text"
                         value={editFormData.name}
-                        onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value.replace(/[^a-zA-Z\s]/g, "") })}
+                        onChange={(e) =>
+                          setEditFormData({
+                            ...editFormData,
+                            name: e.target.value.replace(/[^a-zA-Z\s]/g, ""),
+                          })
+                        }
                         placeholder="Enter your name"
                         className="w-full rounded-xl border border-neutral-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
                       />
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-neutral-500 ml-1">Phone Number</label>
+                      <label className="text-xs font-semibold text-neutral-500 ml-1">
+                        Phone Number
+                      </label>
                       <div className="relative">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs text-neutral-500 font-medium">+91</span>
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 text-xs text-neutral-500 font-medium">
+                          +91
+                        </span>
                         <input
                           type="tel"
                           value={editFormData.phone}
-                          onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value.replace(/\D/g, "").slice(0, 10) })}
+                          onChange={(e) =>
+                            setEditFormData({
+                              ...editFormData,
+                              phone: e.target.value
+                                .replace(/\D/g, "")
+                                .slice(0, 10),
+                            })
+                          }
                           placeholder="10-digit number"
                           className="w-full rounded-xl border border-neutral-200 pl-12 pr-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
                           maxLength={10}
@@ -843,32 +1034,53 @@ export default function Account() {
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-neutral-500 ml-1">Email Address</label>
+                      <label className="text-xs font-semibold text-neutral-500 ml-1">
+                        Email Address
+                      </label>
                       <input
                         type="email"
                         value={editFormData.email}
-                        onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                        onChange={(e) =>
+                          setEditFormData({
+                            ...editFormData,
+                            email: e.target.value,
+                          })
+                        }
                         placeholder="Enter your email"
                         className="w-full rounded-xl border border-neutral-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
                       />
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-neutral-500 ml-1">Date of Birth</label>
+                      <label className="text-xs font-semibold text-neutral-500 ml-1">
+                        Date of Birth
+                      </label>
                       <input
                         type="date"
                         value={editFormData.dateOfBirth}
-                        onChange={(e) => setEditFormData({ ...editFormData, dateOfBirth: e.target.value })}
+                        onChange={(e) =>
+                          setEditFormData({
+                            ...editFormData,
+                            dateOfBirth: e.target.value,
+                          })
+                        }
                         className="w-full rounded-xl border border-neutral-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
                       />
                     </div>
 
                     <div className="space-y-1.5">
-                      <label className="text-xs font-semibold text-neutral-500 ml-1">Flat / House No. / Building</label>
+                      <label className="text-xs font-semibold text-neutral-500 ml-1">
+                        Flat / House No. / Building
+                      </label>
                       <input
                         type="text"
                         value={editFormData.address}
-                        onChange={(e) => setEditFormData({ ...editFormData, address: e.target.value })}
+                        onChange={(e) =>
+                          setEditFormData({
+                            ...editFormData,
+                            address: e.target.value,
+                          })
+                        }
                         placeholder="Enter your address"
                         className="w-full rounded-xl border border-neutral-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
                       />
@@ -876,21 +1088,37 @@ export default function Account() {
 
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1.5">
-                        <label className="text-xs font-semibold text-neutral-500 ml-1">City</label>
+                        <label className="text-xs font-semibold text-neutral-500 ml-1">
+                          City
+                        </label>
                         <input
                           type="text"
                           value={editFormData.city}
-                          onChange={(e) => setEditFormData({ ...editFormData, city: e.target.value })}
+                          onChange={(e) =>
+                            setEditFormData({
+                              ...editFormData,
+                              city: e.target.value,
+                            })
+                          }
                           placeholder="City"
                           className="w-full rounded-xl border border-neutral-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
                         />
                       </div>
                       <div className="space-y-1.5">
-                        <label className="text-xs font-semibold text-neutral-500 ml-1">Pincode</label>
+                        <label className="text-xs font-semibold text-neutral-500 ml-1">
+                          Pincode
+                        </label>
                         <input
                           type="text"
                           value={editFormData.pincode}
-                          onChange={(e) => setEditFormData({ ...editFormData, pincode: e.target.value.replace(/\D/g, "").slice(0, 6) })}
+                          onChange={(e) =>
+                            setEditFormData({
+                              ...editFormData,
+                              pincode: e.target.value
+                                .replace(/\D/g, "")
+                                .slice(0, 6),
+                            })
+                          }
                           placeholder="6 digits"
                           className="w-full rounded-xl border border-neutral-200 px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-teal-500/20 focus:border-teal-500 transition-all"
                           maxLength={6}
@@ -906,9 +1134,23 @@ export default function Account() {
                       className="w-full rounded-xl bg-teal-600 text-white font-bold py-4 hover:bg-teal-700 disabled:opacity-50 transition-all shadow-lg shadow-teal-500/20 uppercase tracking-wider text-sm flex items-center justify-center gap-2">
                       {editingProfile ? (
                         <>
-                          <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24" fill="none">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                          <svg
+                            className="animate-spin h-4 w-4 text-white"
+                            viewBox="0 0 24 24"
+                            fill="none">
+                            <circle
+                              className="opacity-25"
+                              cx="12"
+                              cy="12"
+                              r="10"
+                              stroke="currentColor"
+                              strokeWidth="4"
+                            />
+                            <path
+                              className="opacity-75"
+                              fill="currentColor"
+                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                            />
                           </svg>
                           Saving...
                         </>
@@ -934,7 +1176,12 @@ export default function Account() {
             <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-xs p-6 pt-8 animate-in zoom-in-95 duration-200 pointer-events-auto">
               <div className="flex flex-col items-center text-center">
                 <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center mb-4">
-                  <svg width="32" height="32" viewBox="0 0 24 24" fill="none" className="text-red-500">
+                  <svg
+                    width="32"
+                    height="32"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    className="text-red-500">
                     <path
                       d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"
                       stroke="currentColor"
