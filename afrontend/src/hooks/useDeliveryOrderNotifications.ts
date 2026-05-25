@@ -344,6 +344,49 @@ export const useDeliveryOrderNotifications = () => {
         };
     }, [isAuthenticated, user, connectSocket, disconnectSocket]);
 
+    useEffect(() => {
+        const handleFlutterClick = (e: any) => {
+            const payload = e.detail;
+            try {
+                let data = typeof payload === 'string' ? JSON.parse(payload) : payload;
+                if (data.data) {
+                   data = typeof data.data === 'string' ? JSON.parse(data.data) : data.data;
+                }
+                
+                // If it looks like a delivery order notification
+                if (data.orderId && data.pickupLocation && data.deliveryLocation) {
+                    setState(prev => {
+                        if (prev.currentNotification?.orderId === data.orderId) return prev;
+                        if (prev.currentNotification) {
+                            return { ...prev, notificationQueue: [...prev.notificationQueue, data] };
+                        }
+                        return { ...prev, currentNotification: data };
+                    });
+                }
+            } catch (err) {
+                console.error('Failed to parse flutter delivery notification payload', err);
+            }
+        };
+
+        // Also expose direct function for simpler calls
+        (window as any).triggerDeliveryNotification = (data: any) => {
+             let parsed = typeof data === 'string' ? JSON.parse(data) : data;
+             setState(prev => {
+                if (prev.currentNotification?.orderId === parsed.orderId) return prev;
+                if (prev.currentNotification) {
+                    return { ...prev, notificationQueue: [...prev.notificationQueue, parsed] };
+                }
+                return { ...prev, currentNotification: parsed };
+            });
+        };
+
+        window.addEventListener('flutter-notification-click', handleFlutterClick);
+        return () => {
+            window.removeEventListener('flutter-notification-click', handleFlutterClick);
+            delete (window as any).triggerDeliveryNotification;
+        };
+    }, []);
+
     return {
         currentNotification: state.currentNotification,
         notificationQueue: state.notificationQueue,

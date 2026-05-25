@@ -789,3 +789,19 @@ export function getNotificationState(
 export function clearNotificationState(orderId: string): void {
   notificationStates.delete(orderId);
 }
+
+/**
+ * Get active notification data for a delivery boy if they are currently being notified
+ */
+export function getActiveNotificationsForDeliveryBoy(deliveryBoyId: string): any[] {
+  const activeNotifications: any[] = [];
+  const normalizedId = String(deliveryBoyId).trim();
+  
+  for (const state of notificationStates.values()) {
+    if (!state.acceptedBy && state.notifiedDeliveryBoys.has(normalizedId)) {
+      activeNotifications.push(state.orderData);
+    }
+  }
+  
+  return activeNotifications;
+}
