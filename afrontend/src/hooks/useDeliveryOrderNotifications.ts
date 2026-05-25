@@ -17,12 +17,35 @@ const INITIAL_RECONNECT_DELAY = 2000;
 
 export const useDeliveryOrderNotifications = () => {
     const { isAuthenticated, user } = useAuth();
-    const [state, setState] = useState<NotificationState>({
-        currentNotification: null,
-        notificationQueue: [],
-        isConnected: false,
-        error: null,
+    const [state, setState] = useState<NotificationState>(() => {
+        const saved = localStorage.getItem('deliveryNotificationState');
+        if (saved) {
+            try {
+                const parsed = JSON.parse(saved);
+                return {
+                    currentNotification: parsed.currentNotification || null,
+                    notificationQueue: parsed.notificationQueue || [],
+                    isConnected: false,
+                    error: null,
+                };
+            } catch (e) {
+                // ignore
+            }
+        }
+        return {
+            currentNotification: null,
+            notificationQueue: [],
+            isConnected: false,
+            error: null,
+        };
     });
+
+    useEffect(() => {
+        localStorage.setItem('deliveryNotificationState', JSON.stringify({
+            currentNotification: state.currentNotification,
+            notificationQueue: state.notificationQueue,
+        }));
+    }, [state.currentNotification, state.notificationQueue]);
 
     const socketRef = useRef<Socket | null>(null);
     const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);

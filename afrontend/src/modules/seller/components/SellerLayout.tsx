@@ -11,10 +11,21 @@ interface SellerLayoutProps {
 
 export default function SellerLayout({ children }: SellerLayoutProps) {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [activeNotification, setActiveNotification] = useState<SellerNotification | null>(null);
+  const [activeNotification, setActiveNotification] = useState<SellerNotification | null>(() => {
+    const saved = localStorage.getItem('activeSellerNotification');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return null;
+      }
+    }
+    return null;
+  });
 
   const handleNotificationReceived = useCallback((notification: SellerNotification) => {
     setActiveNotification(notification);
+    localStorage.setItem('activeSellerNotification', JSON.stringify(notification));
   }, []);
 
   useSellerSocket(handleNotificationReceived);
@@ -25,6 +36,7 @@ export default function SellerLayout({ children }: SellerLayoutProps) {
 
   const closeNotification = () => {
     setActiveNotification(null);
+    localStorage.removeItem('activeSellerNotification');
   };
 
   return (

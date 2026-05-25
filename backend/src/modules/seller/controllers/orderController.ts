@@ -293,16 +293,17 @@ export const updateOrderStatus = asyncHandler(
       });
     }
 
-    // Check if status is already the same
-    if (order.status === status) {
+    // Check if status is already the same (or if it's already cancelled and trying to reject)
+    if (order.status === status || (order.status === 'Cancelled' && status === 'Rejected')) {
       return res.status(400).json({
         success: false,
-        message: `Order is already ${status}`,
+        message: `Order is already ${order.status}`,
       });
     }
 
     const previousStatus = order.status;
-    order.status = status;
+    // Automatically cancel the order if the seller rejects it
+    order.status = status === 'Rejected' ? 'Cancelled' : status;
     await order.save();
 
     // Trigger delivery notification if seller accepts the order
