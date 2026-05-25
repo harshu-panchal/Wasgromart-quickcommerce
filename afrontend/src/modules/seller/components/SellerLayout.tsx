@@ -1,4 +1,4 @@
-import { ReactNode, useState, useCallback } from 'react';
+import { ReactNode, useState, useCallback, useEffect } from 'react';
 import SellerHeader from './SellerHeader';
 import SellerSidebar from './SellerSidebar';
 import SellerBottomNav from './SellerBottomNav';
@@ -29,6 +29,37 @@ export default function SellerLayout({ children }: SellerLayoutProps) {
   }, []);
 
   useSellerSocket(handleNotificationReceived);
+
+  useEffect(() => {
+    const handleFlutterClick = (e: any) => {
+      const payload = e.detail;
+      try {
+        let data = typeof payload === 'string' ? JSON.parse(payload) : payload;
+        if (data.data) {
+           data = typeof data.data === 'string' ? JSON.parse(data.data) : data.data;
+        }
+
+        // Only handle seller relevant notifications
+        if (data.type === 'NEW_ORDER' || data.type === 'STATUS_UPDATE') {
+           handleNotificationReceived(data as SellerNotification);
+        }
+      } catch (err) {
+        console.error('Failed to parse flutter notification payload', err);
+      }
+    };
+    
+    // Also attach to window for legacy support if needed
+    (window as any).triggerSellerNotification = (data: any) => {
+        let parsed = typeof data === 'string' ? JSON.parse(data) : data;
+        handleNotificationReceived(parsed);
+    };
+
+    window.addEventListener('flutter-notification-click', handleFlutterClick);
+    return () => {
+      window.removeEventListener('flutter-notification-click', handleFlutterClick);
+      delete (window as any).triggerSellerNotification;
+    };
+  }, [handleNotificationReceived]);
 
   const toggleSidebar = () => {
     setIsSidebarOpen(!isSidebarOpen);

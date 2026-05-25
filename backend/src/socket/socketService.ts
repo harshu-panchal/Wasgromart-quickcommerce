@@ -2,9 +2,11 @@ import { Server as SocketIOServer } from 'socket.io';
 import { Server as HttpServer } from 'http';
 import jwt from 'jsonwebtoken';
 import { verifyToken } from '../services/jwtService';
-import { handleOrderAcceptance, handleOrderRejection } from '../services/orderNotificationService';
+import { handleOrderAcceptance, handleOrderRejection, getActiveNotificationsForDeliveryBoy } from '../services/orderNotificationService';
 import Order from '../models/Order';
+import OrderItem from '../models/OrderItem';
 import DeliveryTracking from '../models/DeliveryTracking';
+import mongoose from 'mongoose';
 import { createSupportMessage } from '../modules/chat/services/supportChatService';
 
 // In-memory cache for order destinations (lat, lng) to avoid DB reads on every update
@@ -298,7 +300,7 @@ export const initializeSocket = (httpServer: HttpServer) => {
         });
 
         // Seller joins their notification room
-        socket.on('join-seller-room', (sellerId: string) => {
+        socket.on('join-seller-room', async (sellerId: string) => {
             const normalizedSellerId = String(sellerId).trim();
             console.log(`🏪 Seller ${normalizedSellerId} joined notifications room`);
             socket.join(`seller-${normalizedSellerId}`);
@@ -308,6 +310,58 @@ export const initializeSocket = (httpServer: HttpServer) => {
                 message: 'Successfully joined seller notifications room',
                 sellerId: normalizedSellerId
             });
+
+            // Check for recent (last 15 mins) pending orders to resend missed notifications
+            try {
+                const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
+                const recentItems = await OrderItem.find({
+                    seller: new mongoose.Types.ObjectId(normalizedSellerId)
+                }).populate('order');
+                
+                const orderMap = new Map();
+                for (const item of recentItems) {
+                    const order = item.order as any;
+                    // Only resend for orders that are still Received/Pending and recent
+                    if (order && (order.status === 'Received' || order.status === 'Pending') && new Date(order.createdAt) > fifteenMinutesAgo) {
+                        const oid = order._id.toString();
+                        if (!orderMap.has(oid)) {
+                            orderMap.set(oid, { order, items: [] });
+                        }
+                        orderMap.get(oid).items.push(item);
+                    }
+                }
+
+                for (const [orderId, data] of orderMap.entries()) {
+                    const { order, items } = data;
+                    const notificationData = {
+                        type: 'NEW_ORDER',
+                        orderId: order._id,
+                        orderNumber: order.orderNumber,
+                        status: order.status,
+                        paymentStatus: order.paymentStatus,
+                        customer: {
+                            name: order.customerName,
+                            email: order.customerEmail,
+                            phone: order.customerPhone,
+                            address: order.deliveryAddress
+                        },
+                        items: items.map((item: any) => ({
+                            productName: item.productName,
+                            quantity: item.quantity,
+                            price: item.unitPrice,
+                            total: item.total,
+                            variation: item.variation
+                        })),
+                        totalAmount: items.reduce((acc: number, item: any) => acc + item.total, 0),
+                        timestamp: order.createdAt
+                    };
+                    
+                    console.log(`📤 Resending missed NEW_ORDER notification to seller ${normalizedSellerId} for order ${order.orderNumber}`);
+                    socket.emit('seller-notification', notificationData);
+                }
+            } catch (err) {
+                console.error('Error fetching missed orders for seller:', err);
+            }
         });
 
         // Delivery boy joins notification room
@@ -327,6 +381,15 @@ export const initializeSocket = (httpServer: HttpServer) => {
                 message: 'Successfully joined delivery notifications room',
                 deliveryBoyId: normalizedDeliveryBoyId
             });
+
+            // Check if there are any active notifications currently waiting for this delivery boy
+            const activeNotifications = getActiveNotificationsForDeliveryBoy(normalizedDeliveryBoyId);
+            if (activeNotifications.length > 0) {
+                console.log(`📤 Resending ${activeNotifications.length} active notification(s) to reconnecting delivery boy ${normalizedDeliveryBoyId}`);
+                for (const notif of activeNotifications) {
+                    socket.emit('new-order', notif);
+                }
+            }
         });
 
         // Handle order acceptance

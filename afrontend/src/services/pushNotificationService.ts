@@ -58,6 +58,19 @@ export function setupFlutterFCMBridge() {
   console.log('[FCM] Flutter bridge ready: window.onFlutterFCMToken');
 }
 
+/**
+ * Exposes window.onFlutterNotificationClick(payload) for Flutter WebView to call
+ * when a user taps a notification in the mobile app.
+ */
+export function setupFlutterNotificationClickBridge() {
+  (window as any).onFlutterNotificationClick = (payload: any) => {
+    console.log('[FCM] Received notification click from Flutter:', payload);
+    const event = new CustomEvent('flutter-notification-click', { detail: payload });
+    window.dispatchEvent(event);
+  };
+  console.log('[FCM] Flutter notification click bridge ready: window.onFlutterNotificationClick');
+}
+
 // ─── Service Worker ───────────────────────────────────────────────────────────
 
 /** Register SW once and cache the result. Subsequent calls return the cached registration. */
