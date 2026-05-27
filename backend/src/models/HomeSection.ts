@@ -73,7 +73,7 @@ const HomeSectionSchema = new Schema<IHomeSection>(
             type: Number,
             required: [true, "Item limit is required"],
             min: [1, "Minimum 1 item required"],
-            max: [50, "Maximum 50 items allowed"],
+            max: [200, "Maximum 200 items allowed"],
             default: 8,
         },
         order: {
