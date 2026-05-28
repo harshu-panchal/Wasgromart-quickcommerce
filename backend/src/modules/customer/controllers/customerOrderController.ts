@@ -344,7 +344,8 @@ export const createOrder = async (req: Request, res: Response) => {
             orderItemIds.push(newOrderItem._id as mongoose.Types.ObjectId);
         }
 
-        // Validate all sellers can deliver to user's location
+        // Validate all sellers can deliver to user's location & capture max distance for delivery boy commission
+        let maxSellerDistanceKm = 0;
         if (sellerIds.size > 0) {
             const uniqueSellerIds = Array.from(sellerIds).map(id => new mongoose.Types.ObjectId(id));
 
@@ -377,6 +378,10 @@ export const createOrder = async (req: Request, res: Response) => {
                         message: `Your delivery address is ${distance.toFixed(2)} km away from ${seller.storeName}. They only deliver within ${serviceRadius} km. Please select products from sellers in your area.`,
                     });
                 }
+
+                if (distance > maxSellerDistanceKm) {
+                    maxSellerDistanceKm = distance;
+                }
             }
         }
 
@@ -389,6 +394,7 @@ export const createOrder = async (req: Request, res: Response) => {
         newOrder.subtotal = Number(calculatedSubtotal.toFixed(2));
         newOrder.total = Number(finalTotal.toFixed(2));
         newOrder.items = orderItemIds;
+        newOrder.deliveryDistanceKm = Number(maxSellerDistanceKm.toFixed(2));
 
 
         if (session) {

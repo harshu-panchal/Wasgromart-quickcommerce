@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { asyncHandler } from "../../../utils/asyncHandler";
 import Delivery from "../../../models/Delivery";
 import Order from "../../../models/Order";
+import Commission from "../../../models/Commission";
 import mongoose from "mongoose";
 
 /**
@@ -125,11 +126,39 @@ export const getDashboardStats = asyncHandler(async (req: Request, res: Response
         totalDeliveredCount: 0
     };
 
-    // Calculate Earnings (Mock logic: 40 per delivery)
-    // You should replace this with real commission logic stored in DB
-    const COMMISSION_PER_ORDER = 40;
-    const todayEarning = result.todayDeliveredCount * COMMISSION_PER_ORDER;
-    const totalEarning = result.totalDeliveredCount * COMMISSION_PER_ORDER;
+    // Earnings — sum of actual delivery-boy commissions (paid), based on admin's Delivery Configuration
+    const earningStats = await Commission.aggregate([
+        {
+            $match: {
+                deliveryBoy: objectId,
+                type: "DELIVERY_BOY",
+                status: "Paid",
+            },
+        },
+        {
+            $group: {
+                _id: null,
+                totalEarning: { $sum: "$commissionAmount" },
+                todayEarning: {
+                    $sum: {
+                        $cond: [
+                            {
+                                $and: [
+                                    { $gte: ["$paidAt", todayStart] },
+                                    { $lte: ["$paidAt", todayEnd] },
+                                ],
+                            },
+                            "$commissionAmount",
+                            0,
+                        ],
+                    },
+                },
+            },
+        },
+    ]);
+
+    const todayEarning = Math.round(((earningStats[0]?.todayEarning) || 0) * 100) / 100;
+    const totalEarning = Math.round(((earningStats[0]?.totalEarning) || 0) * 100) / 100;
 
     // Fetch list of Pending Orders for the "Today's Pending Order" section
     const pendingOrdersList = await Order.find({

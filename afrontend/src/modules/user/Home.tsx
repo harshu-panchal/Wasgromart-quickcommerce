@@ -7,6 +7,7 @@ import LowestPricesEver from "./components/LowestPricesEver";
 import CategoryTileSection from "./components/CategoryTileSection";
 import FeaturedThisWeek from "./components/FeaturedThisWeek";
 import ProductCard from "./components/ProductCard";
+import HomeProductSection from "./components/HomeProductSection";
 import { getHomeContent } from "../../services/api/customerHomeService";
 import { getHeaderCategoriesPublic } from "../../services/api/headerCategoryService";
 import { useLocation } from "../../hooks/useLocation";
@@ -257,41 +258,15 @@ export default function Home() {
                     section.data &&
                     section.data.length > 0
                   ) {
-                    const gridClass =
-                      {
-                        2: "grid-cols-2",
-                        3: "grid-cols-3",
-                        4: "grid-cols-4",
-                        6: "grid-cols-6",
-                        8: "grid-cols-8",
-                      }[columnCount] || "grid-cols-4";
-
-                    const isCompact = columnCount >= 4;
-                    const gapClass = columnCount >= 4 ? "gap-2" : "gap-3 md:gap-4";
-
                     return (
-                      <div key={section.id} className="mt-6 mb-6 md:mt-8 md:mb-8">
-                        {section.title && (
-                          <h2 className="text-lg md:text-2xl font-semibold text-neutral-900 mb-3 md:mb-6 px-4 md:px-6 lg:px-8 tracking-tight capitalize">
-                            {section.title}
-                          </h2>
-                        )}
-                        <div className="px-4 md:px-6 lg:px-8">
-                          <div className={`grid ${gridClass} ${gapClass}`}>
-                            {section.data.map((product: any) => (
-                              <ProductCard
-                                key={product.id || product._id}
-                                product={product}
-                                categoryStyle={true}
-                                showBadge={true}
-                                showPackBadge={false}
-                                showStockInfo={false}
-                                compact={isCompact}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                      </div>
+                      <HomeProductSection
+                        key={section.id}
+                        title={section.title}
+                        products={section.data}
+                        columnCount={columnCount}
+                        initialCount={6}
+                        step={6}
+                      />
                     );
                   }
 

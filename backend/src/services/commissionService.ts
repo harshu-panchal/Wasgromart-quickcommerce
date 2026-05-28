@@ -193,49 +193,41 @@ export const calculateOrderCommissions = async (orderId: string) => {
             }),
         );
 
-        // Calculate delivery boy commission (on order subtotal OR distance based)
+        // Calculate delivery boy commission based on admin's Delivery Configuration:
+        //  - Distance-based mode: deliveryBoyKmRate * deliveryDistanceKm (0 if rate or distance is 0)
+        //  - Fixed-price mode:     order.shipping (whatever the customer paid for delivery)
         if (order.deliveryBoy) {
             const deliveryBoyId = order.deliveryBoy.toString();
 
-            // Check for distance based commission
             let commissionAmount = 0;
             let commissionRate = 0;
-            let usedDistanceBased = false;
+            let orderAmountRef = 0;
 
             try {
                 // @ts-ignore - getSettings is static on model
                 const settings = await AppSettings.getSettings();
-                if (
-                    settings &&
-                    settings.deliveryConfig?.isDistanceBased === true &&
-                    settings.deliveryConfig?.deliveryBoyKmRate &&
-                    order.deliveryDistanceKm &&
-                    order.deliveryDistanceKm > 0
-                ) {
-                    commissionRate = settings.deliveryConfig.deliveryBoyKmRate;
-                    commissionAmount = order.deliveryDistanceKm * commissionRate;
-                    usedDistanceBased = true;
-                    console.log(
-                        `DEBUG: Distance Commission: Dist=${order.deliveryDistanceKm}km, Rate=${commissionRate}/km, Amt=${commissionAmount}`,
-                    );
+                const isDistanceBased = settings?.deliveryConfig?.isDistanceBased === true;
+
+                if (isDistanceBased) {
+                    const kmRate = settings?.deliveryConfig?.deliveryBoyKmRate || 0;
+                    const distanceKm = order.deliveryDistanceKm || 0;
+                    commissionRate = kmRate;
+                    commissionAmount = kmRate * distanceKm;
+                    orderAmountRef = distanceKm;
+                } else {
+                    commissionAmount = order.shipping || 0;
+                    commissionRate = 100;
+                    orderAmountRef = order.shipping || 0;
                 }
             } catch (err) {
                 console.error("Error checking settings for commission:", err);
             }
 
-            if (!usedDistanceBased) {
-                // Fallback to percentage based logic
-                commissionRate = await getDeliveryBoyCommissionRate(deliveryBoyId);
-                commissionAmount = (order.subtotal * commissionRate) / 100;
-            }
-
             commissions.deliveryBoy = {
                 deliveryBoyId,
-                amount: Math.round(commissionAmount * 100) / 100, // Round to 2 decimals
+                amount: Math.round(commissionAmount * 100) / 100,
                 rate: commissionRate,
-                orderAmount: usedDistanceBased
-                    ? order.deliveryDistanceKm || 0
-                    : order.subtotal,
+                orderAmount: orderAmountRef,
             };
         }
 
@@ -422,45 +414,37 @@ export const distributeCommissions = async (orderId: string) => {
                     `Creating missing commission for Delivery Boy ${deliveryBoyId}`,
                 );
 
-                // Calculate Commission Logic
                 let commissionAmount = 0;
                 let commissionRate = 0;
-                let usedDistanceBased = false;
+                let orderAmountRef = 0;
 
                 try {
                     // @ts-ignore
                     const settings = await AppSettings.getSettings();
-                    if (
-                        settings &&
-                        settings.deliveryConfig?.isDistanceBased === true &&
-                        settings.deliveryConfig?.deliveryBoyKmRate &&
-                        order.deliveryDistanceKm &&
-                        order.deliveryDistanceKm > 0
-                    ) {
-                        commissionRate = settings.deliveryConfig.deliveryBoyKmRate;
-                        commissionAmount = order.deliveryDistanceKm * commissionRate;
-                        usedDistanceBased = true;
+                    const isDistanceBased = settings?.deliveryConfig?.isDistanceBased === true;
+
+                    if (isDistanceBased) {
+                        const kmRate = settings?.deliveryConfig?.deliveryBoyKmRate || 0;
+                        const distanceKm = order.deliveryDistanceKm || 0;
+                        commissionRate = kmRate;
+                        commissionAmount = kmRate * distanceKm;
+                        orderAmountRef = distanceKm;
+                    } else {
+                        commissionAmount = order.shipping || 0;
+                        commissionRate = 100;
+                        orderAmountRef = order.shipping || 0;
                     }
                 } catch (err) {
                     console.error("Error checking settings for commission:", err);
                 }
 
-                if (!usedDistanceBased) {
-                    // Fallback to percentage based logic
-                    commissionRate = await getDeliveryBoyCommissionRate(deliveryBoyId);
-                    commissionAmount = (order.subtotal * commissionRate) / 100;
-                }
-
-                // Create Commission Record
                 const newComm = await Commission.create(
                     [
                         {
                             order: order._id,
                             deliveryBoy: order.deliveryBoy,
                             type: "DELIVERY_BOY",
-                            orderAmount: usedDistanceBased
-                                ? order.deliveryDistanceKm || 0
-                                : order.subtotal,
+                            orderAmount: orderAmountRef,
                             commissionRate,
                             commissionAmount: Math.round(commissionAmount * 100) / 100,
                             status: "Paid",
@@ -854,31 +838,21 @@ export const calculateOrderBreakdown = async (
         // 2. Calculate Delivery Commission Split
         if (order.deliveryBoy) {
             const settings = await AppSettings.getSettings();
+            const isDistanceBased = settings?.deliveryConfig?.isDistanceBased === true;
 
-            // Check if distance-based delivery is enabled
-            if (
-                settings?.deliveryConfig?.isDistanceBased &&
-                settings.deliveryConfig.deliveryBoyKmRate &&
-                order.deliveryDistanceKm &&
-                order.deliveryDistanceKm > 0
-            ) {
-                // Distance-based calculation
-                const deliveryBoyKmRate = settings.deliveryConfig.deliveryBoyKmRate;
-                breakdown.deliveryBoyCommission = order.deliveryDistanceKm * deliveryBoyKmRate;
-
-                // Admin gets the rest of the delivery charge
-                breakdown.adminDeliveryCommission = breakdown.totalDeliveryCharge - breakdown.deliveryBoyCommission;
+            if (isDistanceBased) {
+                const deliveryBoyKmRate = settings?.deliveryConfig?.deliveryBoyKmRate || 0;
+                const distanceKm = order.deliveryDistanceKm || 0;
+                breakdown.deliveryBoyCommission = deliveryBoyKmRate * distanceKm;
             } else {
-                // Fallback: If no distance-based config, use percentage of order subtotal
-                const deliveryBoy = await Delivery.findById(order.deliveryBoy).session(session || null);
-                const deliveryBoyRate = deliveryBoy?.commissionRate || 5;
-
-                breakdown.deliveryBoyCommission = (order.subtotal * deliveryBoyRate) / 100;
-                breakdown.adminDeliveryCommission = Math.max(0, breakdown.totalDeliveryCharge);
+                breakdown.deliveryBoyCommission = breakdown.totalDeliveryCharge;
             }
 
+            breakdown.adminDeliveryCommission = Math.max(
+                0,
+                breakdown.totalDeliveryCharge - breakdown.deliveryBoyCommission,
+            );
         } else {
-            // No delivery boy assigned, all delivery charge goes to admin
             breakdown.adminDeliveryCommission = breakdown.totalDeliveryCharge;
         }
 
