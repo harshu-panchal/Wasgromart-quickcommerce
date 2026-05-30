@@ -6,6 +6,13 @@ export interface ApiResponse<T> {
   data: T;
 }
 
+export type ServiceAreaMode = 'radius' | 'polygon';
+
+export interface ServiceAreaPolygon {
+  type: 'Polygon';
+  coordinates: number[][][];
+}
+
 export interface Seller {
   _id: string;
   sellerName: string;
@@ -29,6 +36,8 @@ export interface Seller {
   latitude?: string;
   longitude?: string;
   serviceRadiusKm?: number;
+  serviceAreaMode?: ServiceAreaMode;
+  serviceArea?: ServiceAreaPolygon | null;
   accountName?: string;
   bankName?: string;
   branch?: string;

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useJsApiLoader } from '@react-google-maps/api';
 
 interface GoogleMapsAutocompleteProps {
@@ -11,7 +11,7 @@ interface GoogleMapsAutocompleteProps {
 }
 
 type Libraries = ("places" | "drawing" | "geometry" | "visualization")[];
-const libraries: Libraries = ['places'];
+const libraries: Libraries = ['places', 'geometry'];
 
 // Clean address by removing Plus Codes and unwanted identifiers
 const cleanAddress = (address: string): string => {
@@ -44,6 +44,14 @@ export default function GoogleMapsAutocomplete({
   const inputRef = useRef<HTMLInputElement>(null);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const autocompleteRef = useRef<any>(null);
+  // Keep the latest onChange in a ref so the place_changed listener can always
+  // call the freshest callback without us having to detach/re-attach it on every
+  // parent re-render (which previously wiped out the listener entirely).
+  const onChangeRef = useRef(onChange);
+  useEffect(() => {
+    onChangeRef.current = onChange;
+  }, [onChange]);
+
   const [error, setError] = useState<string>('');
   const [inputValue, setInputValue] = useState(value);
 
@@ -65,21 +73,15 @@ export default function GoogleMapsAutocomplete({
     }
   }, [loadError]);
 
-  const initializeAutocomplete = useCallback(() => {
+  // Initialize the Places Autocomplete ONCE per mount (after the script loads).
+  // The listener uses onChangeRef so it always invokes the latest onChange.
+  useEffect(() => {
+    if (!isLoaded) return;
     if (!inputRef.current || !window.google?.maps?.places) return;
-
-    // Clean up any existing autocomplete
-    if (autocompleteRef.current) {
-      try {
-        window.google.maps.event.clearInstanceListeners(autocompleteRef.current);
-      } catch (e) {
-        console.warn('Error clearing listeners:', e);
-      }
-    }
+    if (autocompleteRef.current) return;
 
     try {
       const places = window.google.maps.places as any;
-
       if (!places.Autocomplete) {
         setError('Google Maps Places Autocomplete not available');
         return;
@@ -96,15 +98,15 @@ export default function GoogleMapsAutocomplete({
       autocomplete.addListener('place_changed', () => {
         const place = autocomplete.getPlace();
 
-        if (!place.geometry || !place.geometry.location) {
+        if (!place || !place.geometry || !place.geometry.location) {
           setError('No location details found for this place');
           return;
         }
 
         const lat = place.geometry.location.lat();
         const lng = place.geometry.location.lng();
-        const rawAddress = place.formatted_address || place.name || inputRef.current?.value || '';
-        const address = cleanAddress(rawAddress);
+        const rawAddress = place.formatted_address || place.name || '';
+        const address = cleanAddress(rawAddress) || rawAddress;
         const placeName = place.name || address;
 
         let city = '';
@@ -114,30 +116,31 @@ export default function GoogleMapsAutocomplete({
         if (place.address_components) {
           for (const component of place.address_components) {
             const types = component.types;
-            if (types.includes("locality")) {
+            if (types.includes('locality')) {
               city = component.long_name;
-            } else if (types.includes("sublocality_level_1") && !city) {
+            } else if (types.includes('sublocality_level_1') && !city) {
               city = component.long_name;
-            } else if (types.includes("administrative_area_level_2") && !city) {
+            } else if (types.includes('administrative_area_level_2') && !city) {
               city = component.long_name;
-            } else if (types.includes("administrative_area_level_3") && !city) {
+            } else if (types.includes('administrative_area_level_3') && !city) {
               city = component.long_name;
-            } else if (types.includes("administrative_area_level_1")) {
+            } else if (types.includes('administrative_area_level_1')) {
               state = component.long_name;
-            } else if (types.includes("postal_code")) {
+            } else if (types.includes('postal_code')) {
               pincode = component.long_name;
             }
           }
         }
 
-        // Fallback for pincode from formatted address
         if (!pincode && place.formatted_address) {
           const match = place.formatted_address.match(/\b\d{6}\b/);
           if (match) pincode = match[0];
         }
 
+        // Reflect the chosen place in the input and the parent atomically.
         setInputValue(address);
-        onChange(address, lat, lng, placeName, { city, state, pincode });
+        if (inputRef.current) inputRef.current.value = address;
+        onChangeRef.current(address, lat, lng, placeName, { city, state, pincode });
         setError('');
       });
     } catch (err: unknown) {
@@ -145,23 +148,19 @@ export default function GoogleMapsAutocomplete({
       console.error('Autocomplete initialization error:', err);
       setError(`Failed to initialize autocomplete: ${errorMessage}`);
     }
-  }, [onChange]); // Removed 'value' from dependencies
-
-  useEffect(() => {
-    if (isLoaded && inputRef.current && !autocompleteRef.current) {
-      initializeAutocomplete();
-    }
 
     return () => {
-       if (autocompleteRef.current) {
+      // Only run on unmount - clean up the listeners we attached.
+      if (autocompleteRef.current) {
         try {
           window.google?.maps?.event?.clearInstanceListeners?.(autocompleteRef.current);
         } catch {
-           // Ignore
+          // ignore
         }
-       }
-    }
-  }, [isLoaded, initializeAutocomplete]);
+        autocompleteRef.current = null;
+      }
+    };
+  }, [isLoaded]);
 
   return (
     <div className="w-full">
@@ -170,17 +169,24 @@ export default function GoogleMapsAutocomplete({
         type="text"
         value={inputValue}
         onChange={(e) => {
-          setInputValue(e.target.value);
-          // When typing manually, only update the address/searchLocation string.
-          // Do NOT trigger coordinate updates (passed as undefined) so the parent can keep existing ones.
+          const next = e.target.value;
+          setInputValue(next);
+          // When typing manually, only update the search string. Pass undefined
+          // for lat/lng so the parent keeps the previously selected coordinates
+          // until a new place is picked from the dropdown.
           // @ts-ignore - passing undefined for lat/lng to signal no change
-          onChange(e.target.value, undefined, undefined, e.target.value);
+          onChangeRef.current(next, undefined, undefined, next);
         }}
         placeholder={placeholder}
         className={`w-full px-3 py-2 border border-neutral-300 rounded-lg placeholder:text-neutral-400 focus:outline-none focus:border-orange-500 bg-white ${className}`}
         disabled={disabled || !isLoaded}
         required={required}
         autoComplete="off"
+        // Pressing Enter in this field would otherwise submit the parent form
+        // before the user has a chance to click a suggestion. Suppress that.
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') e.preventDefault();
+        }}
       />
       {error && (
         <p className="mt-1 text-xs text-red-600">{error}</p>

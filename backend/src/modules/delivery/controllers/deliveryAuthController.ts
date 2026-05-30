@@ -6,7 +6,8 @@ import {
 } from "../../../services/otpService";
 import { generateToken } from "../../../services/jwtService";
 import { asyncHandler } from "../../../utils/asyncHandler";
-// import { uploadDocument } from "../../../services/uploadService"; // File does not exist
+import { uploadDocumentFromBuffer } from "../../../services/cloudinaryService";
+import { CLOUDINARY_FOLDERS } from "../../../config/cloudinary";
 
 /**
  * Send SMS OTP to delivery mobile number
@@ -104,6 +105,31 @@ export const verifySmsOtp = asyncHandler(async (req: Request, res: Response) => 
         status: delivery.status,
       },
     },
+  });
+});
+
+/**
+ * Upload a delivery signup document before the delivery partner has a JWT.
+ */
+export const uploadSignupDocument = asyncHandler(async (req: Request, res: Response) => {
+  const file = (req as any).file;
+
+  if (!file) {
+    return res.status(400).json({
+      success: false,
+      message: "No document file provided",
+    });
+  }
+
+  const isImage = file.mimetype.startsWith("image/");
+  const result = await uploadDocumentFromBuffer(file.buffer, {
+    folder: CLOUDINARY_FOLDERS.DELIVERY_DOCUMENTS,
+    resourceType: isImage ? "image" : "raw",
+  });
+
+  return res.status(200).json({
+    success: true,
+    data: result,
   });
 });
 

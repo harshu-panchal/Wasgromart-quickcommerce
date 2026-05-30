@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
-import { getAllSellers, updateSellerStatus, deleteSeller, Seller as SellerType, updateSeller } from '../../../services/api/sellerService';
+import { getAllSellers, getSellerById, updateSellerStatus, deleteSeller, Seller as SellerType, updateSeller, ServiceAreaPolygon } from '../../../services/api/sellerService';
 import SellerServiceMap from '../components/SellerServiceMap';
 import GoogleMapsAutocomplete from '../../../components/GoogleMapsAutocomplete';
 import LocationPickerMap from '../../../components/LocationPickerMap';
+import ServiceAreaPolygonEditor, { GeoPolygon } from '../../../components/ServiceAreaPolygonEditor';
+
+type ServiceAreaMode = 'radius' | 'polygon';
 
 interface Seller {
     _id: string;
@@ -31,6 +34,8 @@ interface Seller {
     latitude?: string;
     longitude?: string;
     serviceRadiusKm?: number;
+    serviceAreaMode?: ServiceAreaMode;
+    serviceArea?: ServiceAreaPolygon | null;
     accountName?: string;
     bankName?: string;
     branch?: string;
@@ -45,6 +50,32 @@ interface Seller {
 
 // Helper function to convert backend seller to frontend format
 const mapSellerToFrontend = (seller: SellerType): Seller => {
+    // Coordinates can arrive either as separate latitude/longitude fields
+    // (legacy / synthesised) or only inside `location.coordinates` (GeoJSON
+    // Point: [lng, lat]). Normalise to string so existing callers that do
+    // parseFloat(...) keep working.
+    const locationCoords = (seller as any)?.location?.coordinates;
+    const latitudeStr =
+        seller.latitude ??
+        (Array.isArray(locationCoords) && locationCoords.length === 2
+            ? String(locationCoords[1])
+            : undefined);
+    const longitudeStr =
+        seller.longitude ??
+        (Array.isArray(locationCoords) && locationCoords.length === 2
+            ? String(locationCoords[0])
+            : undefined);
+
+    // serviceRadiusKm sometimes arrives as a string from the API; coerce it
+    // so consumers can rely on Number.isFinite checks.
+    const rawRadius: any = seller.serviceRadiusKm;
+    const radiusNumber =
+        typeof rawRadius === 'number'
+            ? rawRadius
+            : rawRadius != null && rawRadius !== ''
+            ? Number(rawRadius)
+            : undefined;
+
     return {
         _id: seller._id,
         id: parseInt(seller._id.slice(-6), 16) || 0, // Generate a numeric ID from MongoDB _id
@@ -68,9 +99,11 @@ const mapSellerToFrontend = (seller: SellerType): Seller => {
         taxName: seller.taxName,
         taxNumber: seller.taxNumber,
         searchLocation: seller.searchLocation,
-        latitude: seller.latitude,
-        longitude: seller.longitude,
-        serviceRadiusKm: seller.serviceRadiusKm,
+        latitude: latitudeStr,
+        longitude: longitudeStr,
+        serviceRadiusKm: Number.isFinite(radiusNumber) ? (radiusNumber as number) : undefined,
+        serviceAreaMode: (seller.serviceAreaMode === 'polygon' ? 'polygon' : 'radius') as ServiceAreaMode,
+        serviceArea: seller.serviceArea && seller.serviceArea.type === 'Polygon' ? seller.serviceArea : null,
         accountName: seller.accountName,
         bankName: seller.bankName,
         branch: seller.branch,
@@ -118,6 +151,9 @@ export default function AdminManageSellerList() {
         lng: '',
         searchLocation: ''
     });
+    const [serviceAreaMode, setServiceAreaMode] = useState<ServiceAreaMode>('radius');
+    const [serviceArea, setServiceArea] = useState<GeoPolygon | null>(null);
+    const [isUpdatingServiceArea, setIsUpdatingServiceArea] = useState(false);
 
     // Fetch sellers from backend
     useEffect(() => {
@@ -245,20 +281,86 @@ export default function AdminManageSellerList() {
         document.body.removeChild(link);
     };
 
-    const handleEdit = (id: number | string) => {
+    const applySellerToEditState = (seller: Seller) => {
+        setEditingSeller(seller);
+        setNewRadius(
+            Number.isFinite(seller.serviceRadiusKm as number) && (seller.serviceRadiusKm as number) > 0
+                ? (seller.serviceRadiusKm as number)
+                : 10
+        );
+        setTempLocation({
+            address: seller.address || '',
+            lat: seller.latitude || '',
+            lng: seller.longitude || '',
+            searchLocation: seller.searchLocation || ''
+        });
+        setServiceAreaMode(seller.serviceAreaMode === 'polygon' ? 'polygon' : 'radius');
+        setServiceArea(
+            seller.serviceArea && seller.serviceArea.type === 'Polygon'
+                ? (seller.serviceArea as GeoPolygon)
+                : null
+        );
+    };
+
+    const handleEdit = async (id: number | string) => {
         const sellerId = typeof id === 'number' ? sellers.find(s => s.id === id)?._id : id;
         const seller = sellers.find(s => s._id === sellerId);
-        if (seller) {
-            setEditingSeller(seller);
-            setNewRadius(seller.serviceRadiusKm || 10);
-            setTempLocation({
-                address: seller.address || '',
-                lat: seller.latitude || '',
-                lng: seller.longitude || '',
-                searchLocation: seller.searchLocation || ''
-            });
-            setIsLocationEditMode(false);
-            setIsEditModalOpen(true);
+        if (!seller) return;
+
+        // Optimistically open with cached data so the modal is responsive.
+        applySellerToEditState(seller);
+        setIsLocationEditMode(false);
+        setIsEditModalOpen(true);
+
+        // Refresh from the server so location coords + service-area data
+        // are guaranteed to reflect what's currently saved (the list endpoint
+        // sometimes omits these heavier fields).
+        try {
+            const fresh = await getSellerById(seller._id);
+            if (fresh.success && fresh.data) {
+                const mapped = mapSellerToFrontend(fresh.data);
+                applySellerToEditState(mapped);
+                setSellers(prev =>
+                    prev.map(s => (s._id === mapped._id ? { ...s, ...mapped } : s))
+                );
+            }
+        } catch (err) {
+            console.warn('Could not refresh seller details, using cached row.', err);
+        }
+    };
+
+    const handleUpdateServiceArea = async () => {
+        if (!editingSeller) return;
+        if (serviceAreaMode === 'polygon' && (!serviceArea || serviceArea.coordinates?.[0]?.length < 4)) {
+            setError('Draw a service area with at least 3 points before saving');
+            setTimeout(() => setError(''), 3000);
+            return;
+        }
+
+        try {
+            setIsUpdatingServiceArea(true);
+            const payload: Partial<SellerType> = {
+                serviceAreaMode,
+                serviceArea: serviceAreaMode === 'polygon' ? serviceArea : null,
+            };
+            const response = await updateSeller(editingSeller._id, payload);
+            if (response.success) {
+                const updated = {
+                    ...editingSeller,
+                    serviceAreaMode,
+                    serviceArea: serviceAreaMode === 'polygon' ? serviceArea : null,
+                };
+                setEditingSeller(updated);
+                setSellers(sellers.map(s => s._id === editingSeller._id ? updated : s));
+                setSuccessMessage('Service area updated successfully');
+                setTimeout(() => setSuccessMessage(''), 3000);
+            }
+        } catch (err: any) {
+            console.error('Error updating service area:', err);
+            setError(err?.response?.data?.message || 'Failed to update service area');
+            setTimeout(() => setError(''), 3000);
+        } finally {
+            setIsUpdatingServiceArea(false);
         }
     };
 
@@ -1025,43 +1127,98 @@ export default function AdminManageSellerList() {
 
                                 {/* Service Area Map */}
                                 <div className="bg-neutral-50 rounded-lg p-4">
-                                    <h4 className="text-sm font-semibold text-neutral-700 mb-3">Service Area Visualization</h4>
+                                    <h4 className="text-sm font-semibold text-neutral-700 mb-3">Service Area</h4>
                                     {editingSeller.latitude && editingSeller.longitude ? (
                                         <div className="space-y-4">
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
-                                                <div>
-                                                    <label className="text-xs text-neutral-500 mb-1 block">Service Radius (km)</label>
-                                                    <div className="flex gap-2">
-                                                        <input
-                                                            type="number"
-                                                            min="0.1"
-                                                            max="100"
-                                                            step="0.1"
-                                                            value={newRadius}
-                                                            onChange={(e) => setNewRadius(parseFloat(e.target.value))}
-                                                            className="w-full px-3 py-2 border border-neutral-300 rounded text-sm focus:ring-teal-500 focus:border-teal-500"
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs font-medium text-neutral-600">Mode:</span>
+                                                <div className="inline-flex rounded-md border border-neutral-300 bg-white overflow-hidden">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setServiceAreaMode('radius')}
+                                                        className={`px-3 py-1 text-xs font-medium transition-colors ${serviceAreaMode === 'radius' ? 'bg-teal-600 text-white' : 'bg-white text-neutral-600 hover:bg-neutral-50'}`}
+                                                    >
+                                                        Radius
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setServiceAreaMode('polygon')}
+                                                        className={`px-3 py-1 text-xs font-medium border-l border-neutral-300 transition-colors ${serviceAreaMode === 'polygon' ? 'bg-teal-600 text-white' : 'bg-white text-neutral-600 hover:bg-neutral-50'}`}
+                                                    >
+                                                        Polygon
+                                                    </button>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleUpdateServiceArea}
+                                                    disabled={isUpdatingServiceArea}
+                                                    className="ml-auto px-3 py-1 text-xs bg-teal-700 text-white rounded hover:bg-teal-800 disabled:opacity-50"
+                                                >
+                                                    {isUpdatingServiceArea ? 'Saving mode...' : 'Save Service Area Mode'}
+                                                </button>
+                                            </div>
+
+                                            {serviceAreaMode === 'radius' ? (
+                                                <>
+                                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                                                        <div>
+                                                            <label className="text-xs text-neutral-500 mb-1 block">Service Radius (km)</label>
+                                                            <div className="flex gap-2">
+                                                                <input
+                                                                    type="number"
+                                                                    min="0.1"
+                                                                    max="100"
+                                                                    step="0.1"
+                                                                    value={newRadius}
+                                                                    onChange={(e) => setNewRadius(parseFloat(e.target.value))}
+                                                                    className="w-full px-3 py-2 border border-neutral-300 rounded text-sm focus:ring-teal-500 focus:border-teal-500"
+                                                                />
+                                                                <button
+                                                                    onClick={handleUpdateRadius}
+                                                                    disabled={isUpdatingRadius || newRadius === editingSeller.serviceRadiusKm}
+                                                                    className="px-4 py-2 bg-teal-600 text-white rounded text-sm font-medium hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                                                                >
+                                                                    {isUpdatingRadius ? 'Updating...' : 'Update Radius'}
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div className="h-[300px] w-full">
+                                                        <SellerServiceMap
+                                                            latitude={parseFloat(editingSeller.latitude || '')}
+                                                            longitude={parseFloat(editingSeller.longitude || '')}
+                                                            radiusKm={newRadius}
+                                                            storeName={editingSeller.storeName}
+                                                            serviceAreaMode={serviceAreaMode}
+                                                            serviceArea={null}
                                                         />
+                                                    </div>
+                                                    <p className="text-xs text-neutral-500 italic">
+                                                        Adjust the radius above to see the service area change dynamically.
+                                                    </p>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <ServiceAreaPolygonEditor
+                                                        value={serviceArea}
+                                                        center={{
+                                                            lat: parseFloat(editingSeller.latitude),
+                                                            lng: parseFloat(editingSeller.longitude),
+                                                        }}
+                                                        onChange={setServiceArea}
+                                                    />
+                                                    <div className="flex justify-end">
                                                         <button
-                                                            onClick={handleUpdateRadius}
-                                                            disabled={isUpdatingRadius || newRadius === editingSeller.serviceRadiusKm}
-                                                            className="px-4 py-2 bg-teal-600 text-white rounded text-sm font-medium hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                                                            type="button"
+                                                            onClick={handleUpdateServiceArea}
+                                                            disabled={isUpdatingServiceArea}
+                                                            className="px-4 py-2 bg-teal-600 text-white rounded text-sm font-medium hover:bg-teal-700 disabled:opacity-50"
                                                         >
-                                                            {isUpdatingRadius ? 'Updating...' : 'Update Radius'}
+                                                            {isUpdatingServiceArea ? 'Saving...' : 'Save Polygon'}
                                                         </button>
                                                     </div>
-                                                </div>
-                                            </div>
-                                            <div className="h-[300px] w-full">
-                                                <SellerServiceMap
-                                                    latitude={parseFloat(editingSeller.latitude)}
-                                                    longitude={parseFloat(editingSeller.longitude)}
-                                                    radiusKm={newRadius}
-                                                    storeName={editingSeller.storeName}
-                                                />
-                                            </div>
-                                            <p className="text-xs text-neutral-500 italic">
-                                                * Adjust the radius above to see the service area change dynamically.
-                                            </p>
+                                                </>
+                                            )}
                                         </div>
                                     ) : (
                                         <div className="p-8 text-center border-2 border-dashed border-neutral-200 rounded-lg">

@@ -1,42 +1,15 @@
-import { useEffect, useState, useRef } from 'react'
-// @ts-ignore - react-leaflet types may not be available
-import { MapContainer, TileLayer, Marker, Popup, Polyline } from 'react-leaflet'
-// @ts-ignore - leaflet types may not be available
-import L from 'leaflet'
-import 'leaflet/dist/leaflet.css'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import {
+  GoogleMap,
+  Marker,
+  Polyline,
+  InfoWindow,
+  useJsApiLoader,
+} from '@react-google-maps/api'
 import { motion } from 'framer-motion'
 
-// Fix for default markers in React-Leaflet
-delete (L.Icon.Default.prototype as any)._getIconUrl
-L.Icon.Default.mergeOptions({
-    iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-    iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-    shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-})
-
-// Custom delivery partner icon
-const deliveryIcon = new L.DivIcon({
-    html: `<div style="font-size: 32px; text-align: center;">🛵</div>`,
-    className: 'delivery-marker',
-    iconSize: [40, 40],
-    iconAnchor: [20, 20]
-})
-
-// Store icon
-const storeIcon = new L.DivIcon({
-    html: `<div style="font-size: 32px; text-align: center;">🏪</div>`,
-    className: 'store-marker',
-    iconSize: [40, 40],
-    iconAnchor: [20, 20]
-})
-
-// Customer icon
-const customerIcon = new L.DivIcon({
-    html: `<div style="font-size: 32px; text-align: center;">📍</div>`,
-    className: 'customer-marker',
-    iconSize: [40, 40],
-    iconAnchor: [20, 40]
-})
+type Libraries = ('places' | 'drawing' | 'geometry' | 'visualization')[]
+const libraries: Libraries = ['places', 'geometry']
 
 interface Location {
     lat: number
@@ -50,33 +23,65 @@ interface LiveTrackingMapProps {
     isTracking: boolean
 }
 
+const containerStyle = { width: '100%', height: '100%' }
+
+const emojiIcon = (emoji: string, size = 40) => ({
+    url: `data:image/svg+xml,${encodeURIComponent(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><text x="4" y="${Math.round(size * 0.8)}" font-size="${Math.round(size * 0.8)}">${emoji}</text></svg>`
+    )}`,
+    scaledSize: window.google?.maps?.Size ? new window.google.maps.Size(size, size) : undefined,
+    anchor: window.google?.maps?.Point ? new window.google.maps.Point(size / 2, size / 2) : undefined,
+} as google.maps.Icon)
+
 export default function LiveTrackingMap({
     storeLocation,
     customerLocation,
     deliveryLocation,
-    isTracking = false
+    isTracking = false,
 }: LiveTrackingMapProps) {
-    const [isFullscreen, setIsFullscreen] = useState(false)
+    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''
+    const { isLoaded, loadError } = useJsApiLoader({
+        id: 'google-map-script',
+        googleMapsApiKey: apiKey,
+        libraries,
+    })
+
     const mapContainerRef = useRef<HTMLDivElement>(null)
+    const mapRef = useRef<google.maps.Map | null>(null)
+    const [isFullscreen, setIsFullscreen] = useState(false)
+    const [openInfo, setOpenInfo] = useState<'store' | 'customer' | 'delivery' | null>(null)
 
-    // Calculate center point between store and customer
-    const defaultCenter: Location = {
-        lat: (storeLocation.lat + customerLocation.lat) / 2,
-        lng: (storeLocation.lng + customerLocation.lng) / 2
-    }
+    const defaultCenter = useMemo<Location>(
+        () => ({
+            lat: (storeLocation.lat + customerLocation.lat) / 2,
+            lng: (storeLocation.lng + customerLocation.lng) / 2,
+        }),
+        [storeLocation.lat, storeLocation.lng, customerLocation.lat, customerLocation.lng]
+    )
 
-    // Create route between store and customer (or delivery partner)
-    const routePoints: Array<[number, number]> = [
-        [storeLocation.lat, storeLocation.lng] as [number, number],
-        ...(deliveryLocation ? [[deliveryLocation.lat, deliveryLocation.lng] as [number, number]] : []),
-        [customerLocation.lat, customerLocation.lng] as [number, number]
-    ]
+    const routePoints = useMemo<Location[]>(() => {
+        return [
+            storeLocation,
+            ...(deliveryLocation ? [deliveryLocation] : []),
+            customerLocation,
+        ]
+    }, [storeLocation, customerLocation, deliveryLocation])
+
+    // Fit bounds whenever the route points change so all markers stay visible.
+    useEffect(() => {
+        if (!isLoaded || !mapRef.current || !window.google?.maps) return
+        const bounds = new window.google.maps.LatLngBounds()
+        routePoints.forEach((p) => bounds.extend(p))
+        if (!bounds.isEmpty()) {
+            mapRef.current.fitBounds(bounds, 48)
+        }
+    }, [isLoaded, routePoints])
 
     const handleFullscreen = () => {
         if (!document.fullscreenElement && mapContainerRef.current) {
             mapContainerRef.current.requestFullscreen()
             setIsFullscreen(true)
-        } else {
+        } else if (document.fullscreenElement) {
             document.exitFullscreen()
             setIsFullscreen(false)
         }
@@ -90,68 +95,124 @@ export default function LiveTrackingMap({
         return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
     }, [])
 
+    if (loadError) {
+        return (
+            <div className="relative h-64 overflow-hidden rounded-lg bg-red-50 border border-red-200 flex items-center justify-center text-sm text-red-700 p-4 text-center">
+                Failed to load Google Maps. Check the API key configuration.
+            </div>
+        )
+    }
+
+    if (!apiKey) {
+        return (
+            <div className="relative h-64 overflow-hidden rounded-lg bg-amber-50 border border-amber-200 flex items-center justify-center text-sm text-amber-800 p-4 text-center">
+                Set <code className="mx-1 px-1 rounded bg-amber-100">VITE_GOOGLE_MAPS_API_KEY</code> to load the map.
+            </div>
+        )
+    }
+
+    if (!isLoaded) {
+        return (
+            <div className="relative h-64 overflow-hidden rounded-lg bg-neutral-50 border border-neutral-200 flex items-center justify-center text-sm text-neutral-500">
+                Loading map...
+            </div>
+        )
+    }
+
     return (
         <div ref={mapContainerRef} className="relative h-64 overflow-hidden rounded-lg">
-            <MapContainer
-                center={[defaultCenter.lat, defaultCenter.lng]}
+            <GoogleMap
+                mapContainerStyle={containerStyle}
+                center={defaultCenter}
                 zoom={13}
-                style={{ height: '100%', width: '100%' }}
-                className="z-0"
+                onLoad={(m) => {
+                    mapRef.current = m
+                }}
+                onUnmount={() => {
+                    mapRef.current = null
+                }}
+                options={{
+                    streetViewControl: false,
+                    mapTypeControl: false,
+                    fullscreenControl: false,
+                    zoomControl: true,
+                    gestureHandling: 'greedy',
+                    clickableIcons: false,
+                }}
             >
-                <TileLayer
-                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-                />
-
-                {/* Store Marker */}
-                <Marker position={[storeLocation.lat, storeLocation.lng]} icon={storeIcon}>
-                    <Popup>
-                        <div className="text-center">
-                            <p className="font-semibold">Store Location</p>
-                            <p className="text-xs text-gray-600">Pickup point</p>
-                        </div>
-                    </Popup>
-                </Marker>
-
-                {/* Customer Marker */}
-                <Marker position={[customerLocation.lat, customerLocation.lng]} icon={customerIcon}>
-                    <Popup>
-                        <div className="text-center">
-                            <p className="font-semibold">Delivery Address</p>
-                            <p className="text-xs text-gray-600">Your location</p>
-                        </div>
-                    </Popup>
-                </Marker>
-
-                {/* Delivery Partner Marker (if tracking) */}
-                {deliveryLocation && (
-                    <Marker position={[deliveryLocation.lat, deliveryLocation.lng]} icon={deliveryIcon}>
-                        <Popup>
-                            <div className="text-center">
-                                <p className="font-semibold">Delivery Partner</p>
-                                <p className="text-xs text-gray-600">
-                                    {isTracking ? 'On the way' : 'Location'}
-                                </p>
+                <Marker
+                    position={storeLocation}
+                    icon={emojiIcon('🏪', 40)}
+                    onClick={() => setOpenInfo('store')}
+                    title="Store Location"
+                >
+                    {openInfo === 'store' && (
+                        <InfoWindow onCloseClick={() => setOpenInfo(null)}>
+                            <div className="text-center text-xs">
+                                <p className="font-semibold text-sm">Store Location</p>
+                                <p className="text-gray-600">Pickup point</p>
                             </div>
-                        </Popup>
+                        </InfoWindow>
+                    )}
+                </Marker>
+
+                <Marker
+                    position={customerLocation}
+                    icon={emojiIcon('📍', 40)}
+                    onClick={() => setOpenInfo('customer')}
+                    title="Delivery Address"
+                >
+                    {openInfo === 'customer' && (
+                        <InfoWindow onCloseClick={() => setOpenInfo(null)}>
+                            <div className="text-center text-xs">
+                                <p className="font-semibold text-sm">Delivery Address</p>
+                                <p className="text-gray-600">Your location</p>
+                            </div>
+                        </InfoWindow>
+                    )}
+                </Marker>
+
+                {deliveryLocation && (
+                    <Marker
+                        position={deliveryLocation}
+                        icon={emojiIcon('🛵', 40)}
+                        onClick={() => setOpenInfo('delivery')}
+                        title="Delivery Partner"
+                    >
+                        {openInfo === 'delivery' && (
+                            <InfoWindow onCloseClick={() => setOpenInfo(null)}>
+                                <div className="text-center text-xs">
+                                    <p className="font-semibold text-sm">Delivery Partner</p>
+                                    <p className="text-gray-600">{isTracking ? 'On the way' : 'Location'}</p>
+                                </div>
+                            </InfoWindow>
+                        )}
                     </Marker>
                 )}
 
-                {/* Route Polyline */}
                 <Polyline
-                    positions={routePoints}
-                    pathOptions={{
-                        color: '#16a34a',
-                        weight: 4,
-                        opacity: 0.7,
-                        dashArray: '10, 10'
+                    path={routePoints}
+                    options={{
+                        strokeColor: '#16a34a',
+                        strokeWeight: 4,
+                        strokeOpacity: 0.7,
+                        geodesic: true,
+                        icons: [
+                            {
+                                icon: {
+                                    path: 'M 0,-1 0,1',
+                                    strokeOpacity: 1,
+                                    scale: 4,
+                                },
+                                offset: '0',
+                                repeat: '20px',
+                            },
+                        ],
                     }}
                 />
-            </MapContainer>
+            </GoogleMap>
 
-            {/* Map Controls */}
             <div className="absolute top-3 right-3 z-10 flex flex-col gap-2">
-                {/* Fullscreen Button */}
                 <motion.button
                     className="w-10 h-10 bg-white rounded-lg shadow-lg flex items-center justify-center hover:bg-gray-50"
                     whileHover={{ scale: 1.05 }}
@@ -164,7 +225,6 @@ export default function LiveTrackingMap({
                 </motion.button>
             </div>
 
-            {/* Tracking Status Indicator */}
             {isTracking && (
                 <div className="absolute bottom-3 left-3 z-10 bg-white px-3 py-2 rounded-lg shadow-lg flex items-center gap-2">
                     <motion.div
@@ -174,6 +234,9 @@ export default function LiveTrackingMap({
                     />
                     <span className="text-sm font-medium text-gray-900">Live Tracking</span>
                 </div>
+            )}
+            {isFullscreen && (
+                <span className="sr-only">Fullscreen</span>
             )}
         </div>
     )

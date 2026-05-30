@@ -6,6 +6,7 @@ import {
 } from "../../../services/otpService";
 import { generateToken } from "../../../services/jwtService";
 import { asyncHandler } from "../../../utils/asyncHandler";
+import { validateServiceArea } from "../../../utils/serviceAreaValidator";
 
 /**
  * Send OTP to seller mobile number
@@ -200,6 +201,14 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
     coordinates: [longitude, latitude],
   } : undefined;
 
+  const serviceAreaResult = validateServiceArea(req.body);
+  if ("message" in serviceAreaResult) {
+    return res.status(400).json({
+      success: false,
+      message: serviceAreaResult.message,
+    });
+  }
+
   // Create new seller with GeoJSON location (password not required during signup)
   const seller = await Seller.create({
     sellerName,
@@ -217,6 +226,8 @@ export const register = asyncHandler(async (req: Request, res: Response) => {
     longitude: req.body.longitude,
     location, // GeoJSON location for geospatial queries
     serviceRadiusKm, // Service radius in kilometers
+    serviceAreaMode: serviceAreaResult.mode || 'radius',
+    ...(serviceAreaResult.area ? { serviceArea: serviceAreaResult.area } : {}),
     status: "Pending",
     requireProductApproval: false,
     viewCustomerDetails: false,
@@ -321,6 +332,26 @@ export const updateProfile = asyncHandler(async (req: Request, res: Response) =>
   } else if (updates.serviceRadiusKm === '' || updates.serviceRadiusKm === null) {
     // If empty string or null is sent, remove it from updates to keep existing value
     delete updates.serviceRadiusKm;
+  }
+
+  const serviceAreaResult = validateServiceArea(updates);
+  if ("message" in serviceAreaResult) {
+    return res.status(400).json({
+      success: false,
+      message: serviceAreaResult.message,
+    });
+  }
+  if (serviceAreaResult.mode !== undefined) {
+    updates.serviceAreaMode = serviceAreaResult.mode;
+  }
+  if (serviceAreaResult.area === null) {
+    delete updates.serviceArea;
+    (updates as any).$unset = { ...(updates.$unset || {}), serviceArea: "" };
+  } else if (serviceAreaResult.area !== undefined) {
+    updates.serviceArea = serviceAreaResult.area;
+  } else {
+    // No serviceArea key provided -> do not touch the existing field
+    delete updates.serviceArea;
   }
 
   const seller = await Seller.findByIdAndUpdate(sellerId, updates, {

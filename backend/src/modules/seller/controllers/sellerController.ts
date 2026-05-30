@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import Seller from "../../../models/Seller";
 import { asyncHandler } from "../../../utils/asyncHandler";
+import { validateServiceArea } from "../../../utils/serviceAreaValidator";
 
 /**
  * Get all sellers (Admin only)
@@ -148,6 +149,26 @@ export const updateSeller = asyncHandler(
     ) {
       // If empty string or null is sent, remove it from updates to keep existing value
       delete updateData.serviceRadiusKm;
+    }
+
+    const serviceAreaResult = validateServiceArea(updateData);
+    if ("message" in serviceAreaResult) {
+      return res.status(400).json({
+        success: false,
+        message: serviceAreaResult.message,
+      });
+    }
+    if (serviceAreaResult.mode !== undefined) {
+      updateData.serviceAreaMode = serviceAreaResult.mode;
+    }
+    if (serviceAreaResult.area === null) {
+      delete updateData.serviceArea;
+      (updateData as any).$unset = { ...(updateData.$unset || {}), serviceArea: "" };
+    } else if (serviceAreaResult.area !== undefined) {
+      updateData.serviceArea = serviceAreaResult.area;
+    } else {
+      // No serviceArea key provided -> do not touch the existing field
+      delete updateData.serviceArea;
     }
 
     const seller = await Seller.findByIdAndUpdate(id, updateData, {

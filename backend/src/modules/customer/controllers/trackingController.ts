@@ -332,31 +332,45 @@ export const getSellersInRadius = asyncHandler(
       });
     }
 
-    // Use aggregation to find sellers whose radius covers the current point
-    // 1. Get all sellers with locations
-    // 2. Filter by distance <= serviceRadiusKm
+    // $geoNear computes the distance from the delivery boy to every seller's
+    // point (used for display). The final $match accepts the seller in two
+    // cases: polygon mode where the seller's `serviceArea` actually contains
+    // the delivery boy's point, or radius mode where distance <= radius.
+    const point = { type: "Point" as const, coordinates: [lng, lat] as [number, number] };
+
     const sellersInRange = await Seller.aggregate([
       {
         $geoNear: {
-          near: { type: "Point", coordinates: [lng, lat] },
+          near: point,
           distanceField: "distanceFromDeliveryBoy", // in meters
           spherical: true,
           key: "location",
-          // We can't filter by a field's value in $geoNear directly for maxDistance
-          // so we'll filter in the next stage
         },
       },
       {
         $addFields: {
-          // serviceRadiusKm is in kilometers, distanceFromDeliveryBoy is in meters
           radiusInMeters: { $multiply: ["$serviceRadiusKm", 1000] },
         },
       },
       {
         $match: {
-          $expr: {
-            $lte: ["$distanceFromDeliveryBoy", "$radiusInMeters"],
-          },
+          $or: [
+            {
+              serviceAreaMode: "polygon",
+              serviceArea: { $geoIntersects: { $geometry: point } },
+            },
+            {
+              $and: [
+                {
+                  $or: [
+                    { serviceAreaMode: "radius" },
+                    { serviceAreaMode: { $exists: false } },
+                  ],
+                },
+                { $expr: { $lte: ["$distanceFromDeliveryBoy", "$radiusInMeters"] } },
+              ],
+            },
+          ],
         },
       },
       {
@@ -365,6 +379,7 @@ export const getSellersInRadius = asyncHandler(
           storeName: 1,
           address: 1,
           serviceRadiusKm: 1,
+          serviceAreaMode: 1,
           distanceFromDeliveryBoy: 1,
         },
       },

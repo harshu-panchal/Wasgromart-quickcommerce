@@ -26,7 +26,8 @@ export default function GoogleMapsLocationPicker({
 
     const { isLoaded, loadError } = useJsApiLoader({
         id: 'google-map-script',
-        googleMapsApiKey: apiKey || ''
+        googleMapsApiKey: apiKey || '',
+        libraries: ['places', 'geometry'] as any,
     });
 
     // Update center when initial props change significantly

@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import {
   getAllSellers,
   Seller as SellerType,
+  ServiceAreaPolygon,
+  ServiceAreaMode,
 } from "../../../services/api/sellerService";
 import SellerServiceMap from "../components/SellerServiceMap";
 
@@ -17,6 +19,8 @@ interface Seller {
   latitude?: string;
   longitude?: string;
   serviceRadiusKm?: number;
+  serviceAreaMode?: ServiceAreaMode;
+  serviceArea?: ServiceAreaPolygon | null;
   status: "Approved" | "Pending" | "Rejected";
 }
 
@@ -47,6 +51,8 @@ export default function AdminSellerLocation() {
               latitude: seller.latitude,
               longitude: seller.longitude,
               serviceRadiusKm: seller.serviceRadiusKm,
+              serviceAreaMode: seller.serviceAreaMode,
+              serviceArea: seller.serviceArea,
               status: seller.status || "Pending",
             })
           );
@@ -173,6 +179,8 @@ export default function AdminSellerLocation() {
                 longitude={parseFloat(selectedSeller.longitude)}
                 radiusKm={selectedSeller.serviceRadiusKm || 10}
                 storeName={selectedSeller.storeName}
+                serviceAreaMode={selectedSeller.serviceAreaMode}
+                serviceArea={selectedSeller.serviceArea}
               />
             ) : (
               <div className="flex flex-col items-center justify-center h-full bg-neutral-50 text-neutral-500">

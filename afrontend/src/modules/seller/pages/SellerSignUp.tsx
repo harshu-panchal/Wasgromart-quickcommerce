@@ -48,7 +48,7 @@ export default function SellerSignUp() {
   const { isLoaded } = useJsApiLoader({
     id: "google-map-script",
     googleMapsApiKey: import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "",
-    libraries: ["places"] as any,
+    libraries: ["places", "geometry"] as any,
   });
   const [formData, setFormData] = useState<SellerSignUpFormData>(() => {
     const saved = localStorage.getItem("seller_signup_draft");

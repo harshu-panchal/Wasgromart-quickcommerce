@@ -43,6 +43,13 @@ export interface ISeller extends Document {
   };
   // Service radius in kilometers
   serviceRadiusKm?: number;
+  // Service area mode: which geometry should be used for customer-facing range filtering
+  serviceAreaMode?: 'radius' | 'polygon';
+  // GeoJSON polygon describing the seller's manually-drawn service area
+  serviceArea?: {
+    type: 'Polygon';
+    coordinates: number[][][]; // [[[lng, lat], ...]]
+  };
 
   // Payment Details
   accountName?: string;
@@ -225,6 +232,22 @@ const SellerSchema = new Schema<ISeller>(
       min: [0.1, 'Service radius must be at least 0.1 km'],
       max: [100, 'Service radius cannot exceed 100 km'],
     },
+    // Service area mode: which geometry the customer feed uses for this seller
+    serviceAreaMode: {
+      type: String,
+      enum: ['radius', 'polygon'],
+      default: 'radius',
+    },
+    // GeoJSON polygon for the manually-drawn service area
+    serviceArea: {
+      type: {
+        type: String,
+        enum: ['Polygon'],
+      },
+      coordinates: {
+        type: [[[Number]]], // [[[lng, lat], ...]]
+      },
+    },
 
     // Payment Details
     accountName: {
@@ -335,12 +358,35 @@ const SellerSchema = new Schema<ISeller>(
   }
 );
 
-// Clean up incomplete/invalid location objects before validation to prevent Mongoose/MongoDB errors
+// Returns true when the value is a structurally valid single-ring GeoJSON Polygon.
+// Used to scrub malformed serviceArea objects before validation/save so that the
+// 2dsphere index never sees garbage that would throw at insert/update time.
+function isValidGeoPolygon(area: any): boolean {
+  if (!area || area.type !== 'Polygon') return false;
+  const coords = area.coordinates;
+  if (!Array.isArray(coords) || coords.length < 1) return false;
+  const ring = coords[0];
+  if (!Array.isArray(ring) || ring.length < 4) return false;
+  for (const point of ring) {
+    if (!Array.isArray(point) || point.length !== 2) return false;
+    const [lng, lat] = point;
+    if (typeof lng !== 'number' || typeof lat !== 'number') return false;
+    if (lng < -180 || lng > 180 || lat < -90 || lat > 90) return false;
+  }
+  const first = ring[0];
+  const last = ring[ring.length - 1];
+  return first[0] === last[0] && first[1] === last[1];
+}
+
+// Clean up incomplete/invalid location/serviceArea objects before validation to prevent Mongoose/MongoDB errors
 SellerSchema.pre('validate', function (next) {
   if (this.location) {
     if (!this.location.coordinates || !Array.isArray(this.location.coordinates) || this.location.coordinates.length !== 2) {
       this.location = undefined;
     }
+  }
+  if (this.serviceArea && !isValidGeoPolygon(this.serviceArea)) {
+    this.serviceArea = undefined;
   }
   next();
 });
@@ -367,6 +413,10 @@ SellerSchema.pre('save', async function (next) {
     }
   }
 
+  if (this.serviceArea && !isValidGeoPolygon(this.serviceArea)) {
+    this.serviceArea = undefined;
+  }
+
   // Skip password hashing if password is not provided or not modified
   if (!this.isModified('password') || !this.password) {
     return next();
@@ -390,6 +440,7 @@ SellerSchema.methods.comparePassword = async function (
 
 // Create geospatial index on location field for efficient queries
 SellerSchema.index({ location: '2dsphere' });
+SellerSchema.index({ serviceArea: '2dsphere' });
 SellerSchema.index({ status: 1 }); // Compound index for status + location queries
 
 const Seller = mongoose.model<ISeller>('Seller', SellerSchema);

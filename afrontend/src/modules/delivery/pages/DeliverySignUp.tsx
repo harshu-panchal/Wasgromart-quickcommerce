@@ -5,7 +5,7 @@ import {
   sendOTP,
   verifyOTP,
 } from "../../../services/api/auth/deliveryAuthService";
-import { uploadDocument } from "../../../services/api/uploadService";
+import { uploadDeliverySignupDocument } from "../../../services/api/uploadService";
 import { validateDocumentFile } from "../../../utils/imageUpload";
 import OTPInput from "../../../components/OTPInput";
 import { useAuth } from "../../../context/AuthContext";
@@ -275,18 +275,12 @@ export default function DeliverySignUp() {
         setUploadingDocs(true);
 
         if (drivingLicenseFile) {
-          const drivingLicenseResult = await uploadDocument(
-            drivingLicenseFile,
-            "wasgro-mart/delivery/documents"
-          );
+          const drivingLicenseResult = await uploadDeliverySignupDocument(drivingLicenseFile);
           drivingLicenseUrl = drivingLicenseResult.secureUrl;
         }
 
         if (nationalIdentityCardFile) {
-          const nationalIdResult = await uploadDocument(
-            nationalIdentityCardFile,
-            "wasgro-mart/delivery/documents"
-          );
+          const nationalIdResult = await uploadDeliverySignupDocument(nationalIdentityCardFile);
           nationalIdentityCardUrl = nationalIdResult.secureUrl;
         }
 
@@ -329,6 +323,7 @@ export default function DeliverySignUp() {
       setError(err.message || "Registration failed. Please try again.");
     } finally {
       setLoading(false);
+      setUploadingDocs(false);
     }
   };
 

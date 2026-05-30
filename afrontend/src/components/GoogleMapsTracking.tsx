@@ -92,7 +92,8 @@ export default function GoogleMapsTracking({
 
     const { isLoaded, loadError } = useJsApiLoader({
         id: 'google-map-script',
-        googleMapsApiKey: apiKey || ''
+        googleMapsApiKey: apiKey || '',
+        libraries: ['places', 'geometry'] as any,
     })
 
     // Combine storeLocation with sellerLocations

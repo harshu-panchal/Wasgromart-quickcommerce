@@ -1,5 +1,12 @@
 import api, { setAuthToken, removeAuthToken } from '../config';
 
+export type ServiceAreaMode = 'radius' | 'polygon';
+
+export interface ServiceAreaPolygon {
+  type: 'Polygon';
+  coordinates: number[][][];
+}
+
 export interface SendOTPResponse {
   success: boolean;
   message: string;
@@ -40,6 +47,8 @@ export interface RegisterData {
   latitude?: string;
   longitude?: string;
   serviceRadiusKm?: string | number;
+  serviceAreaMode?: ServiceAreaMode;
+  serviceArea?: ServiceAreaPolygon | null;
   panCard?: string;
   taxName?: string;
   taxNumber?: string;
