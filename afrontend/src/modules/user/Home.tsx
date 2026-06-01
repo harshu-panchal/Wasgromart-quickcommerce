@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import HomeHero from "./components/HomeHero";
 import HomeBannerCarousel from "./components/HomeBannerCarousel";
-import PromoStrip from "./components/PromoStrip";
+import PromoSection from "./components/PromoSection";
 import LowestPricesEver from "./components/LowestPricesEver";
 import CategoryTileSection from "./components/CategoryTileSection";
 import FeaturedThisWeek from "./components/FeaturedThisWeek";
@@ -69,7 +69,7 @@ export default function Home() {
 
     fetchData();
 
-    // Preload PromoStrip data for all header categories in the background
+    // Preload PromoSection data for all header categories in the background
     // This ensures instant loading when users switch tabs
     const preloadHeaderCategories = async () => {
       try {
@@ -179,6 +179,9 @@ export default function Home() {
         activeTab={activeTab}
         products={homeData.lowestPrices}
       />
+
+      {/* Promo Section (sale banner, featured products and category cards for the active header category) */}
+      <PromoSection activeTab={activeTab} />
 
       {/* Main content */}
       <div

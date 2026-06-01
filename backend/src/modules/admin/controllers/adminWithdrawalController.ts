@@ -206,7 +206,7 @@ export const completeWithdrawal = async (req: Request, res: Response) => {
         // For now, assuming debitWallet is a helper we might need to create or import.
         // If it doesn't exist, I'll add a TODO or inline the logic if I can find it.
         // Actually, in the source code it imported `debitWallet` from `walletManagementService`.
-        // I should check if that service exists in Kosil or if I need to create it.
+        // I should check if that service exists in wasgromart or if I need to create it.
 
         // Inline logic for now to be safe as I didn't check for that service yet:
         let debitSuccess = false;

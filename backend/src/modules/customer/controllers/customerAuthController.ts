@@ -79,7 +79,7 @@ export const verifySmsOtp = asyncHandler(async (req: Request, res: Response) => 
     customer = await Customer.create({
       phone: mobile,
       name: "User",
-      email: `${mobile}@kosil.temp`,
+      email: `${mobile}@wasgromart.temp`,
       status: "Active",
       walletAmount: 0,
       totalOrders: 0,

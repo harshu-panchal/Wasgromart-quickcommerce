@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo, useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import ProductCard from './components/ProductCard';
 import { getProducts } from '../../services/api/customerProductService';
@@ -17,34 +17,89 @@ export default function Search() {
   const [loading, setLoading] = useState(false);
   const [contentLoading, setContentLoading] = useState(true);
 
-  // Fetch products based on search query
-  useEffect(() => {
-    const fetchProducts = async () => {
-      if (!searchQuery.trim()) {
-        setSearchResults([]);
-        return;
-      }
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [totalProducts, setTotalProducts] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const observerTarget = useRef<HTMLDivElement>(null);
 
+  // Reset pagination when search query or location changes
+  useEffect(() => {
+    if (searchQuery.trim()) {
+      setSearchResults([]);
+      setPage(1);
+      setHasMore(true);
+      setTotalProducts(0);
+    }
+  }, [searchQuery, location?.latitude, location?.longitude]);
+
+  // Fetch products based on search query
+  const fetchProducts = useCallback(async (pageNum: number) => {
+    if (!searchQuery.trim()) {
+      return;
+    }
+
+    if (pageNum === 1) {
       setLoading(true);
-      try {
-        const params: any = { search: searchQuery };
-        // Include user location for seller service radius filtering
-        if (location?.latitude && location?.longitude) {
-          params.latitude = location.latitude;
-          params.longitude = location.longitude;
+    } else {
+      setLoadingMore(true);
+    }
+    try {
+      const params: any = { search: searchQuery, page: pageNum, limit: 20 };
+      // Include user location for seller service radius filtering
+      if (location?.latitude && location?.longitude) {
+        params.latitude = location.latitude;
+        params.longitude = location.longitude;
+      }
+      const response = await getProducts(params);
+      const newProducts = response.data as unknown as Product[];
+      
+      if (pageNum === 1) {
+        setSearchResults(newProducts);
+      } else {
+        setSearchResults(prev => [...prev, ...newProducts]);
+      }
+      
+      setTotalProducts(response.pagination?.total || 0);
+      setHasMore(newProducts.length === 20 && (pageNum * 20 < (response.pagination?.total || 0)));
+    } catch (error) {
+      console.error('Error searching products:', error);
+      if (pageNum === 1) setSearchResults([]);
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  }, [searchQuery, location?.latitude, location?.longitude]);
+
+  useEffect(() => {
+    if (searchQuery.trim()) {
+      fetchProducts(page);
+    }
+  }, [fetchProducts, page]);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !loading && !loadingMore) {
+          setPage(prev => prev + 1);
         }
-        const response = await getProducts(params);
-        setSearchResults(response.data as unknown as Product[]);
-      } catch (error) {
-        console.error('Error searching products:', error);
-        setSearchResults([]);
-      } finally {
-        setLoading(false);
+      },
+      { threshold: 0.1, rootMargin: '400px' }
+    );
+
+    const currentTarget = observerTarget.current;
+    if (currentTarget) {
+      observer.observe(currentTarget);
+    }
+
+    return () => {
+      if (currentTarget) {
+        observer.unobserve(currentTarget);
       }
     };
+  }, [hasMore, loading, loadingMore]);
 
-    fetchProducts();
-  }, [searchQuery, location]);
+
 
   // Fetch trending/home content for initial view
   useEffect(() => {
@@ -78,25 +133,36 @@ export default function Search() {
       {searchQuery.trim() && (
         <div className="px-4 md:px-6 lg:px-8 py-4 md:py-6">
           <h2 className="text-lg md:text-2xl font-semibold text-neutral-900 mb-3 md:mb-6">
-            Search Results {searchResults.length > 0 && `(${searchResults.length})`}
+            Search Results {totalProducts > 0 && `(${totalProducts})`}
           </h2>
           {loading ? (
             <div className="flex justify-center py-12">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
             </div>
           ) : searchResults.length > 0 ? (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 md:gap-4">
-              {searchResults.map((product) => (
-                <ProductCard
-                  key={product.id}
-                  product={product}
-                  categoryStyle={true}
-                  showBadge={true}
-                  showPackBadge={false}
-                  showStockInfo={true}
-                />
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 md:gap-4">
+                {searchResults.map((product, index) => (
+                  <ProductCard
+                    key={`${product.id}-${index}`}
+                    product={product}
+                    categoryStyle={true}
+                    showBadge={true}
+                    showPackBadge={false}
+                    showStockInfo={true}
+                  />
+                ))}
+              </div>
+              
+              {/* Invisible element to trigger loading more */}
+              <div ref={observerTarget} className="h-4 mt-4 w-full" />
+              
+              {loadingMore && (
+                <div className="flex justify-center py-6">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-600"></div>
+                </div>
+              )}
+            </>
           ) : (
             <div className="text-center py-12 md:py-16 text-neutral-500">
               <p className="text-lg md:text-xl mb-2">No products found</p>

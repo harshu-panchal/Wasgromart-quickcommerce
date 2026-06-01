@@ -13,8 +13,8 @@ export const getAppSettings = asyncHandler(
     // Create default settings if none exist
     if (!settings) {
       settings = await AppSettings.create({
-        appName: "Kosil",
-        contactEmail: "contact@kosil.com",
+        appName: "wasgromart",
+        contactEmail: "contact@wasgromart.com",
         contactPhone: "1234567890",
       });
     }
@@ -130,8 +130,8 @@ export const updateSMSGatewaySettings = asyncHandler(
 
     if (!settings) {
       settings = await AppSettings.create({
-        appName: "Kosil",
-        contactEmail: "contact@kosil.com",
+        appName: "wasgromart",
+        contactEmail: "contact@wasgromart.com",
         contactPhone: "1234567890",
         smsGateway,
       });

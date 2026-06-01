@@ -230,7 +230,7 @@ export const getHelpSupport = asyncHandler(async (_req: Request, res: Response) 
 
     const contactOptions = [
         { label: 'Call Support', value: '+91 7846940429', icon: 'phone' },
-        { label: 'Email Support', value: 'support@kosil.com', icon: 'email' },
+        { label: 'Email Support', value: 'support@wasgromart.com', icon: 'email' },
         { label: 'Live Chat', value: 'Available 24/7', icon: 'chat' },
     ];
 

@@ -197,6 +197,7 @@ export default function AdminOrderDetail() {
               <table className="w-full">
                 <thead>
                   <tr className="border-b">
+                    <th className="text-left py-2 px-2 w-16">Image</th>
                     <th className="text-left py-2 px-2">Product</th>
                     <th className="text-right py-2 px-2">Price</th>
                     <th className="text-right py-2 px-2">Qty</th>
@@ -209,6 +210,24 @@ export default function AdminOrderDetail() {
                     const seller = typeof item.seller === 'object' ? item.seller : null;
                     return (
                       <tr key={item._id || index} className="border-b">
+                        <td className="py-3 px-2">
+                          {product?.mainImage ? (
+                            <div className="w-12 h-12 rounded overflow-hidden bg-neutral-100 border border-neutral-200 flex-shrink-0">
+                              <img 
+                                src={product.mainImage} 
+                                alt={item.productName || product?.productName || 'Product'} 
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).src = 'https://via.placeholder.com/48?text=No+Image';
+                                }}
+                              />
+                            </div>
+                          ) : (
+                            <div className="w-12 h-12 rounded bg-neutral-100 border border-neutral-200 flex items-center justify-center text-neutral-400 text-xs">
+                              No Img
+                            </div>
+                          )}
+                        </td>
                         <td className="py-3 px-2">
                           <div>
                             <div className="font-medium">{item.productName || product?.productName || 'N/A'}</div>

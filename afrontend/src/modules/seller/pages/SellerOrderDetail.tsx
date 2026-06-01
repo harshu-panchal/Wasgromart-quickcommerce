@@ -600,6 +600,9 @@ export default function SellerOrderDetail() {
                   <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-700 uppercase tracking-wider">
                     Sr. No.
                   </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-700 uppercase tracking-wider w-16">
+                    Image
+                  </th>
                   <th className="px-4 py-3 text-left text-xs font-semibold text-neutral-700 uppercase tracking-wider">
                     Product
                   </th>
@@ -616,6 +619,24 @@ export default function SellerOrderDetail() {
                   <tr key={item.srNo}>
                     <td className="px-4 py-3 text-sm text-neutral-900">
                       {item.srNo}
+                    </td>
+                    <td className="px-4 py-3">
+                      {item.image ? (
+                        <div className="w-12 h-12 rounded overflow-hidden bg-neutral-100 border border-neutral-200 flex-shrink-0">
+                          <img 
+                            src={item.image} 
+                            alt={item.product} 
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).src = 'https://via.placeholder.com/48?text=No+Image';
+                            }}
+                          />
+                        </div>
+                      ) : (
+                        <div className="w-12 h-12 rounded bg-neutral-100 border border-neutral-200 flex items-center justify-center text-neutral-400 text-xs">
+                          No Img
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-sm text-neutral-900">
                       {item.product}

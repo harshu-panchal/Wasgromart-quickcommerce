@@ -114,7 +114,7 @@ export async function sendPushNotification(tokens: string[], payload: PushNotifi
                     body: String(payload.body),
                     icon: '/favicon.ico',
                     badge: '/favicon.ico',
-                    tag: payload.data?.type || 'kosil-general',
+                    tag: payload.data?.type || 'wasgromart-general',
                     data: messageData,
                     requireInteraction: true,
                 },

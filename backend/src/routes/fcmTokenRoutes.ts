@@ -217,7 +217,7 @@ router.post("/save", authenticate, async (req: Request, res: Response) => {
       try {
         const pushResponse: any = await sendPushNotification([token], {
           title: "Login Successful",
-          body: "Welcome back to Kosil! You have successfully logged in.",
+          body: "Welcome back to wasgromart! You have successfully logged in.",
           data: {
             type: "login_success",
             link: "/",

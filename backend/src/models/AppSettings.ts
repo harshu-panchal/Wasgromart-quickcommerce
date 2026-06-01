@@ -127,7 +127,7 @@ const AppSettingsSchema = new Schema<IAppSettings>(
     appName: {
       type: String,
       required: [true, "App name is required"],
-      default: "Kosil",
+      default: "Wasgromart",
       trim: true,
     },
     appLogo: {
@@ -402,15 +402,15 @@ AppSettingsSchema.statics.getSettings = async function (this: mongoose.Model<IAp
   let settings = await this.findOne();
   if (!settings) {
     settings = await this.create({
-      appName: "Kosil",
-      contactEmail: "contact@kosil.com",
+      appName: "Wasgromart",
+      contactEmail: "contact@wasgromart.com",
       contactPhone: "1234567890",
     });
   }
   return settings;
 };
 
-// Indexes
+// Indexes 
 AppSettingsSchema.index({ appName: 1 });
 
 const AppSettings = mongoose.model<IAppSettings, IAppSettingsModel>(

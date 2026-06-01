@@ -1,5 +1,5 @@
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import ProductCard from "./components/ProductCard";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -28,6 +28,12 @@ export default function CategoryPage() {
   const [categoryLoading, setCategoryLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [backendMessage, setBackendMessage] = useState<string | null>(null);
+
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const [totalProducts, setTotalProducts] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const observerTarget = useRef<HTMLDivElement>(null);
 
   // Fetch Category Details
   useEffect(() => {
@@ -80,56 +86,93 @@ export default function CategoryPage() {
     }
   }, [id, searchParams]);
 
-  // Fetch Products when category or subcategory changes
+  // Reset pagination when category or subcategory changes
   useEffect(() => {
-    const fetchProducts = async () => {
+    setProducts([]);
+    setPage(1);
+    setHasMore(true);
+    setTotalProducts(0);
+  }, [id, selectedSubcategory, category?._id, userLocation?.latitude, userLocation?.longitude]);
+
+  // Fetch Products
+  const fetchProducts = useCallback(async (pageNum: number) => {
+    if (pageNum === 1) {
       setLoading(true);
       setError(null);
       setBackendMessage(null);
-      try {
-        // If the ID in the URL is actually for a subcategory, we should use the parent category ID
-        // which we fetch in the other useEffect and store in 'category'.
-        // However, for fetching products, the backend getProducts handles 'category' (parent)
-        // and 'subcategory' separately.
-
-        const params: any = { category: category?._id || id };
-        if (selectedSubcategory !== "all") {
-          params.subcategory = selectedSubcategory;
-        }
-        // Include user location for seller service radius filtering
-        if (userLocation?.latitude && userLocation?.longitude) {
-          params.latitude = userLocation.latitude;
-          params.longitude = userLocation.longitude;
-        }
-
-        const response = await getProducts(params);
-        if (response.success) {
-          // Ensure products have default tags/name array for filtering logic if missing
-          const safeProducts = (response.data || []).map((p: any) => ({
-            ...p,
-            tags: Array.isArray(p.tags) ? p.tags : [],
-            nameParts: p.name ? p.name.toLowerCase().split(" ") : [],
-          }));
-          setProducts(safeProducts);
-          
-          if (safeProducts.length === 0 && response.message) {
-            setBackendMessage(response.message);
-          }
-        } else {
-          setError(response.message || "Failed to fetch products for this category.");
-        }
-      } catch (error) {
-        console.error("Error fetching products:", error);
-        setError("Network error while loading products.");
-      } finally {
-        setLoading(false);
+    } else {
+      setLoadingMore(true);
+    }
+    
+    try {
+      const params: any = { category: category?._id || id, page: pageNum, limit: 20 };
+      if (selectedSubcategory !== "all") {
+        params.subcategory = selectedSubcategory;
       }
-    };
+      if (userLocation?.latitude && userLocation?.longitude) {
+        params.latitude = userLocation.latitude;
+        params.longitude = userLocation.longitude;
+      }
 
-    if (id) {
-      fetchProducts();
+      const response = await getProducts(params);
+      if (response.success) {
+        const safeProducts = (response.data || []).map((p: any) => ({
+          ...p,
+          tags: Array.isArray(p.tags) ? p.tags : [],
+          nameParts: p.name ? p.name.toLowerCase().split(" ") : [],
+        }));
+        
+        if (pageNum === 1) {
+          setProducts(safeProducts);
+        } else {
+          setProducts(prev => [...prev, ...safeProducts]);
+        }
+        
+        setTotalProducts(response.pagination?.total || 0);
+        setHasMore(safeProducts.length === 20 && (pageNum * 20 < (response.pagination?.total || 0)));
+        
+        if (safeProducts.length === 0 && response.message && pageNum === 1) {
+          setBackendMessage(response.message);
+        }
+      } else {
+        if (pageNum === 1) setError(response.message || "Failed to fetch products for this category.");
+      }
+    } catch (error) {
+      console.error("Error fetching products:", error);
+      if (pageNum === 1) setError("Network error while loading products.");
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
     }
   }, [id, selectedSubcategory, category?._id, userLocation]);
+
+  useEffect(() => {
+    if (id) {
+      fetchProducts(page);
+    }
+  }, [fetchProducts, page, id]);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !loading && !loadingMore) {
+          setPage(prev => prev + 1);
+        }
+      },
+      { threshold: 0.1, rootMargin: '400px' }
+    );
+
+    const currentTarget = observerTarget.current;
+    if (currentTarget) {
+      observer.observe(currentTarget);
+    }
+
+    return () => {
+      if (currentTarget) {
+        observer.unobserve(currentTarget);
+      }
+    };
+  }, [hasMore, loading, loadingMore]);
 
   // Client-side filtering removed in favor of backend subcategory filtering
   const categoryProducts = products;
@@ -378,7 +421,7 @@ export default function CategoryPage() {
                   </svg>
                 </button>
                 <h1 className="text-base md:text-xl font-bold text-neutral-900">
-                  {category?.name}
+                  {category?.name} {totalProducts > 0 && `(${totalProducts})`}
                 </h1>
               </div>
               {/* Logo - top right */}
@@ -480,9 +523,9 @@ export default function CategoryPage() {
           {categoryProducts.length > 0 ? (
             <div className="px-3 md:px-6 lg:px-8 py-4 md:py-6">
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2 md:gap-4">
-                {categoryProducts.map((product) => (
+                {categoryProducts.map((product, index) => (
                   <ProductCard
-                    key={product.id}
+                    key={`${product.id}-${index}`}
                     product={product}
                     showHeartIcon={false}
                     showStockInfo={false}
@@ -492,6 +535,15 @@ export default function CategoryPage() {
                   />
                 ))}
               </div>
+              
+              {/* Invisible element to trigger loading more */}
+              <div ref={observerTarget} className="h-4 mt-4 w-full" />
+              
+              {loadingMore && (
+                <div className="flex justify-center py-6">
+                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-green-600"></div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="px-4 md:px-6 lg:px-8 py-8 md:py-12 text-center flex flex-col items-center justify-center min-h-[40vh]">

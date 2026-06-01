@@ -2,7 +2,7 @@ import Admin from "../models/Admin";
 
 const DEFAULT_ADMIN_MOBILE = process.env.DEFAULT_ADMIN_MOBILE || "9876543210";
 const DEFAULT_ADMIN_EMAIL =
-  process.env.DEFAULT_ADMIN_EMAIL || "admin@kosil.com";
+  process.env.DEFAULT_ADMIN_EMAIL || "admin@wasgromart.com";
 const DEFAULT_ADMIN_PASSWORD =
   process.env.DEFAULT_ADMIN_PASSWORD || "Admin@123";
 const DEFAULT_ADMIN_FIRST = process.env.DEFAULT_ADMIN_FIRST || "Default";
@@ -12,7 +12,7 @@ const DEFAULT_ADMIN_ROLE = process.env.DEFAULT_ADMIN_ROLE || "Super Admin";
 /**
  * Ensure a default admin user exists for quick access to the admin panel.
  * Mobile: 9876543210 (default)
- * Email: admin@kosil.com (default)
+ * Email: admin@wasgromart.com (default)
  * Password: Admin@123 (not used for OTP login but stored for completeness)
  */
 export async function ensureDefaultAdmin() {
