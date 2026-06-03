@@ -3,7 +3,7 @@ import {
   useNavigate,
   useLocation as useRouterLocation,
 } from "react-router-dom";
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 // import { products } from '../../data/products'; // REMOVED
 // import { categories } from '../../data/categories'; // REMOVED
@@ -68,21 +68,12 @@ export default function ProductDetail() {
           // Set location availability flag
           setIsAvailableAtLocation(productData.isAvailableAtLocation !== false);
 
-          // Get all images (main + gallery)
-          const allImages = [
-            productData.mainImage || productData.imageUrl || "",
-            ...(productData.galleryImages ||
-              productData.galleryImageUrls ||
-              []),
-          ].filter(Boolean);
-
           setProduct({
             ...productData,
             // Ensure all critical fields have safe defaults
             id: productData._id || productData.id,
             name: productData.productName || productData.name || "Product",
             imageUrl: productData.mainImage || productData.imageUrl || "",
-            allImages: allImages,
             price: productData.price || 0,
             mrp: productData.mrp || productData.price || 0,
             pack:
@@ -157,9 +148,37 @@ export default function ProductDetail() {
     selectedVariant?.status !== "Sold out" &&
     (variantStock > 0 || variantStock === 0); // 0 means unlimited
 
-  // Get all images for gallery
-  const allImages =
-    product?.allImages || [product?.imageUrl || ""].filter(Boolean);
+  // Get all images for gallery — prefer the selected variant's own images,
+  // fall back to product-level images, then to the imageUrl/legacy fields.
+  const allImages = useMemo(() => {
+    const variantMain = selectedVariant?.mainImage;
+    const variantGallery = (selectedVariant?.galleryImages || []).filter(Boolean);
+
+    if (variantMain || variantGallery.length > 0) {
+      return [variantMain, ...variantGallery].filter(Boolean) as string[];
+    }
+
+    return [
+      product?.mainImage || product?.imageUrl || "",
+      ...((product?.galleryImages as string[] | undefined) ||
+        (product?.galleryImageUrls as string[] | undefined) ||
+        []),
+    ].filter(Boolean) as string[];
+  }, [
+    selectedVariant?.mainImage,
+    selectedVariant?.galleryImages,
+    product?.mainImage,
+    product?.imageUrl,
+    product?.galleryImages,
+    product?.galleryImageUrls,
+  ]);
+
+  // Reset the selected image when the variant changes so the carousel
+  // doesn't stay on an out-of-range index from the previous variant.
+  useEffect(() => {
+    setSelectedImageIndex(0);
+  }, [selectedVariantIndex, allImages.length]);
+
   const currentImage = allImages[selectedImageIndex] || product?.imageUrl || "";
 
   // Minimum swipe distance (in pixels)

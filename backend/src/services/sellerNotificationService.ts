@@ -49,6 +49,7 @@ export async function notifySellersOfOrderUpdate(
                 },
                 items: sellerSpecificItems.map((item: any) => ({
                     productName: item.productName,
+                    productImage: item.productImage,
                     quantity: item.quantity,
                     price: item.unitPrice,
                     total: item.total,

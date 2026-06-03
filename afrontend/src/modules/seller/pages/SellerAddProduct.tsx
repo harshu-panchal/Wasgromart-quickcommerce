@@ -42,7 +42,15 @@ export default function SellerAddProduct() {
   const [brands, setBrands] = useState<Brand[]>([]);
   const [taxes, setTaxes] = useState<Tax[]>([]);
   const [shops, setShops] = useState<Shop[]>([]);
-  const [variations, setVariations] = useState<ProductVariation[]>([]);
+  // Variations include a few frontend-only fields (prefixed with _) for tracking
+  // pending file uploads + previews. They're stripped before the API call.
+  type VariationDraft = ProductVariation & {
+    _mainImageFile?: File | null;
+    _mainImagePreview?: string;
+    _galleryImageFiles?: File[];
+    _galleryImagePreviews?: string[];
+  };
+  const [variations, setVariations] = useState<VariationDraft[]>([]);
 
   // Image states
   const [mainImageFile, setMainImageFile] = useState<File | null>(null);
@@ -423,6 +431,114 @@ export default function SellerAddProduct() {
     setVariations((prev) => prev.filter((_, i) => i !== index));
   };
 
+  // ---------- Per-variant image helpers ----------
+  const updateVariationAtIndex = (
+    index: number,
+    patch: Partial<VariationDraft>
+  ) => {
+    setVariations((prev) =>
+      prev.map((v, i) => (i === index ? { ...v, ...patch } : v))
+    );
+  };
+
+  const handleVariantMainImageChange = async (
+    index: number,
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validation = validateImageFile(file);
+    if (!validation.valid) {
+      setUploadError(validation.error || "Invalid variant main image");
+      return;
+    }
+
+    try {
+      const preview = await createImagePreview(file);
+      updateVariationAtIndex(index, {
+        _mainImageFile: file,
+        _mainImagePreview: preview,
+      });
+      setUploadError("");
+    } catch {
+      setUploadError("Failed to read variant main image");
+    }
+  };
+
+  const handleRemoveVariantMainImage = (index: number) => {
+    updateVariationAtIndex(index, {
+      _mainImageFile: null,
+      _mainImagePreview: "",
+      mainImage: "",
+    });
+  };
+
+  const handleVariantGalleryAdd = async (
+    index: number,
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    const valid: File[] = [];
+    const previews: string[] = [];
+    for (const f of files) {
+      const v = validateImageFile(f);
+      if (!v.valid) {
+        setUploadError(v.error || "Invalid gallery image");
+        continue;
+      }
+      try {
+        previews.push(await createImagePreview(f));
+        valid.push(f);
+      } catch {
+        // skip files we cannot preview
+      }
+    }
+
+    const current = variations[index] || ({} as VariationDraft);
+    const existingFiles = current._galleryImageFiles || [];
+    const existingPreviews = current._galleryImagePreviews || [];
+
+    updateVariationAtIndex(index, {
+      _galleryImageFiles: [...existingFiles, ...valid],
+      _galleryImagePreviews: [...existingPreviews, ...previews],
+    });
+
+    // Allow selecting the same file again later
+    e.target.value = "";
+  };
+
+  const handleRemoveVariantGalleryPending = (
+    index: number,
+    fileIdx: number
+  ) => {
+    const current = variations[index];
+    if (!current) return;
+    updateVariationAtIndex(index, {
+      _galleryImageFiles: (current._galleryImageFiles || []).filter(
+        (_, i) => i !== fileIdx
+      ),
+      _galleryImagePreviews: (current._galleryImagePreviews || []).filter(
+        (_, i) => i !== fileIdx
+      ),
+    });
+  };
+
+  const handleRemoveVariantGalleryExisting = (
+    index: number,
+    imgIdx: number
+  ) => {
+    const current = variations[index];
+    if (!current) return;
+    updateVariationAtIndex(index, {
+      galleryImages: (current.galleryImages || []).filter(
+        (_, i) => i !== imgIdx
+      ),
+    });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setUploadError("");
@@ -482,6 +598,61 @@ export default function SellerAddProduct() {
         return;
       }
 
+      // Upload per-variant images (main + gallery) and strip the frontend-only fields
+      const uploadedVariations: ProductVariation[] = [];
+      for (let i = 0; i < variations.length; i++) {
+        const v = variations[i];
+        let variantMainImage = v.mainImage || "";
+        let variantGalleryImages: string[] = Array.isArray(v.galleryImages)
+          ? [...v.galleryImages]
+          : [];
+
+        if (v._mainImageFile) {
+          try {
+            const res = await uploadImage(
+              v._mainImageFile,
+              "Wasgro mart/products/variants"
+            );
+            variantMainImage = res.secureUrl;
+          } catch (err) {
+            console.error(`Variant ${i + 1} main image upload failed`, err);
+          }
+        }
+
+        if (v._galleryImageFiles && v._galleryImageFiles.length > 0) {
+          try {
+            const res = await uploadImages(
+              v._galleryImageFiles,
+              "Wasgro mart/products/variants/gallery"
+            );
+            variantGalleryImages = [
+              ...variantGalleryImages,
+              ...res.map((r) => r.secureUrl),
+            ];
+          } catch (err) {
+            console.error(`Variant ${i + 1} gallery upload failed`, err);
+          }
+        }
+
+        const {
+          _mainImageFile,
+          _mainImagePreview,
+          _galleryImageFiles,
+          _galleryImagePreviews,
+          ...clean
+        } = v;
+        void _mainImageFile;
+        void _mainImagePreview;
+        void _galleryImageFiles;
+        void _galleryImagePreviews;
+
+        uploadedVariations.push({
+          ...clean,
+          mainImage: variantMainImage || undefined,
+          galleryImages: variantGalleryImages,
+        });
+      }
+
       // Prepare product data for API
       const tagsArray = formData.tags
         ? formData.tags
@@ -517,7 +688,7 @@ export default function SellerAddProduct() {
         fssaiLicNo: formData.fssaiLicNo || undefined,
         mainImageUrl: mainImageUrl || undefined,
         galleryImageUrls,
-        variations: variations,
+        variations: uploadedVariations,
         variationType: formData.variationType || undefined,
         isShopByStoreOnly: formData.isShopByStoreOnly === "Yes",
         shopId:
@@ -998,35 +1169,170 @@ export default function SellerAddProduct() {
                   <h3 className="text-sm font-medium text-neutral-700 mb-2">
                     Added Variations:
                   </h3>
-                  <div className="space-y-2">
-                    {variations.map((variation, index) => (
-                      <div
-                        key={index}
-                        className="flex items-center justify-between p-3 bg-white border border-neutral-200 rounded-lg">
-                        <div className="flex-1">
-                          <span className="font-medium">{variation.title}</span>{" "}
-                          - ₹{variation.price}
-                          {variation.discPrice > 0 && (
-                            <span className="text-teal-700 ml-2">
-                              (₹{variation.discPrice})
-                            </span>
-                          )}
-                          <span className="ml-4 text-sm text-neutral-600">
-                            Stock:{" "}
-                            {variation.stock === 0
-                              ? "Unlimited"
-                              : variation.stock}{" "}
-                            | Status: {variation.status}
-                          </span>
+                  <div className="space-y-3">
+                    {variations.map((variation, index) => {
+                      const variantTitle =
+                        variation.title || variation.value || `Variation ${index + 1}`;
+                      const mainPreview =
+                        variation._mainImagePreview || variation.mainImage || "";
+                      const existingGallery = variation.galleryImages || [];
+                      const pendingGallery =
+                        variation._galleryImagePreviews || [];
+                      return (
+                        <div
+                          key={index}
+                          className="p-3 bg-white border border-neutral-200 rounded-lg">
+                          {/* Top row: variation summary + remove */}
+                          <div className="flex items-start justify-between mb-3 gap-3">
+                            <div className="flex-1 min-w-0">
+                              <span className="font-medium">{variantTitle}</span>{" "}
+                              - ₹{variation.price}
+                              {variation.discPrice > 0 && (
+                                <span className="text-teal-700 ml-2">
+                                  (₹{variation.discPrice})
+                                </span>
+                              )}
+                              <span className="ml-4 text-sm text-neutral-600">
+                                Stock:{" "}
+                                {variation.stock === 0
+                                  ? "Unlimited"
+                                  : variation.stock}{" "}
+                                | Status: {variation.status}
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => removeVariation(index)}
+                              className="text-red-600 hover:text-red-700 text-sm font-medium whitespace-nowrap">
+                              Remove
+                            </button>
+                          </div>
+
+                          {/* Variant images block */}
+                          <div className="border-t border-neutral-200 pt-3">
+                            <p className="text-xs font-semibold text-neutral-500 uppercase tracking-wider mb-2">
+                              Variant Images{" "}
+                              <span className="font-normal text-neutral-400 normal-case">
+                                (optional — falls back to product images)
+                              </span>
+                            </p>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-[120px_1fr] gap-3 items-start">
+                              {/* Main variant image */}
+                              <div>
+                                <label className="block text-[11px] font-medium text-neutral-600 mb-1">
+                                  Main image
+                                </label>
+                                <label
+                                  className={`relative block w-[120px] h-[120px] rounded-lg border-2 border-dashed cursor-pointer overflow-hidden ${
+                                    mainPreview
+                                      ? "border-teal-600"
+                                      : "border-neutral-300 hover:border-teal-500"
+                                  }`}>
+                                  {mainPreview ? (
+                                    <>
+                                      <img
+                                        src={mainPreview}
+                                        alt="Variant main"
+                                        className="absolute inset-0 w-full h-full object-cover"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          handleRemoveVariantMainImage(index);
+                                        }}
+                                        className="absolute top-1 right-1 bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                                        ×
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center text-neutral-400 text-[11px] font-medium">
+                                      <span className="text-xl leading-none">＋</span>
+                                      <span className="mt-1">Upload</span>
+                                    </div>
+                                  )}
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={(e) =>
+                                      handleVariantMainImageChange(index, e)
+                                    }
+                                  />
+                                </label>
+                              </div>
+
+                              {/* Variant gallery */}
+                              <div>
+                                <label className="block text-[11px] font-medium text-neutral-600 mb-1">
+                                  Gallery images ({existingGallery.length + pendingGallery.length})
+                                </label>
+                                <div className="flex flex-wrap gap-2">
+                                  {existingGallery.map((url, gIdx) => (
+                                    <div
+                                      key={`ex-${gIdx}`}
+                                      className="relative w-16 h-16 rounded-md overflow-hidden border border-neutral-200">
+                                      <img
+                                        src={url}
+                                        alt={`Variant gallery ${gIdx + 1}`}
+                                        className="w-full h-full object-cover"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleRemoveVariantGalleryExisting(
+                                            index,
+                                            gIdx
+                                          )
+                                        }
+                                        className="absolute top-0.5 right-0.5 bg-red-600 hover:bg-red-700 text-white text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                                        ×
+                                      </button>
+                                    </div>
+                                  ))}
+                                  {pendingGallery.map((src, gIdx) => (
+                                    <div
+                                      key={`new-${gIdx}`}
+                                      className="relative w-16 h-16 rounded-md overflow-hidden border border-teal-300">
+                                      <img
+                                        src={src}
+                                        alt={`Variant pending ${gIdx + 1}`}
+                                        className="w-full h-full object-cover"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() =>
+                                          handleRemoveVariantGalleryPending(
+                                            index,
+                                            gIdx
+                                          )
+                                        }
+                                        className="absolute top-0.5 right-0.5 bg-red-600 hover:bg-red-700 text-white text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                                        ×
+                                      </button>
+                                    </div>
+                                  ))}
+                                  <label className="w-16 h-16 rounded-md border-2 border-dashed border-neutral-300 hover:border-teal-500 cursor-pointer flex flex-col items-center justify-center text-neutral-400">
+                                    <span className="text-lg leading-none">＋</span>
+                                    <span className="text-[9px] mt-0.5">Add</span>
+                                    <input
+                                      type="file"
+                                      accept="image/*"
+                                      multiple
+                                      className="hidden"
+                                      onChange={(e) =>
+                                        handleVariantGalleryAdd(index, e)
+                                      }
+                                    />
+                                  </label>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => removeVariation(index)}
-                          className="text-red-600 hover:text-red-700 ml-4">
-                          Remove
-                        </button>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}

@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
-import { createProduct, getShops, Shop, bulkCreateProducts } from "../../../services/api/productService";
+import { createProduct, getShops, Shop, bulkCreateProducts, ProductVariation } from "../../../services/api/productService";
 import * as XLSX from "xlsx";
 
-import { uploadImage } from "../../../services/api/uploadService";
+import { uploadImage, uploadImages } from "../../../services/api/uploadService";
+import { validateImageFile, createImagePreview } from "../../../utils/imageUpload";
 import {
   getCategories,
   getSubcategories,
@@ -19,6 +20,16 @@ import {
 } from "../../../services/api/headerCategoryService";
 import { useAuth } from "../../../context/AuthContext";
 import { useToast } from "../../../context/ToastContext";
+
+// Per-variant draft used by the bulk-upload variant manager modal.
+// Extends the shared ProductVariation with frontend-only file/preview state
+// that gets uploaded then stripped before the API call.
+export type BulkVariantDraft = ProductVariation & {
+  _mainImageFile?: File | null;
+  _mainImagePreview?: string;
+  _galleryImageFiles?: File[];
+  _galleryImagePreviews?: string[];
+};
 
 interface ProductRow {
   id: string;
@@ -57,6 +68,9 @@ interface ProductRow {
   galleryPreviews: string[];
   images: string[];
   previewImages: string[];
+  // Extra variants beyond the inline (title/price/stock) one.
+  // When non-empty the bulk row submits these instead of the inline single-variant fallback.
+  variants: BulkVariantDraft[];
   status: "idle" | "uploading" | "success" | "error";
   errorMsg?: string;
   // Row-specific lists
@@ -78,6 +92,9 @@ export default function SellerBulkUpload() {
   const [mode, setMode] = useState<'select' | 'manual' | 'excel' | 'preview'>('select');
   const [excelUploaded, setExcelUploaded] = useState(false);
   const fileInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
+
+  // ID of the row whose Variants modal is currently open (null = closed).
+  const [variantManagerRowId, setVariantManagerRowId] = useState<string | null>(null);
 
 
 
@@ -167,6 +184,7 @@ export default function SellerBulkUpload() {
     galleryPreviews: ["", "", "", "", ""],
     images: [],
     previewImages: [],
+    variants: [],
     status: "idle",
     categoriesList: [],
     subcategoriesList: [],
@@ -479,6 +497,137 @@ export default function SellerBulkUpload() {
     reader.readAsDataURL(file);
   };
 
+  // ---------- Per-row variant manager helpers (used by the Manage Variants modal) ----------
+  const setVariantsForRow = (rowId: string, updater: (vs: BulkVariantDraft[]) => BulkVariantDraft[]) => {
+    setRows(prev => prev.map(r => r.id === rowId ? { ...r, variants: updater(r.variants || []) } : r));
+  };
+
+  const addVariantToRow = (rowId: string) => {
+    setVariantsForRow(rowId, (vs) => [
+      ...vs,
+      {
+        title: "",
+        price: 0,
+        discPrice: 0,
+        stock: 0,
+        status: "Available",
+      } as BulkVariantDraft,
+    ]);
+  };
+
+  const removeVariantFromRow = (rowId: string, idx: number) => {
+    setVariantsForRow(rowId, (vs) => vs.filter((_, i) => i !== idx));
+  };
+
+  const updateVariantField = (rowId: string, idx: number, patch: Partial<BulkVariantDraft>) => {
+    setVariantsForRow(rowId, (vs) => vs.map((v, i) => i === idx ? { ...v, ...patch } : v));
+  };
+
+  const handleBulkVariantMainImage = async (rowId: string, idx: number, file: File | null) => {
+    if (!file) return;
+    const v = validateImageFile(file);
+    if (!v.valid) {
+      showToast(v.error || "Invalid image", "error");
+      return;
+    }
+    try {
+      const preview = await createImagePreview(file);
+      updateVariantField(rowId, idx, { _mainImageFile: file, _mainImagePreview: preview });
+    } catch {
+      showToast("Could not preview the image", "error");
+    }
+  };
+
+  const handleBulkVariantGalleryAdd = async (rowId: string, idx: number, files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    const valid: File[] = [];
+    const previews: string[] = [];
+    for (const f of Array.from(files)) {
+      const v = validateImageFile(f);
+      if (!v.valid) continue;
+      try {
+        previews.push(await createImagePreview(f));
+        valid.push(f);
+      } catch {
+        // skip files we cannot preview
+      }
+    }
+    setVariantsForRow(rowId, (vs) =>
+      vs.map((variant, i) => {
+        if (i !== idx) return variant;
+        return {
+          ...variant,
+          _galleryImageFiles: [...(variant._galleryImageFiles || []), ...valid],
+          _galleryImagePreviews: [...(variant._galleryImagePreviews || []), ...previews],
+        };
+      })
+    );
+  };
+
+  const removeBulkVariantGalleryPending = (rowId: string, idx: number, imgIdx: number) => {
+    setVariantsForRow(rowId, (vs) =>
+      vs.map((variant, i) => {
+        if (i !== idx) return variant;
+        return {
+          ...variant,
+          _galleryImageFiles: (variant._galleryImageFiles || []).filter((_, k) => k !== imgIdx),
+          _galleryImagePreviews: (variant._galleryImagePreviews || []).filter((_, k) => k !== imgIdx),
+        };
+      })
+    );
+  };
+
+  const removeBulkVariantGalleryExisting = (rowId: string, idx: number, imgIdx: number) => {
+    setVariantsForRow(rowId, (vs) =>
+      vs.map((variant, i) => {
+        if (i !== idx) return variant;
+        return {
+          ...variant,
+          galleryImages: (variant.galleryImages || []).filter((_, k) => k !== imgIdx),
+        };
+      })
+    );
+  };
+
+  const removeBulkVariantMainImage = (rowId: string, idx: number) => {
+    updateVariantField(rowId, idx, {
+      _mainImageFile: null,
+      _mainImagePreview: "",
+      mainImage: "",
+    });
+  };
+
+  // Strip frontend-only fields and upload images for one variant draft.
+  const uploadVariantDraft = async (draft: BulkVariantDraft): Promise<ProductVariation> => {
+    let mainImage = draft.mainImage || "";
+    let galleryImages: string[] = Array.isArray(draft.galleryImages) ? [...draft.galleryImages] : [];
+
+    if (draft._mainImageFile) {
+      try {
+        const res = await uploadImage(draft._mainImageFile, "Wasgro mart/products/variants");
+        mainImage = res.secureUrl;
+      } catch (err) {
+        console.error("Variant main image upload failed", err);
+      }
+    }
+    if (draft._galleryImageFiles && draft._galleryImageFiles.length > 0) {
+      try {
+        const res = await uploadImages(draft._galleryImageFiles, "Wasgro mart/products/variants/gallery");
+        galleryImages = [...galleryImages, ...res.map(r => r.secureUrl)];
+      } catch (err) {
+        console.error("Variant gallery upload failed", err);
+      }
+    }
+
+    const { _mainImageFile, _mainImagePreview, _galleryImageFiles, _galleryImagePreviews, ...clean } = draft;
+    void _mainImageFile; void _mainImagePreview; void _galleryImageFiles; void _galleryImagePreviews;
+    return {
+      ...clean,
+      mainImage: mainImage || undefined,
+      galleryImages,
+    };
+  };
+
   const handleSubmitAll = async () => {
     if (isSubmitting) return;
 
@@ -489,9 +638,16 @@ export default function SellerBulkUpload() {
       return;
     }
 
-    const invalidRows = pendingRows.filter(r => !r.productName || !r.price || !r.headerCategory || !r.category);
+    const invalidRows = pendingRows.filter(r => {
+      if (!r.productName || !r.headerCategory || !r.category) return true;
+      // Either the inline price OR at least one variant with price > 0 is required
+      if (r.variants && r.variants.length > 0) {
+        return !r.variants.some(v => Number(v.price) > 0);
+      }
+      return !r.price;
+    });
     if (invalidRows.length > 0) {
-      showToast("Please fill required fields (Name, Price, Category) for all active rows", "error");
+      showToast("Please fill required fields (Name, Price/Variants, Category) for all active rows", "error");
       return;
     }
 
@@ -543,6 +699,35 @@ export default function SellerBulkUpload() {
            });
         }
 
+        // Build the final variations list:
+        // - if the row has explicit variants from the Manage Variants modal, upload their per-variant images first
+        // - otherwise fall back to the single inline variant built from the row's price/title/etc.
+        let finalVariations: ProductVariation[];
+        if (row.variants && row.variants.length > 0) {
+          finalVariations = [];
+          for (const draft of row.variants) {
+            const uploaded = await uploadVariantDraft(draft);
+            finalVariations.push({
+              ...uploaded,
+              title: uploaded.title || "Default",
+              price: Number(uploaded.price) || 0,
+              discPrice: Number(uploaded.discPrice) || 0,
+              stock: Number(uploaded.stock) || 0,
+              status: uploaded.status || "Available",
+            });
+          }
+        } else {
+          finalVariations = [
+            {
+              title: row.variationTitle || "Default",
+              price: parseFloat(row.price),
+              discPrice: parseFloat(row.discPrice || "0"),
+              stock: parseInt(row.stock || "0"),
+              status: (parseInt(row.stock || "0") >= 0 ? "Available" : "Sold out") as any,
+            },
+          ];
+        }
+
         const productData = {
           productName: row.productName,
           headerCategoryId: row.headerCategory,
@@ -570,18 +755,9 @@ export default function SellerBulkUpload() {
           seoDescription: row.seoDescription || undefined,
           mainImageUrl: mainImageUrl,
           galleryImageUrls: galleryUrls,
-          variations: [
-            {
-              title: row.variationTitle || "Default",
-              price: parseFloat(row.price),
-              discPrice: parseFloat(row.discPrice || "0"),
-              stock: parseInt(row.stock || "0"),
-              // 0 means Unlimited, so it should be "Available"
-              status: (parseInt(row.stock || "0") >= 0) ? "Available" : "Sold out" as any
-            }
-          ],
+          variations: finalVariations,
           variationType: row.variationType || "Size",
-          isShopByStoreOnly: false // Ensure it's not restricted by default
+          isShopByStoreOnly: false, // Ensure it's not restricted by default
         };
 
         preparedProducts.push(productData);
@@ -936,8 +1112,12 @@ export default function SellerBulkUpload() {
                       value={row.price}
                       onChange={(e) => updateRow(row.id, "price", e.target.value)}
                       placeholder="0.00"
-                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none"
+                      disabled={row.variants.length > 0}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none disabled:bg-neutral-100 disabled:text-neutral-400"
                     />
+                    {row.variants.length > 0 && (
+                      <div className="text-[10px] text-neutral-400 mt-1 italic">Set in modal</div>
+                    )}
                   </td>
 
                   {/* Disc Price */}
@@ -947,7 +1127,8 @@ export default function SellerBulkUpload() {
                       value={row.discPrice}
                       onChange={(e) => updateRow(row.id, "discPrice", e.target.value)}
                       placeholder="0.00"
-                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none"
+                      disabled={row.variants.length > 0}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none disabled:bg-neutral-100 disabled:text-neutral-400"
                     />
                   </td>
 
@@ -958,7 +1139,8 @@ export default function SellerBulkUpload() {
                       value={row.stock}
                       onChange={(e) => updateRow(row.id, "stock", e.target.value)}
                       placeholder="0"
-                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none"
+                      disabled={row.variants.length > 0}
+                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none disabled:bg-neutral-100 disabled:text-neutral-400"
                     />
                     <div className="text-[10px] text-green-600 mt-1 font-medium">0 = Unlimited</div>
                   </td>
@@ -966,13 +1148,47 @@ export default function SellerBulkUpload() {
 
                   {/* Variation Title */}
                   <td className="px-4 py-3">
-                    <input
-                      type="text"
-                      value={row.variationTitle}
-                      onChange={(e) => updateRow(row.id, "variationTitle", e.target.value)}
-                      placeholder="e.g. 500g"
-                      className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none"
-                    />
+                    <div className="space-y-1.5">
+                      <input
+                        type="text"
+                        value={row.variationTitle}
+                        onChange={(e) => updateRow(row.id, "variationTitle", e.target.value)}
+                        placeholder="e.g. 500g"
+                        disabled={row.variants.length > 0}
+                        className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-teal-500 outline-none disabled:bg-neutral-100 disabled:text-neutral-400"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          // Seed the modal with the inline single-variant fields
+                          // if this is the first time the seller opens it for the row.
+                          if (row.variants.length === 0) {
+                            setVariantsForRow(row.id, () => [
+                              {
+                                title: row.variationTitle || "",
+                                price: parseFloat(row.price || "0") || 0,
+                                discPrice: parseFloat(row.discPrice || "0") || 0,
+                                stock: parseInt(row.stock || "0") || 0,
+                                status: "Available",
+                              } as BulkVariantDraft,
+                            ]);
+                          }
+                          setVariantManagerRowId(row.id);
+                        }}
+                        className="w-full text-[11px] font-semibold text-teal-700 hover:text-white hover:bg-teal-700 border border-teal-700/30 rounded-md px-2 py-1 transition-colors flex items-center justify-center gap-1"
+                        title="Add multiple variants with their own images"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                          <path d="M3 7h18M3 12h18M3 17h18" />
+                        </svg>
+                        Manage Variants
+                        {row.variants.length > 0 && (
+                          <span className="ml-1 bg-teal-700 text-white rounded-full px-1.5 text-[10px]">
+                            {row.variants.length}
+                          </span>
+                        )}
+                      </button>
+                    </div>
                   </td>
 
                   {/* Variation Type */}
@@ -1267,6 +1483,222 @@ export default function SellerBulkUpload() {
       )}
     </div>
       
+      {/* ===== Variant Manager Modal ===== */}
+      {variantManagerRowId && (() => {
+        const activeRow = rows.find(r => r.id === variantManagerRowId);
+        if (!activeRow) return null;
+        const variants = activeRow.variants || [];
+
+        return (
+          <div
+            className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+            onClick={() => setVariantManagerRowId(null)}
+          >
+            <div
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b bg-teal-700 text-white">
+                <div className="min-w-0">
+                  <h3 className="text-lg font-bold truncate">
+                    Variants for {activeRow.productName || "Untitled product"}
+                  </h3>
+                  <p className="text-xs text-white/80 mt-0.5">
+                    Add multiple variants and upload images for each. Customers will see the matching images when they switch variants.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setVariantManagerRowId(null)}
+                  className="text-white/80 hover:text-white p-1 hover:bg-white/10 rounded transition-colors"
+                  aria-label="Close"
+                >
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </button>
+              </div>
+
+              {/* Body */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-4 bg-neutral-50">
+                {variants.length === 0 && (
+                  <div className="text-center py-10 text-neutral-500 text-sm">
+                    No variants yet. Click "Add Variant" to create one.
+                  </div>
+                )}
+                {variants.map((variant, idx) => {
+                  const mainPreview = variant._mainImagePreview || variant.mainImage || "";
+                  const existingGallery = variant.galleryImages || [];
+                  const pendingGallery = variant._galleryImagePreviews || [];
+                  return (
+                    <div key={idx} className="bg-white rounded-xl border border-neutral-200 p-4 shadow-sm">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-bold text-neutral-700">Variant {idx + 1}</h4>
+                        <button
+                          type="button"
+                          onClick={() => removeVariantFromRow(activeRow.id, idx)}
+                          className="text-xs text-red-600 hover:text-red-700 font-medium"
+                        >
+                          Remove variant
+                        </button>
+                      </div>
+
+                      {/* Variant fields */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                        <div>
+                          <label className="block text-[11px] font-medium text-neutral-600 mb-1">Title</label>
+                          <input
+                            type="text"
+                            value={variant.title || ""}
+                            onChange={(e) => updateVariantField(activeRow.id, idx, { title: e.target.value })}
+                            placeholder="e.g. 500g"
+                            className="w-full px-2.5 py-1.5 border rounded text-sm focus:ring-2 focus:ring-teal-500 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-medium text-neutral-600 mb-1">Price *</label>
+                          <input
+                            type="number"
+                            value={variant.price ?? 0}
+                            onChange={(e) => updateVariantField(activeRow.id, idx, { price: parseFloat(e.target.value) || 0 })}
+                            placeholder="0.00"
+                            className="w-full px-2.5 py-1.5 border rounded text-sm focus:ring-2 focus:ring-teal-500 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-medium text-neutral-600 mb-1">Disc. Price</label>
+                          <input
+                            type="number"
+                            value={variant.discPrice ?? 0}
+                            onChange={(e) => updateVariantField(activeRow.id, idx, { discPrice: parseFloat(e.target.value) || 0 })}
+                            placeholder="0.00"
+                            className="w-full px-2.5 py-1.5 border rounded text-sm focus:ring-2 focus:ring-teal-500 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-medium text-neutral-600 mb-1">Stock</label>
+                          <input
+                            type="number"
+                            value={variant.stock ?? 0}
+                            onChange={(e) => updateVariantField(activeRow.id, idx, { stock: parseInt(e.target.value) || 0 })}
+                            placeholder="0"
+                            className="w-full px-2.5 py-1.5 border rounded text-sm focus:ring-2 focus:ring-teal-500 outline-none"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Variant images */}
+                      <div className="border-t border-neutral-100 pt-3">
+                        <p className="text-[11px] font-semibold text-neutral-500 uppercase tracking-wider mb-2">
+                          Variant Images <span className="font-normal text-neutral-400 normal-case">(optional)</span>
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-[110px_1fr] gap-3 items-start">
+                          {/* Main image */}
+                          <div>
+                            <label className="block text-[10px] font-medium text-neutral-600 mb-1">Main image</label>
+                            <label className={`relative block w-[110px] h-[110px] rounded-lg border-2 border-dashed cursor-pointer overflow-hidden ${mainPreview ? "border-teal-600" : "border-neutral-300 hover:border-teal-500"}`}>
+                              {mainPreview ? (
+                                <>
+                                  <img src={mainPreview} alt="Variant main" className="absolute inset-0 w-full h-full object-cover" />
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.preventDefault(); removeBulkVariantMainImage(activeRow.id, idx); }}
+                                    className="absolute top-1 right-1 bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center"
+                                  >×</button>
+                                </>
+                              ) : (
+                                <div className="absolute inset-0 flex flex-col items-center justify-center text-neutral-400 text-[11px]">
+                                  <span className="text-xl leading-none">＋</span>
+                                  <span className="mt-1">Upload</span>
+                                </div>
+                              )}
+                              <input
+                                type="file"
+                                accept="image/*"
+                                className="hidden"
+                                onChange={(e) => handleBulkVariantMainImage(activeRow.id, idx, e.target.files?.[0] || null)}
+                              />
+                            </label>
+                          </div>
+
+                          {/* Gallery */}
+                          <div>
+                            <label className="block text-[10px] font-medium text-neutral-600 mb-1">
+                              Gallery images ({existingGallery.length + pendingGallery.length})
+                            </label>
+                            <div className="flex flex-wrap gap-2">
+                              {existingGallery.map((url, gIdx) => (
+                                <div key={`ex-${gIdx}`} className="relative w-14 h-14 rounded overflow-hidden border border-neutral-200">
+                                  <img src={url} alt="" className="w-full h-full object-cover" />
+                                  <button
+                                    type="button"
+                                    onClick={() => removeBulkVariantGalleryExisting(activeRow.id, idx, gIdx)}
+                                    className="absolute top-0.5 right-0.5 bg-red-600 hover:bg-red-700 text-white text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center"
+                                  >×</button>
+                                </div>
+                              ))}
+                              {pendingGallery.map((src, gIdx) => (
+                                <div key={`new-${gIdx}`} className="relative w-14 h-14 rounded overflow-hidden border border-teal-300">
+                                  <img src={src} alt="" className="w-full h-full object-cover" />
+                                  <button
+                                    type="button"
+                                    onClick={() => removeBulkVariantGalleryPending(activeRow.id, idx, gIdx)}
+                                    className="absolute top-0.5 right-0.5 bg-red-600 hover:bg-red-700 text-white text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center"
+                                  >×</button>
+                                </div>
+                              ))}
+                              <label className="w-14 h-14 rounded border-2 border-dashed border-neutral-300 hover:border-teal-500 cursor-pointer flex flex-col items-center justify-center text-neutral-400">
+                                <span className="text-lg leading-none">＋</span>
+                                <span className="text-[9px] mt-0.5">Add</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  multiple
+                                  className="hidden"
+                                  onChange={(e) => { handleBulkVariantGalleryAdd(activeRow.id, idx, e.target.files); e.target.value = ""; }}
+                                />
+                              </label>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                <button
+                  type="button"
+                  onClick={() => addVariantToRow(activeRow.id)}
+                  className="w-full py-3 border-2 border-dashed border-teal-400 text-teal-700 rounded-xl hover:bg-teal-50 font-semibold text-sm flex items-center justify-center gap-2"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                  Add Variant
+                </button>
+              </div>
+
+              {/* Footer */}
+              <div className="px-6 py-4 border-t bg-white flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => {
+                    // Clearing all variants reverts the row to the inline single-variant flow
+                    setVariantsForRow(activeRow.id, () => []);
+                  }}
+                  className="text-sm text-red-600 hover:text-red-700 font-medium"
+                >
+                  Clear all variants
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setVariantManagerRowId(null)}
+                  className="px-5 py-2 bg-teal-700 hover:bg-teal-800 text-white rounded-lg font-semibold text-sm"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       <style>{`
         .custom-scrollbar::-webkit-scrollbar {
           height: 10px;

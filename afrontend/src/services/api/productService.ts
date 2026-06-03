@@ -22,6 +22,9 @@ export interface ProductVariation {
   stock: number;
   status: "Available" | "Sold out" | "In stock"; // Added In stock
   sku?: string;
+  // Per-variant imagery — overrides product-level images when set
+  mainImage?: string;
+  galleryImages?: string[];
 }
 
 export interface Product {

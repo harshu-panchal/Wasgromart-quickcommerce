@@ -54,13 +54,26 @@ function generateOTP(length: number = 4): string {
 
 /**
  * Normalize mobile number to include country code (91)
+ *
+ * IMPORTANT: detection must be length-aware, not just `startsWith('91')`,
+ * because perfectly valid 10-digit Indian numbers can begin with the digits
+ * "91" (e.g. 9168560196). If we relied on prefix alone we would skip adding
+ * the country code and end up with a 10-digit string that fails the
+ * 12-13 digit check.
  */
 function normalizeMobileNumber(mobile: string): string {
   let cleanMobile = mobile.replace(/^\+/, '').replace(/\D/g, '');
 
-  if (!cleanMobile.startsWith('91')) {
+  // 10 digits → bare Indian mobile, always add country code
+  if (cleanMobile.length === 10) {
     cleanMobile = '91' + cleanMobile;
   }
+  // 11 digits starting with leading 0 (e.g. 09168560196) → strip 0 and add 91
+  else if (cleanMobile.length === 11 && cleanMobile.startsWith('0')) {
+    cleanMobile = '91' + cleanMobile.substring(1);
+  }
+  // 12-13 digits already includes country code (or another country code) — leave as-is
+  // Anything else falls through and is rejected by the length check below.
 
   if (cleanMobile.length < 12 || cleanMobile.length > 13) {
     throw new Error(`Invalid mobile number: ${cleanMobile}. Must be 12-13 digits with country code.`);

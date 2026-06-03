@@ -23,6 +23,7 @@ export interface SellerNotification {
     };
     items: Array<{
         productName: string;
+        productImage?: string;
         quantity: number;
         price: number;
         total: number;

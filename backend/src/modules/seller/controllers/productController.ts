@@ -46,6 +46,9 @@ export const createProduct = asyncHandler(
         name: v.name || "Variation",
         discPrice: v.discPrice || 0,
         status: v.status || "Available",
+        // Per-variant imagery (accept both *Url and final naming from clients)
+        mainImage: v.mainImage || v.mainImageUrl || undefined,
+        galleryImages: v.galleryImages || v.galleryImageUrls || [],
       }));
     }
 
@@ -155,6 +158,8 @@ export const bulkCreateProducts = asyncHandler(
             name: v.name || "Variation",
             discPrice: v.discPrice || 0,
             status: v.status || "Available",
+            mainImage: v.mainImage || v.mainImageUrl || undefined,
+            galleryImages: v.galleryImages || v.galleryImageUrls || [],
           }));
 
           // Sync Price/Stock
@@ -398,6 +403,8 @@ export const updateProduct = asyncHandler(
         name: v.name || "Variation",
         discPrice: v.discPrice || 0,
         status: v.status || "Available",
+        mainImage: v.mainImage || v.mainImageUrl || undefined,
+        galleryImages: v.galleryImages || v.galleryImageUrls || [],
       }));
 
       for (const variation of updateData.variations) {

@@ -38,6 +38,9 @@ export interface IProduct extends mongoose.Document {
     stock?: number;
     sku?: string;
     status?: string;
+    // Per-variant imagery (falls back to product-level mainImage/galleryImages on the client)
+    mainImage?: string;
+    galleryImages?: string[];
   }>;
 
   // Status Flags
@@ -208,6 +211,8 @@ const ProductSchema = new Schema<IProduct>(
             default: "Available",
           },
           sku: String,
+          mainImage: { type: String, trim: true },
+          galleryImages: { type: [String], default: [] },
         },
       ],
       default: [],
