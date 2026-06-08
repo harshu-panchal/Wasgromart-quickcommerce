@@ -28,12 +28,27 @@ if (messaging) {
     messaging.onBackgroundMessage((payload) => {
         console.log('[firebase-messaging-sw.js] Background message received:', payload);
 
+        // IMPORTANT: When a push message contains BOTH a `notification` block
+        // and a `data` block (mixed message), the FCM SDK already displays the
+        // notification automatically via webpush.notification + the browser's
+        // Push API. If we ALSO call self.registration.showNotification here,
+        // the user sees TWO banners for the same message.
+        //
+        // For mixed messages, bail out and let the SDK do the displaying.
+        // Only data-only messages (no `notification` field on the payload)
+        // require us to render manually.
+        if (payload?.notification) {
+            console.log(
+                '[firebase-messaging-sw.js] Notification block present, SDK will auto-display. Skipping manual show.'
+            );
+            return;
+        }
+
         const data = payload?.data || {};
-        const notification = payload?.notification || {};
 
         // Prefer data fields (sent by backend) over notification block
-        const notificationTitle = data.title || notification.title || 'New Order arrived';
-        const notificationBody  = data.body  || notification.body  || data.msg || data.message || '';
+        const notificationTitle = data.title || 'New Order arrived';
+        const notificationBody  = data.body  || data.msg || data.message || '';
 
         const isDeliveryAlert = data.type === 'NEW_ORDER' || data.type === 'ORDER_ASSIGNED';
 
