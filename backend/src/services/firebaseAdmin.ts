@@ -42,6 +42,18 @@ export interface PushNotificationPayload {
     body: string;
     data?: { [key: string]: string };
     sound?: string; // custom sound filename without extension (e.g. 'seller_alert')
+    /**
+     * When true, build a data-only FCM message (no `notification`,
+     * `webpush.notification`, `android.notification`, or `apns.payload.aps.alert`
+     * blocks). This is the Firebase-recommended shape when the app has its own
+     * notification handlers on every platform — it avoids the classic mixed-
+     * message duplicate where the SDK auto-displays the `notification` block AND
+     * the user's onBackgroundMessage handler also calls showNotification.
+     *
+     * The client SW (firebase-messaging-sw.js) and Flutter app are expected to
+     * render the notification themselves from the data fields (`title`, `body`).
+     */
+    dataOnly?: boolean;
 }
 
 const INVALID_TOKEN_ERROR_CODES = new Set([
@@ -72,57 +84,87 @@ export async function sendPushNotification(tokens: string[], payload: PushNotifi
             body: String(payload.body),
         };
 
-        const message: any = {
-            // Top-level notification block — required for Flutter/native apps to
-            // auto-display the notification without any Flutter-side handling code
-            notification: {
-                title: String(payload.title),
-                body: String(payload.body),
-            },
-            // Data payload — available to Flutter app via message.data
-            data: messageData,
-            tokens: tokens,
-            android: {
-                priority: 'high',
-                notification: {
-                    title: String(payload.title),
-                    body: String(payload.body),
-                    // Use custom sound channel for seller alerts (which is pre-registered in native app), default otherwise
-                    // This prevents Android from blocking notifications on unregistered channels (e.g. wasgromart_delivery_alert)
-                    channelId: payload.sound === 'seller_alert' ? 'wasgromart_seller_alert' : 'wasgromart_notifications',
-                    sound: payload.sound ? `${payload.sound}.mp3` : 'default',
-                    clickAction: 'FLUTTER_NOTIFICATION_CLICK',
+        // Data-only path: omit every `notification` block so neither the FCM JS
+        // SDK nor the native FCM SDK auto-displays. The app's handlers
+        // (firebase-messaging-sw.js for web, Flutter for mobile) own the
+        // display and read title/body from `data`. This is Firebase's
+        // recommended shape for apps with custom handlers and prevents the
+        // mixed-message duplicate notification footgun.
+        const message: any = payload.dataOnly
+            ? {
+                data: messageData,
+                tokens: tokens,
+                android: {
+                    priority: 'high',
                 },
-            },
-            apns: {
-                payload: {
-                    aps: {
-                        alert: {
-                            title: String(payload.title),
-                            body: String(payload.body),
+                apns: {
+                    headers: {
+                        'apns-priority': '10',
+                    },
+                    payload: {
+                        aps: {
+                            // contentAvailable lets iOS wake the app to handle the data
+                            contentAvailable: true,
                         },
-                        // iOS: sound file must be bundled in the Flutter app
-                        sound: payload.sound ? `${payload.sound}.mp3` : 'default',
-                        badge: 1,
-                        contentAvailable: true,
                     },
                 },
-            },
-            webpush: {
+                webpush: {
+                    headers: {
+                        Urgency: 'high',
+                    },
+                },
+            }
+            : {
+                // Top-level notification block — required for Flutter/native apps to
+                // auto-display the notification without any Flutter-side handling code
                 notification: {
                     title: String(payload.title),
                     body: String(payload.body),
-                    icon: '/favicon.ico',
-                    badge: '/favicon.ico',
-                    tag: payload.data?.type || 'wasgromart-general',
-                    data: messageData,
-                    requireInteraction: true,
                 },
-                headers: {
-                    Urgency: 'high'
-                }
-            },
-        };
+                // Data payload — available to Flutter app via message.data
+                data: messageData,
+                tokens: tokens,
+                android: {
+                    priority: 'high',
+                    notification: {
+                        title: String(payload.title),
+                        body: String(payload.body),
+                        // Use custom sound channel for seller alerts (which is pre-registered in native app), default otherwise
+                        // This prevents Android from blocking notifications on unregistered channels (e.g. wasgromart_delivery_alert)
+                        channelId: payload.sound === 'seller_alert' ? 'wasgromart_seller_alert' : 'wasgromart_notifications',
+                        sound: payload.sound ? `${payload.sound}.mp3` : 'default',
+                        clickAction: 'FLUTTER_NOTIFICATION_CLICK',
+                    },
+                },
+                apns: {
+                    payload: {
+                        aps: {
+                            alert: {
+                                title: String(payload.title),
+                                body: String(payload.body),
+                            },
+                            // iOS: sound file must be bundled in the Flutter app
+                            sound: payload.sound ? `${payload.sound}.mp3` : 'default',
+                            badge: 1,
+                            contentAvailable: true,
+                        },
+                    },
+                },
+                webpush: {
+                    notification: {
+                        title: String(payload.title),
+                        body: String(payload.body),
+                        icon: '/favicon.ico',
+                        badge: '/favicon.ico',
+                        tag: payload.data?.type || 'wasgromart-general',
+                        data: messageData,
+                        requireInteraction: true,
+                    },
+                    headers: {
+                        Urgency: 'high'
+                    }
+                },
+            };
 
         const response = await admin.messaging().sendEachForMulticast(message);
         const invalidTokens: string[] = [];

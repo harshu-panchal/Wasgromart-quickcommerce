@@ -34,6 +34,13 @@ export interface BroadcastPayload {
   body: string;
   data?: Record<string, string>;
   sound?: string;
+  /**
+   * When true (default), send a data-only FCM message so the SW (web) and
+   * Flutter app (mobile) render the notification themselves. This avoids the
+   * duplicate-notification issue where the SDK auto-displays the notification
+   * block AND the app's handler also calls showNotification.
+   */
+  dataOnly?: boolean;
 }
 
 export interface BroadcastResult {
@@ -271,6 +278,10 @@ export async function broadcastPush(
   let failureCount = 0;
   const invalidTokens: string[] = [];
 
+  // Default to data-only so we never hit the mixed-message duplicate. Callers
+  // can opt back into notification+data mode by explicitly passing dataOnly:false.
+  const useDataOnly = payload.dataOnly !== false;
+
   for (let i = 0; i < allTokens.length; i += CHUNK_SIZE) {
     const chunk = allTokens.slice(i, i + CHUNK_SIZE);
     try {
@@ -279,6 +290,7 @@ export async function broadcastPush(
         body: payload.body,
         data: payload.data,
         sound: payload.sound,
+        dataOnly: useDataOnly,
       });
       successCount += result?.successCount || 0;
       failureCount += result?.failureCount || 0;
