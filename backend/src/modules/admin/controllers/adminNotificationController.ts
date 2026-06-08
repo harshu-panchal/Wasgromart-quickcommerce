@@ -1,9 +1,40 @@
 import { Request, Response } from "express";
 import { asyncHandler } from "../../../utils/asyncHandler";
 import Notification from "../../../models/Notification";
+import {
+  broadcastPush,
+  Audience,
+  RoleAudience,
+  UserCollection,
+  BroadcastResult,
+} from "../../../services/broadcastNotificationService";
+
+const ROLE_AUDIENCES: ReadonlySet<RoleAudience> = new Set([
+  "All",
+  "Admin",
+  "Seller",
+  "Customer",
+  "Delivery",
+]);
+const USER_COLLECTIONS: ReadonlySet<UserCollection> = new Set([
+  "Admin",
+  "Seller",
+  "Customer",
+  "Delivery",
+]);
 
 /**
- * Create a new notification
+ * Create a new notification AND broadcast it via FCM to the chosen audience.
+ *
+ * Body:
+ *   - recipientType: "All" | "Admin" | "Seller" | "Customer" | "Delivery"
+ *   - recipientId?: ObjectId — when present, the broadcast is targeted at a
+ *     single user. recipientType must be the user's collection
+ *     (Admin/Seller/Customer/Delivery, never "All").
+ *   - title, message, type?, link?, actionLabel?, priority?, expiresAt?
+ *
+ * Response includes a `push` block with delivery stats so the admin UI can
+ * surface real numbers (targeted users / devices / success / failure).
  */
 export const createNotification = asyncHandler(
   async (req: Request, res: Response) => {
@@ -26,6 +57,30 @@ export const createNotification = asyncHandler(
       });
     }
 
+    if (!ROLE_AUDIENCES.has(recipientType)) {
+      return res.status(400).json({
+        success: false,
+        message: `Invalid recipientType: ${recipientType}`,
+      });
+    }
+
+    if (recipientId) {
+      if (recipientType === "All") {
+        return res.status(400).json({
+          success: false,
+          message:
+            "recipientId is not allowed when recipientType is 'All'. Pick a specific user type.",
+        });
+      }
+      if (!USER_COLLECTIONS.has(recipientType)) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "recipientType must be Admin/Seller/Customer/Delivery when targeting a specific user.",
+        });
+      }
+    }
+
     const notification = await Notification.create({
       recipientType,
       recipientId,
@@ -40,10 +95,50 @@ export const createNotification = asyncHandler(
       isRead: false,
     });
 
+    // Fire the FCM broadcast. Wrapped so a Firebase outage doesn't 500 the
+    // create request — the DB row is the source of truth, push is best-effort.
+    let pushStats: BroadcastResult = {
+      targetedUsers: 0,
+      tokens: 0,
+      successCount: 0,
+      failureCount: 0,
+      invalidTokenCount: 0,
+    };
+
+    try {
+      const audience: Audience = recipientId
+        ? {
+            kind: "user",
+            userId: String(recipientId),
+            userType: recipientType as UserCollection,
+          }
+        : { kind: "role", role: recipientType as RoleAudience };
+
+      pushStats = await broadcastPush(audience, {
+        title,
+        body: message,
+        data: {
+          notificationId: String(notification._id),
+          type: "admin_broadcast",
+          recipientType: String(recipientType),
+          link: link ? String(link) : "",
+        },
+      });
+
+      notification.sentAt = new Date();
+      await notification.save();
+    } catch (pushError) {
+      console.error(
+        `[${new Date().toISOString()}] Broadcast push failed for notification ${notification._id}:`,
+        pushError,
+      );
+    }
+
     return res.status(201).json({
       success: true,
-      message: "Notification created successfully",
+      message: "Notification created and broadcast",
       data: notification,
+      push: pushStats,
     });
   }
 );
@@ -188,9 +283,8 @@ export const updateNotification = asyncHandler(
 );
 
 /**
- * Send notification (Push to users)
- * This is a placeholder for actual push notification logic (Firebase/Socket.io)
- * For now, just mark it as sent.
+ * Re-broadcast an existing notification via FCM. Useful for retrying a row
+ * that was created when Firebase was down, or for resending an old one.
  */
 export const sendNotification = asyncHandler(
   async (req: Request, res: Response) => {
@@ -205,16 +299,51 @@ export const sendNotification = asyncHandler(
       });
     }
 
-    // Logic to send push notification would go here
-    // e.g. await pushNotificationService.send(notification);
+    let pushStats: BroadcastResult = {
+      targetedUsers: 0,
+      tokens: 0,
+      successCount: 0,
+      failureCount: 0,
+      invalidTokenCount: 0,
+    };
 
-    notification.sentAt = new Date();
-    await notification.save();
+    try {
+      const audience: Audience = notification.recipientId
+        ? {
+            kind: "user",
+            userId: String(notification.recipientId),
+            userType: notification.recipientType as UserCollection,
+          }
+        : {
+            kind: "role",
+            role: notification.recipientType as RoleAudience,
+          };
+
+      pushStats = await broadcastPush(audience, {
+        title: notification.title,
+        body: notification.message,
+        data: {
+          notificationId: String(notification._id),
+          type: "admin_broadcast",
+          recipientType: String(notification.recipientType),
+          link: notification.link ? String(notification.link) : "",
+        },
+      });
+
+      notification.sentAt = new Date();
+      await notification.save();
+    } catch (pushError) {
+      console.error(
+        `[${new Date().toISOString()}] Re-broadcast push failed for notification ${id}:`,
+        pushError,
+      );
+    }
 
     return res.status(200).json({
       success: true,
-      message: "Notification sent successfully",
+      message: "Notification broadcast triggered",
       data: notification,
+      push: pushStats,
     });
   }
 );

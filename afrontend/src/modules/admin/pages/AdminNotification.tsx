@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import {
   getNotifications,
   createNotification,
@@ -6,13 +6,48 @@ import {
   Notification as NotificationType,
   CreateNotificationData,
 } from '../../../services/api/admin/adminNotificationService';
+import {
+  searchUsers,
+  AdminUserSearchHit,
+  AdminSearchUserType,
+} from '../../../services/api/admin/adminUserSearchService';
+
+// Form-level recipient option. "Specific" is a UI-only choice that maps to
+// the picked user's actual collection on submit.
+type FormRecipientType =
+  | 'All'
+  | 'Admin'
+  | 'Seller'
+  | 'Customer'
+  | 'Delivery'
+  | 'Specific';
 
 export default function AdminNotification() {
-  const [formData, setFormData] = useState({
-    recipientType: 'All' as 'All' | 'Admin' | 'Seller' | 'Customer' | 'Delivery',
+  const [formData, setFormData] = useState<{
+    recipientType: FormRecipientType;
+    title: string;
+    message: string;
+  }>({
+    recipientType: 'All',
     title: '',
     message: '',
   });
+
+  // "Specific User" picker state
+  const [specificUserType, setSpecificUserType] =
+    useState<AdminSearchUserType>('Customer');
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [userSearchResults, setUserSearchResults] = useState<
+    AdminUserSearchHit[]
+  >([]);
+  const [userSearchOpen, setUserSearchOpen] = useState(false);
+  const [userSearchLoading, setUserSearchLoading] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<AdminUserSearchHit | null>(
+    null,
+  );
+  const userSearchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   const [notifications, setNotifications] = useState<NotificationType[]>([]);
   const [loading, setLoading] = useState(false);
@@ -75,7 +110,59 @@ export default function AdminNotification() {
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value as any }));
+    if (name === 'recipientType' && value !== 'Specific') {
+      setSelectedUser(null);
+      setUserSearchQuery('');
+      setUserSearchResults([]);
+      setUserSearchOpen(false);
+    }
+  };
+
+  // Debounced cross-collection user search for the "Specific User" picker.
+  useEffect(() => {
+    if (formData.recipientType !== 'Specific') return;
+    if (userSearchDebounceRef.current) {
+      clearTimeout(userSearchDebounceRef.current);
+    }
+    const q = userSearchQuery.trim();
+    if (q.length < 2) {
+      setUserSearchResults([]);
+      setUserSearchLoading(false);
+      return;
+    }
+    setUserSearchLoading(true);
+    userSearchDebounceRef.current = setTimeout(async () => {
+      try {
+        const res = await searchUsers({ q, type: specificUserType });
+        if (res.success && Array.isArray(res.data)) {
+          setUserSearchResults(res.data);
+          setUserSearchOpen(true);
+        } else {
+          setUserSearchResults([]);
+        }
+      } catch {
+        setUserSearchResults([]);
+      } finally {
+        setUserSearchLoading(false);
+      }
+    }, 350);
+    return () => {
+      if (userSearchDebounceRef.current) {
+        clearTimeout(userSearchDebounceRef.current);
+      }
+    };
+  }, [userSearchQuery, specificUserType, formData.recipientType]);
+
+  const handleSelectUser = (hit: AdminUserSearchHit) => {
+    setSelectedUser(hit);
+    setUserSearchOpen(false);
+    setUserSearchQuery('');
+    setUserSearchResults([]);
+  };
+
+  const handleClearSelectedUser = () => {
+    setSelectedUser(null);
   };
 
   const handleSendNotification = async (e: React.FormEvent) => {
@@ -93,26 +180,66 @@ export default function AdminNotification() {
       return;
     }
 
+    if (formData.recipientType === 'Specific' && !selectedUser) {
+      setError('Please pick a specific user to notify');
+      return;
+    }
+
     setLoading(true);
     try {
-      const notificationData: CreateNotificationData = {
-        recipientType: formData.recipientType,
-        title: formData.title.trim(),
-        message: formData.message.trim(),
-        type: 'Info',
-        priority: 'Medium',
-      };
+      const notificationData: CreateNotificationData =
+        formData.recipientType === 'Specific' && selectedUser
+          ? {
+              recipientType: selectedUser.userType,
+              recipientId: selectedUser.userId,
+              title: formData.title.trim(),
+              message: formData.message.trim(),
+              type: 'Info',
+              priority: 'Medium',
+            }
+          : {
+              recipientType: formData.recipientType as
+                | 'All'
+                | 'Admin'
+                | 'Seller'
+                | 'Customer'
+                | 'Delivery',
+              title: formData.title.trim(),
+              message: formData.message.trim(),
+              type: 'Info',
+              priority: 'Medium',
+            };
 
       const response = await createNotification(notificationData);
 
       if (response.success) {
-        setSuccessMessage('Notification sent successfully!');
+        const stats = response.push;
+        if (stats) {
+          if (stats.tokens === 0) {
+            setSuccessMessage(
+              `Saved. No FCM devices registered for the chosen audience (${stats.targetedUsers} user(s) matched).`,
+            );
+          } else {
+            setSuccessMessage(
+              `Sent to ${stats.targetedUsers} user(s) · ${stats.successCount}/${stats.tokens} device(s) delivered` +
+                (stats.failureCount > 0 ? ` · ${stats.failureCount} failed` : '') +
+                (stats.invalidTokenCount > 0
+                  ? ` · ${stats.invalidTokenCount} stale token(s) cleaned up`
+                  : ''),
+            );
+          }
+        } else {
+          setSuccessMessage('Notification sent successfully!');
+        }
         // Reset form
         setFormData({
           recipientType: 'All',
           title: '',
           message: '',
         });
+        setSelectedUser(null);
+        setUserSearchQuery('');
+        setUserSearchResults([]);
         // Refresh notifications list
         fetchNotifications();
       } else {
@@ -299,8 +426,114 @@ export default function AdminNotification() {
                     <option value="Seller">Seller</option>
                     <option value="Customer">Customer</option>
                     <option value="Delivery">Delivery</option>
+                    <option value="Specific">Specific User</option>
                   </select>
                 </div>
+
+                {formData.recipientType === 'Specific' && (
+                  <div className="space-y-2 p-3 bg-neutral-50 rounded border border-neutral-200">
+                    <div>
+                      <label className="block text-xs font-medium text-neutral-700 mb-1">
+                        Target User Type
+                      </label>
+                      <select
+                        value={specificUserType}
+                        onChange={(e) => {
+                          setSpecificUserType(
+                            e.target.value as AdminSearchUserType,
+                          );
+                          setSelectedUser(null);
+                          setUserSearchResults([]);
+                        }}
+                        disabled={loading}
+                        className="w-full px-3 py-1.5 text-sm border border-neutral-300 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none bg-white"
+                      >
+                        <option value="Customer">Customer</option>
+                        <option value="Seller">Seller</option>
+                        <option value="Delivery">Delivery</option>
+                        <option value="Admin">Admin</option>
+                      </select>
+                    </div>
+
+                    {selectedUser ? (
+                      <div className="flex items-center justify-between gap-2 px-3 py-2 bg-green-50 border border-green-300 rounded">
+                        <div className="text-sm">
+                          <div className="font-medium text-neutral-800">
+                            {selectedUser.displayName}
+                          </div>
+                          <div className="text-xs text-neutral-500">
+                            {selectedUser.userType}
+                            {selectedUser.phone ? ` · ${selectedUser.phone}` : ''}
+                            {selectedUser.email ? ` · ${selectedUser.email}` : ''}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleClearSelectedUser}
+                          disabled={loading}
+                          className="text-green-700 hover:text-green-900 font-bold text-lg leading-none"
+                          aria-label="Clear selected user"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="relative">
+                        <label className="block text-xs font-medium text-neutral-700 mb-1">
+                          Search by name, phone, or email
+                        </label>
+                        <input
+                          type="text"
+                          value={userSearchQuery}
+                          onChange={(e) => setUserSearchQuery(e.target.value)}
+                          onFocus={() => {
+                            if (userSearchResults.length > 0)
+                              setUserSearchOpen(true);
+                          }}
+                          disabled={loading}
+                          placeholder="Type at least 2 characters..."
+                          className="w-full px-3 py-1.5 text-sm border border-neutral-300 rounded focus:ring-2 focus:ring-green-500 focus:border-green-500 outline-none"
+                        />
+                        {userSearchOpen &&
+                          (userSearchLoading ||
+                            userSearchResults.length > 0 ||
+                            userSearchQuery.trim().length >= 2) && (
+                            <div className="absolute z-10 left-0 right-0 mt-1 bg-white border border-neutral-300 rounded shadow-md max-h-56 overflow-y-auto">
+                              {userSearchLoading && (
+                                <div className="px-3 py-2 text-xs text-neutral-500">
+                                  Searching...
+                                </div>
+                              )}
+                              {!userSearchLoading &&
+                                userSearchResults.length === 0 && (
+                                  <div className="px-3 py-2 text-xs text-neutral-500">
+                                    No users found.
+                                  </div>
+                                )}
+                              {!userSearchLoading &&
+                                userSearchResults.map((hit) => (
+                                  <button
+                                    type="button"
+                                    key={`${hit.userType}-${hit.userId}`}
+                                    onClick={() => handleSelectUser(hit)}
+                                    className="w-full text-left px-3 py-2 hover:bg-green-50 border-b last:border-b-0 border-neutral-100"
+                                  >
+                                    <div className="text-sm font-medium text-neutral-800">
+                                      {hit.displayName}
+                                    </div>
+                                    <div className="text-xs text-neutral-500">
+                                      {hit.userType}
+                                      {hit.phone ? ` · ${hit.phone}` : ''}
+                                      {hit.email ? ` · ${hit.email}` : ''}
+                                    </div>
+                                  </button>
+                                ))}
+                            </div>
+                          )}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-sm font-medium text-neutral-700 mb-2">

@@ -25,6 +25,9 @@ import * as couponController from "../modules/admin/controllers/adminCouponContr
 // Notification Controllers
 import * as notificationController from "../modules/admin/controllers/adminNotificationController";
 
+// User Search Controller (used by Notification "Specific User" picker)
+import * as userSearchController from "../modules/admin/controllers/adminUserSearchController";
+
 // Wallet Controllers
 import * as walletController from "../modules/admin/controllers/adminWalletController";
 import * as withdrawalController from "../modules/admin/controllers/adminWithdrawalController";
@@ -222,6 +225,9 @@ router.get("/coupons/:id", couponController.getCouponById);
 router.put("/coupons/:id", couponController.updateCoupon);
 router.delete("/coupons/:id", couponController.deleteCoupon);
 router.post("/coupons/validate", couponController.validateCoupon);
+
+// ==================== User Search (cross-collection) ====================
+router.get("/users/search", userSearchController.searchUsers);
 
 // ==================== Notification Routes ====================
 router.post("/notifications", notificationController.createNotification);

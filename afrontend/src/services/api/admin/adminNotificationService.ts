@@ -69,12 +69,29 @@ export interface MarkMultipleAsReadData {
 }
 
 /**
- * Create a new notification
+ * Delivery stats returned by the backend after broadcasting via FCM.
+ * Exposes how many users matched, how many devices were targeted, and how
+ * many actually accepted the push.
+ */
+export interface BroadcastPushStats {
+  targetedUsers: number;
+  tokens: number;
+  successCount: number;
+  failureCount: number;
+  invalidTokenCount: number;
+}
+
+export interface CreateNotificationResponse extends ApiResponse<Notification> {
+  push?: BroadcastPushStats;
+}
+
+/**
+ * Create a new notification (also fans out an FCM push to the audience).
  */
 export const createNotification = async (
   data: CreateNotificationData
-): Promise<ApiResponse<Notification>> => {
-  const response = await api.post<ApiResponse<Notification>>(
+): Promise<CreateNotificationResponse> => {
+  const response = await api.post<CreateNotificationResponse>(
     "/admin/notifications",
     data
   );
