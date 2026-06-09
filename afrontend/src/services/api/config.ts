@@ -1,28 +1,68 @@
 import axios, { AxiosInstance, InternalAxiosRequestConfig } from "axios";
 
-// Base API URL - adjust based on your backend URL
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api/v1";
+// Base API URL is configured per-environment in:
+//   afrontend/.env.development  → http://localhost:5000/api/v1
+//   afrontend/.env.production   → https://api.wasgromart.com/api/v1
+// The localhost fallback below is intentionally ONLY used in dev mode, so a
+// production bundle accidentally built without env vars fails loudly instead
+// of silently shipping localhost URLs to every visitor's browser.
+const RAW_API_BASE_URL = import.meta.env.VITE_API_BASE_URL as string | undefined;
+const isDev = import.meta.env.DEV;
 
+if (!RAW_API_BASE_URL) {
+  if (isDev) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[API Config] VITE_API_BASE_URL is not set. Falling back to http://localhost:5000/api/v1.\n" +
+        "→ Create afrontend/.env.development (or .env.local) with VITE_API_BASE_URL=... to silence this."
+    );
+  } else {
+    // eslint-disable-next-line no-console
+    console.error(
+      "[API Config] VITE_API_BASE_URL is MISSING in this production build.\n" +
+        "→ This build will be broken for all users. Re-build with VITE_API_BASE_URL=https://api.wasgromart.com/api/v1 set."
+    );
+  }
+}
+
+const API_BASE_URL = (RAW_API_BASE_URL || "http://localhost:5000/api/v1").replace(/\/$/, "");
 
 // Socket.io base URL - extract from API_BASE_URL by removing /api/v1
 // Socket connections need the base server URL without the API path
 export const getSocketBaseURL = (): string => {
-  // Use VITE_API_URL or VITE_API_BASE_URL
-  const apiBaseUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api/v1";
+  const apiBaseUrl =
+    (import.meta.env.VITE_API_URL as string | undefined) ||
+    RAW_API_BASE_URL ||
+    "http://localhost:5000/api/v1";
 
   // Remove /api/v1 or /api and any trailing slash from the end
-  const socketUrl = apiBaseUrl.replace(/\/api\/v\d+\/?$|\/api\/?$|\/$/, '');
+  const socketUrl = apiBaseUrl.replace(/\/api\/v\d+\/?$|\/api\/?$|\/$/, "");
 
   return socketUrl || "http://localhost:5000";
 };
 
-// Log the API base URL for debugging (only in development or if there's an issue)
-if (import.meta.env.DEV || !import.meta.env.VITE_API_BASE_URL) {
-  console.log('[API Config] Base URL:', API_BASE_URL);
-  console.log('[API Config] VITE_API_BASE_URL:', import.meta.env.VITE_API_BASE_URL);
-  console.log('[API Config] Socket Base URL:', getSocketBaseURL());
-  console.log('[API Config] Secure Context:', window.isSecureContext ? '✅ Yes' : '❌ No (FCM will fail on mobile)');
+// Expose the resolved API origin (scheme + host) for code that needs to build
+// absolute asset URLs without re-implementing the parsing logic.
+export const getApiOrigin = (): string => {
+  try {
+    return new URL(API_BASE_URL).origin;
+  } catch {
+    return "";
+  }
+};
+
+if (isDev || !RAW_API_BASE_URL) {
+  // eslint-disable-next-line no-console
+  console.log("[API Config] Base URL:", API_BASE_URL);
+  // eslint-disable-next-line no-console
+  console.log("[API Config] VITE_API_BASE_URL:", RAW_API_BASE_URL);
+  // eslint-disable-next-line no-console
+  console.log("[API Config] Socket Base URL:", getSocketBaseURL());
+  // eslint-disable-next-line no-console
+  console.log(
+    "[API Config] Secure Context:",
+    window.isSecureContext ? "✅ Yes" : "❌ No (FCM will fail on mobile)"
+  );
 }
 
 // Create axios instance

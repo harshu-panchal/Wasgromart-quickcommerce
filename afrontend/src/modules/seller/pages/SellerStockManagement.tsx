@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getProducts, updateStock, Product } from '../../../services/api/productService';
 import { getCategories } from '../../../services/api/categoryService';
+import { getApiOrigin } from '../../../services/api/config';
 import { useAuth } from '../../../context/AuthContext';
 
 interface StockItem {
@@ -52,16 +53,10 @@ export default function SellerStockManagement() {
         if (!url) return '/assets/product-placeholder.jpg';
         if (url.startsWith('http') || url.startsWith('data:') || url.startsWith('blob:')) return url;
 
-        // Handle relative paths
-        const apiBase = import.meta.env.VITE_API_BASE_URL || "http://localhost:5000/api/v1";
-        try {
-            const urlObj = new URL(apiBase);
-            const origin = urlObj.origin;
-            const cleanUrl = url.replace(/\\/g, '/'); // Fix windows backslashes
-            return `${origin}/${cleanUrl.startsWith('/') ? cleanUrl.slice(1) : cleanUrl}`;
-        } catch (e) {
-            return url;
-        }
+        const origin = getApiOrigin();
+        const cleanUrl = url.replace(/\\/g, '/');
+        if (!origin) return cleanUrl;
+        return `${origin}/${cleanUrl.startsWith('/') ? cleanUrl.slice(1) : cleanUrl}`;
     };
 
     // Fetch products and convert to stock items
