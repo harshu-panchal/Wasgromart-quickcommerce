@@ -8,6 +8,7 @@ import { SubscriptionProvider } from "./context/SubscriptionContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import { LocationProvider } from "./context/LocationContext";
 import { ToastProvider } from "./context/ToastContext";
+import { WishlistProvider } from "./context/WishlistContext";
 
 import { LoadingProvider } from "./context/LoadingContext";
 import { AxiosLoadingInterceptor } from "./context/AxiosLoadingInterceptor";
@@ -358,6 +359,7 @@ function AppContent() {
                         v7_relativeSplatPath: true,
                       }}>
                       <RouteLoaderTrigger />
+                      <WishlistProvider>
                       <Routes>
                         <Route
                           path="/terms-of-service"
@@ -972,6 +974,7 @@ function AppContent() {
                           }
                         />
                       </Routes>
+                      </WishlistProvider>
                     </BrowserRouter>
                   </OrdersProvider>
                 </CartProvider>

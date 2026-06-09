@@ -32,7 +32,7 @@ import {
 } from "../../services/api/customerAddressService";
 import GoogleMapsLocationPicker from "../../components/GoogleMapsLocationPicker";
 import { getProducts } from "../../services/api/customerProductService";
-import { addToWishlist } from "../../services/api/customerWishlistService";
+import { useWishlistContext } from "../../context/WishlistContext";
 import { updateProfile } from "../../services/api/customerService";
 import { calculateProductPrice } from "../../utils/priceUtils";
 
@@ -54,6 +54,7 @@ export default function Checkout() {
   const { location: userLocation } = useLocationContext();
   const { showToast: showGlobalToast } = useToast();
   const { user, updateUser } = useAuth();
+  const { addToWishlist: addToWishlistShared } = useWishlistContext();
   const navigate = useNavigate();
   const [tipAmount, setTipAmount] = useState<number | null>(null);
   const [customTipAmount, setCustomTipAmount] = useState<number>(0);
@@ -368,12 +369,8 @@ export default function Checkout() {
         return;
       }
 
-      // Add to wishlist
-      await addToWishlist(
-        productId,
-        userLocation.latitude,
-        userLocation.longitude
-      );
+      // Add to wishlist via shared context so heart icons across the app stay in sync
+      await addToWishlistShared(productId);
       // Remove from cart
       await removeFromCart(productId, variantId, variantTitle);
       // Show success message

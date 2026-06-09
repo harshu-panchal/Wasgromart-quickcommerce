@@ -1,55 +1,32 @@
-import { useState, useEffect } from 'react';
+import { useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { getWishlist, removeFromWishlist } from '../../services/api/customerWishlistService';
 import { Product } from '../../types/domain';
 import { useCart } from '../../context/CartContext';
-import { useLocation } from '../../hooks/useLocation';
-import { useToast } from '../../context/ToastContext';
+import { useWishlistContext } from '../../context/WishlistContext';
 import Button from '../../components/ui/button';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { calculateProductPrice } from '../../utils/priceUtils';
 
 export default function Wishlist() {
   const navigate = useNavigate();
-  const { location } = useLocation();
   const { addToCart } = useCart();
-  const { showToast } = useToast();
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
+  const { wishlistProducts, loading, removeFromWishlist } = useWishlistContext();
 
-  const fetchWishlist = async () => {
-    try {
-      setLoading(true);
-      const res = await getWishlist({
-        latitude: location?.latitude,
-        longitude: location?.longitude
-      });
-      if (res.success && res.data) {
-        setProducts(res.data.products.map(p => ({
-          ...p,
-          id: p._id || (p as any).id,
-          name: p.productName || (p as any).name,
-          imageUrl: p.mainImageUrl || p.mainImage || (p as any).imageUrl,
-          price: (p as any).price || (p as any).variations?.[0]?.price || 0,
-          pack: (p as any).pack || (p as any).variations?.[0]?.name || 'Standard'
-        })) as any);
-      }
-    } catch (error: any) {
-      console.error('Failed to fetch wishlist:', error);
-      showToast(error.message || 'Failed to fetch wishlist', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchWishlist();
-  }, [location?.latitude, location?.longitude]);
+  // Normalise to the shape the existing UI expects (id, name, imageUrl, price, pack)
+  const products = useMemo<Product[]>(() => {
+    return (wishlistProducts || []).map((p: any) => ({
+      ...p,
+      id: p._id || p.id,
+      name: p.productName || p.name,
+      imageUrl: p.mainImageUrl || p.mainImage || p.imageUrl,
+      price: p.price || p.variations?.[0]?.price || 0,
+      pack: p.pack || p.variations?.[0]?.name || 'Standard',
+    })) as Product[];
+  }, [wishlistProducts]);
 
   const handleRemove = async (productId: string) => {
     try {
       await removeFromWishlist(productId);
-      setProducts(products.filter(p => (p.id !== productId && p._id !== productId)));
     } catch (error) {
       console.error('Failed to remove from wishlist:', error);
     }
@@ -65,7 +42,7 @@ export default function Wishlist() {
       </div>
 
       <div className="px-4">
-        {loading ? (
+        {loading && products.length === 0 ? (
           <div className="flex justify-center pt-20">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
           </div>
