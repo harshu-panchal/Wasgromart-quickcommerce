@@ -106,10 +106,15 @@ async function fetchSectionData(
   try {
     const { categories, subCategories, displayType } = section;
     const baseLimit = section.limit || 12;
-    const effectiveLimit = options.limit && options.limit > 0
+    // Pagination overrides (limit / skip / withTotal) only apply to the
+    // "products" display type. Category / subcategory tile sections are
+    // always returned whole (capped at the admin's `section.limit`) because
+    // the UI renders them with `CategoryTileSection` which has no "See More".
+    const isProductsType = displayType === "products";
+    const effectiveLimit = isProductsType && options.limit && options.limit > 0
       ? options.limit
       : baseLimit;
-    const skip = Math.max(0, options.skip || 0);
+    const skip = isProductsType ? Math.max(0, options.skip || 0) : 0;
 
     // If displayType is "subcategories", fetch subcategories
     if (displayType === "subcategories") {
@@ -634,9 +639,12 @@ export const getHomeContent = async (req: Request, res: Response) => {
     // Fetch data for each section. When the client passed
     // `productsPerSection`, also include the per-section total so the frontend
     // can drive "See More" without an extra round-trip on first paint.
+    // NOTE: chunked loading only applies to `displayType: "products"` —
+    // category / subcategory tile sections are always returned whole.
     const dynamicSections = await Promise.all(
       homeSections.map(async (section: any) => {
-        const wantsPagination = parsedProductsPerSection > 0;
+        const wantsPagination =
+          parsedProductsPerSection > 0 && section.displayType === "products";
         const { data, total } = await fetchSectionData(
           section,
           nearbySellerIds,
@@ -653,8 +661,8 @@ export const getHomeContent = async (req: Request, res: Response) => {
           displayType: section.displayType,
           columns: section.columns,
           data,
-          // Only emit per-section pagination when explicitly requested so the
-          // legacy bundle response stays byte-identical.
+          // Only emit per-section pagination for product sections — tile
+          // sections never paginate.
           ...(wantsPagination
             ? {
               pagination: {
@@ -862,10 +870,14 @@ export const getHomeSections = async (req: Request, res: Response) => {
 
     const data = await Promise.all(
       sections.map(async (section: any) => {
+        // Only product sections chunk; tile sections always return whole.
+        const isProductsType = section.displayType === "products";
         const { data: sectionData, total } = await fetchSectionData(
           section,
           nearbySellerIds,
-          { limit: productsPerSection, skip: 0, withTotal: true },
+          isProductsType
+            ? { limit: productsPerSection, skip: 0, withTotal: true }
+            : {},
         );
         return {
           id: section._id.toString(),
@@ -874,12 +886,16 @@ export const getHomeSections = async (req: Request, res: Response) => {
           displayType: section.displayType,
           columns: section.columns,
           data: sectionData,
-          pagination: {
-            page: 1,
-            limit: productsPerSection,
-            total,
-            hasMore: sectionData.length < total,
-          },
+          ...(isProductsType
+            ? {
+              pagination: {
+                page: 1,
+                limit: productsPerSection,
+                total,
+                hasMore: sectionData.length < total,
+              },
+            }
+            : {}),
         };
       }),
     );
@@ -945,6 +961,16 @@ export const getHomeSectionProducts = async (req: Request, res: Response) => {
       return res.status(404).json({
         success: false,
         message: "Section not found",
+      });
+    }
+
+    // Category / subcategory tile sections are not paginated by design — the
+    // home page fetches them whole. Reject calls that don't make sense rather
+    // than silently returning empty pages.
+    if (section.displayType !== "products") {
+      return res.status(400).json({
+        success: false,
+        message: `Section "${section.title}" is a ${section.displayType} section and is not paginated`,
       });
     }
 
