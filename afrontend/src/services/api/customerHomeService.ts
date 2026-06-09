@@ -1,26 +1,55 @@
 import api from "./config";
 import { apiCache } from "../../utils/apiCache";
 
+export interface HomeSectionPagination {
+  page: number;
+  limit: number;
+  total: number;
+  hasMore: boolean;
+}
+
+export interface HomeSection {
+  id: string;
+  title: string;
+  slug?: string;
+  displayType: "subcategories" | "products" | "categories";
+  columns?: number;
+  data: any[];
+  /** Only present when the server was asked to paginate this section. */
+  pagination?: HomeSectionPagination;
+}
+
 export interface HomeContentResponse {
   success: boolean;
   data: {
     bestsellers: any[];
     lowestPrices?: any[];
     categories: any[];
+    homeSections?: HomeSection[];
+    /** Only present when the server was asked to chunk the section list. */
+    homeSectionsPagination?: HomeSectionPagination;
     shops: any[];
     promoBanners: any[];
     trending: any[];
     cookingIdeas: any[];
     promoCards?: any[];
-    promoStrip?: any; // PromoStrip data from backend
+    promoStrip?: any;
   };
 }
 
+export interface GetHomeContentOptions {
+  /** Cap on number of home sections to return in this request. 0 = no cap. */
+  sectionsLimit?: number;
+  /** Cap on products inside each home section. 0 = use section's admin limit. */
+  productsPerSection?: number;
+}
+
 /**
- * Get home page content with caching
- * @param headerCategorySlug - Optional header category slug to filter categories (e.g., 'winter', 'wedding')
- * @param useCache - Whether to use cache (default: true)
- * @param cacheTTL - Cache TTL in milliseconds (default: 5 minutes)
+ * Get home page content with caching.
+ *
+ * Pass `sectionsLimit` / `productsPerSection` to enable chunked loading.
+ * Leaving them undefined preserves the legacy "fetch everything" behaviour
+ * used by Categories.tsx, Search.tsx and PromoSection.tsx.
  */
 export const getHomeContent = async (
   headerCategorySlug?: string,
@@ -28,9 +57,11 @@ export const getHomeContent = async (
   longitude?: number,
   useCache: boolean = true,
   cacheTTL: number = 5 * 60 * 1000, // 5 minutes
-  skipLoader: boolean = false
+  skipLoader: boolean = false,
+  options: GetHomeContentOptions = {}
 ): Promise<HomeContentResponse> => {
-  const cacheKey = `home-content-${headerCategorySlug || 'all'}-${latitude || 0}-${longitude || 0}`;
+  const { sectionsLimit, productsPerSection } = options;
+  const cacheKey = `home-content-${headerCategorySlug || "all"}-${latitude || 0}-${longitude || 0}-${sectionsLimit ?? 0}-${productsPerSection ?? 0}`;
 
   const fetchFn = async () => {
     const params: any = headerCategorySlug ? { headerCategorySlug } : {};
@@ -38,9 +69,15 @@ export const getHomeContent = async (
       params.latitude = latitude;
       params.longitude = longitude;
     }
+    if (sectionsLimit && sectionsLimit > 0) {
+      params.sectionsLimit = sectionsLimit;
+    }
+    if (productsPerSection && productsPerSection > 0) {
+      params.productsPerSection = productsPerSection;
+    }
     const response = await api.get<HomeContentResponse>("/customer/home", {
       params,
-      skipLoader
+      skipLoader,
     } as any);
     return response.data;
   };
@@ -50,6 +87,76 @@ export const getHomeContent = async (
   }
 
   return fetchFn();
+};
+
+export interface HomeSectionsResponse {
+  success: boolean;
+  data: {
+    sections: HomeSection[];
+    pagination: HomeSectionPagination;
+  };
+}
+
+/**
+ * Fetch a single page of home sections (each populated with the first
+ * `productsPerSection` products). Used to lazily load more sections as the
+ * user scrolls through the home page.
+ */
+export const getHomeSections = async (
+  page: number,
+  limit: number = 5,
+  productsPerSection: number = 6,
+  headerCategorySlug?: string,
+  latitude?: number,
+  longitude?: number,
+  skipLoader: boolean = true
+): Promise<HomeSectionsResponse> => {
+  const params: any = { page, limit, productsPerSection };
+  if (headerCategorySlug) params.headerCategorySlug = headerCategorySlug;
+  if (latitude !== undefined && longitude !== undefined) {
+    params.latitude = latitude;
+    params.longitude = longitude;
+  }
+  const response = await api.get<HomeSectionsResponse>(
+    "/customer/home/sections",
+    { params, skipLoader } as any
+  );
+  return response.data;
+};
+
+export interface HomeSectionProductsResponse {
+  success: boolean;
+  data: {
+    sectionId: string;
+    title: string;
+    displayType: string;
+    products: any[];
+    pagination: HomeSectionPagination;
+  };
+}
+
+/**
+ * Fetch a single page of products inside a specific home section. Used by the
+ * "See More" button on the home page.
+ */
+export const getHomeSectionProducts = async (
+  sectionId: string,
+  page: number,
+  limit: number = 6,
+  latitude?: number,
+  longitude?: number,
+  skipLoader: boolean = true
+): Promise<HomeSectionProductsResponse> => {
+  const params: any = { page, limit };
+  if (latitude !== undefined && longitude !== undefined) {
+    params.latitude = latitude;
+    params.longitude = longitude;
+  }
+  const response = await api.get<HomeSectionProductsResponse>(
+    `/customer/home/sections/${sectionId}/products`,
+    { params, skipLoader } as any
+  );
+  return response.data;
 };
 
 /**

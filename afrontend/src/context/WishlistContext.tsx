@@ -12,12 +12,16 @@ import { useAuth } from "./AuthContext";
 import { useToast } from "./ToastContext";
 import { useLocation } from "../hooks/useLocation";
 import { useNavigate } from "react-router-dom";
-import { Product } from "../types/domain";
 import {
   getWishlist as apiGetWishlist,
   addToWishlist as apiAddToWishlist,
   removeFromWishlist as apiRemoveFromWishlist,
 } from "../services/api/customerWishlistService";
+
+// The wishlist endpoint returns products with the API-layer shape (a superset
+// of fields). Consumers (Wishlist page) re-normalise to the local domain
+// shape as needed, so a permissive type here keeps things flexible.
+type WishlistProduct = Record<string, any>;
 
 /**
  * Shared wishlist state for the customer app.
@@ -32,7 +36,7 @@ import {
 
 interface WishlistContextValue {
   wishlistIds: Set<string>;
-  wishlistProducts: Product[];
+  wishlistProducts: WishlistProduct[];
   loading: boolean;
   isWishlisted: (productId?: string) => boolean;
   toggleWishlist: (
@@ -48,8 +52,8 @@ const WishlistContext = createContext<WishlistContextValue | undefined>(
   undefined,
 );
 
-const productKey = (p: Product): string =>
-  String((p as any)._id || (p as any).id || "");
+const productKey = (p: WishlistProduct): string =>
+  String(p?._id || p?.id || "");
 
 export function WishlistProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated } = useAuth();
@@ -57,7 +61,7 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
   const { showToast } = useToast();
   const navigate = useNavigate();
 
-  const [wishlistProducts, setWishlistProducts] = useState<Product[]>([]);
+  const [wishlistProducts, setWishlistProducts] = useState<WishlistProduct[]>([]);
   const [wishlistIds, setWishlistIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(false);
 
@@ -68,7 +72,7 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
   // when unrelated state changes re-render the provider.
   const lastFetchKeyRef = useRef<string | null>(null);
 
-  const setFromProducts = useCallback((products: Product[]) => {
+  const setFromProducts = useCallback((products: WishlistProduct[]) => {
     const list = Array.isArray(products) ? products : [];
     setWishlistProducts(list);
     setWishlistIds(new Set(list.map(productKey).filter(Boolean)));

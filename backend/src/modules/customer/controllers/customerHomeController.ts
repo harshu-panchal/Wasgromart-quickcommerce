@@ -14,13 +14,102 @@ import mongoose from "mongoose";
 import { cache } from "../../../utils/cache";
 import { findSellersWithinRange } from "../../../utils/locationHelper";
 
-// Helper function to fetch data for a home section based on its configuration
+interface SectionFetchOptions {
+  /** Override the effective row cap (defaults to section.limit). */
+  limit?: number;
+  /** Number of items to skip (only used for `displayType: "products"`). */
+  skip?: number;
+  /** When true, also return a total row count alongside the data. */
+  withTotal?: boolean;
+}
+
+interface SectionFetchResult {
+  data: any[];
+  total: number;
+}
+
+/**
+ * Build the Mongo query for a "products" home section. Returned separately so
+ * we can re-use it both for `find()` and `countDocuments()` (when paginating).
+ */
+function buildProductSectionQuery(section: any): any {
+  const { categories, subCategories } = section;
+  const query: any = {
+    status: "Active",
+    publish: true,
+    // Exclude shop-by-store-only products from home sections
+    $or: [
+      { isShopByStoreOnly: { $ne: true } },
+      { isShopByStoreOnly: { $exists: false } },
+    ],
+  };
+
+  if (categories && categories.length > 0) {
+    const categoryIds = categories
+      .map((cat: any) => (cat ? cat._id || cat : null))
+      .filter((id: any) => id);
+    if (categoryIds.length > 0) {
+      query.category = { $in: categoryIds };
+    }
+  }
+
+  if (subCategories && subCategories.length > 0) {
+    const subCategoryIds = subCategories
+      .map((sub: any) => (sub ? sub._id || sub : null))
+      .filter((id: any) => id);
+    if (subCategoryIds.length > 0) {
+      query.subcategory = { $in: subCategoryIds };
+    }
+  }
+
+  return query;
+}
+
+function shapeProduct(p: any, nearbySellerIds?: mongoose.Types.ObjectId[]): any {
+  const isAvailable =
+    nearbySellerIds && nearbySellerIds.length > 0 && p.seller
+      ? nearbySellerIds.some((id) => id.toString() === p.seller.toString())
+      : false;
+
+  return {
+    id: p._id.toString(),
+    productId: p._id.toString(),
+    name: p.productName,
+    productName: p.productName,
+    image: p.mainImage,
+    mainImage: p.mainImage,
+    price: p.price,
+    discount:
+      p.discount ||
+      (p.mrp && p.price
+        ? Math.round(((p.mrp - p.price) / p.mrp) * 100)
+        : 0),
+    productImages: p.mainImage ? [p.mainImage] : [],
+    rating: p.rating || 0,
+    reviewsCount: p.reviewsCount || 0,
+    reviews: p.reviewsCount || 0,
+    pack: p.pack || "",
+    type: "product",
+    isAvailable,
+    seller: p.seller,
+  };
+}
+
+// Helper function to fetch data for a home section based on its configuration.
+// Returns both the page of data and (optionally) the total row count so callers
+// can compute `hasMore` for client-side pagination.
 async function fetchSectionData(
   section: any,
   nearbySellerIds?: mongoose.Types.ObjectId[],
-): Promise<any[]> {
+  options: SectionFetchOptions = {},
+): Promise<SectionFetchResult> {
   try {
-    const { categories, subCategories, displayType, limit } = section;
+    const { categories, subCategories, displayType } = section;
+    const baseLimit = section.limit || 12;
+    const effectiveLimit = options.limit && options.limit > 0
+      ? options.limit
+      : baseLimit;
+    const skip = Math.max(0, options.skip || 0);
 
     // If displayType is "subcategories", fetch subcategories
     if (displayType === "subcategories") {
@@ -31,12 +120,6 @@ async function fetchSectionData(
         .map((sub: any) => (sub ? sub._id || sub : null))
         .filter((id: any) => id);
 
-      console.log(`[fetchSectionData] Fetching subcategories for section "${section.title}"`, {
-        categoryIds,
-        subCategoryIds
-      });
-
-      // Query Category model instead of SubCategory, as subcategories were migrated to Category
       const query: any = { status: "Active" };
 
       if (categoryIds.length > 0 && subCategoryIds.length > 0) {
@@ -46,19 +129,17 @@ async function fetchSectionData(
       } else if (subCategoryIds.length > 0) {
         query._id = { $in: subCategoryIds };
       } else {
-        return [];
+        return { data: [], total: 0 };
       }
 
       const subcategoryDocs = await Category.find(query)
         .select("name image order slug parentId")
         .sort({ order: 1 })
-        .limit(limit || 12)
+        .limit(effectiveLimit)
         .lean();
 
-      console.log(`[fetchSectionData] Found ${subcategoryDocs.length} subcategories in Category model`);
-
       if (subcategoryDocs.length > 0) {
-        return subcategoryDocs.map((sub: any) => ({
+        const data = subcategoryDocs.map((sub: any) => ({
           id: sub._id.toString(),
           subcategoryId: sub._id.toString(),
           categoryId: sub.parentId?.toString() || "",
@@ -67,6 +148,7 @@ async function fetchSectionData(
           slug: sub.slug || sub.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
           type: "subcategory",
         }));
+        return { data, total: data.length };
       }
 
       // Fallback: Try fetching from SubCategory model (legacy)
@@ -75,10 +157,10 @@ async function fetchSectionData(
       })
         .select("name image order category")
         .sort({ order: 1 })
-        .limit(limit || 10)
+        .limit(effectiveLimit)
         .lean();
 
-      return legacySubcategories.map((sub: any) => ({
+      const data = legacySubcategories.map((sub: any) => ({
         id: sub._id.toString(),
         subcategoryId: sub._id.toString(),
         categoryId: sub.category?.toString() || "",
@@ -87,93 +169,48 @@ async function fetchSectionData(
         slug: sub.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
         type: "subcategory",
       }));
+      return { data, total: data.length };
     }
 
-    // If displayType is "products", fetch products
+    // If displayType is "products", fetch products (this is the path that
+    // supports pagination via skip + limit).
     if (displayType === "products") {
-      const query: any = {
-        status: "Active",
-        publish: true,
-        // Exclude shop-by-store-only products from home sections
-        $or: [
-          { isShopByStoreOnly: { $ne: true } },
-          { isShopByStoreOnly: { $exists: false } },
-        ],
-      };
+      const query = buildProductSectionQuery(section);
+      // Cap the total at section.limit so pagination respects the admin's
+      // upper bound on how many products this section is allowed to show.
+      const adminCap = section.limit || 200;
 
-      // We fetch these irrespective of location radius to show preview images on home page
-      // Location validation still happens at cart/order level
-      if (nearbySellerIds && nearbySellerIds.length > 0) {
-        // If we have nearby sellers, we can still filter by them if we want to prioritize
-        // But the user requested to show them irrespective of location radius
-        // For now, let's keep it simple and show all active products for the section
-      }
-
-      if (categories && categories.length > 0) {
-        const categoryIds = categories
-          .map((cat: any) => (cat ? cat._id || cat : null))
-          .filter((id: any) => id);
-
-        if (categoryIds.length > 0) {
-          query.category = { $in: categoryIds };
-        }
-      }
-
-      if (subCategories && subCategories.length > 0) {
-        const subCategoryIds = subCategories
-          .map((sub: any) => (sub ? sub._id || sub : null))
-          .filter((id: any) => id);
-
-        if (subCategoryIds.length > 0) {
-          query.subcategory = { $in: subCategoryIds };
-        }
-      }
-
-      const products = await Product.find(query)
-        .sort({ createdAt: -1 }) // Show newest items first
-        .limit(limit || 8)
+      const productsPromise = Product.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(effectiveLimit)
         .select(
           "productName mainImage price mrp discount rating reviewsCount pack seller",
         )
         .lean();
 
-      return products.map((p: any) => {
-        // Check if the product's seller is within range
-        const isAvailable =
-          nearbySellerIds && nearbySellerIds.length > 0 && p.seller
-            ? nearbySellerIds.some(
-              (id) => id.toString() === p.seller.toString(),
-            )
-            : false;
-
+      let total = 0;
+      if (options.withTotal) {
+        const [products, dbTotal] = await Promise.all([
+          productsPromise,
+          Product.countDocuments(query),
+        ]);
+        total = Math.min(dbTotal, adminCap);
         return {
-          id: p._id.toString(),
-          productId: p._id.toString(),
-          name: p.productName,
-          productName: p.productName,
-          image: p.mainImage,
-          mainImage: p.mainImage,
-          price: p.price,
-          discount:
-            p.discount ||
-            (p.mrp && p.price
-              ? Math.round(((p.mrp - p.price) / p.mrp) * 100)
-              : 0),
-          productImages: p.mainImage ? [p.mainImage] : [],
-          rating: p.rating || 0,
-          reviewsCount: p.reviewsCount || 0,
-          reviews: p.reviewsCount || 0,
-          pack: p.pack || "",
-          type: "product",
-          isAvailable,
-          seller: p.seller,
+          data: products.map((p: any) => shapeProduct(p, nearbySellerIds)),
+          total,
         };
-      });
+      }
+
+      const products = await productsPromise;
+      return {
+        data: products.map((p: any) => shapeProduct(p, nearbySellerIds)),
+        total: skip + products.length,
+      };
     }
 
     // If displayType is "categories", fetch the selected categories themselves
     if (displayType === "categories") {
-      // If categories are specified, fetch those specific categories
       if (categories && categories.length > 0) {
         const categoryIds = categories.map((cat: any) => cat._id || cat);
 
@@ -183,33 +220,73 @@ async function fetchSectionData(
         })
           .select("name image slug")
           .sort({ order: 1 })
-          .limit(limit || 8)
+          .limit(effectiveLimit)
           .lean();
 
-        return fetchedCategories.map((c: any) => ({
+        const data = fetchedCategories.map((c: any) => ({
           id: c._id.toString(),
-          categoryId: c.slug || c._id.toString(), // Use slug for SEO-friendly URLs, fallback to _id
+          categoryId: c.slug || c._id.toString(),
           name: c.name,
           image: c.image,
           slug: c.slug,
           type: "category",
         }));
-      } else {
-        // If no categories specified, return empty array
-        return [];
+        return { data, total: data.length };
       }
+      return { data: [], total: 0 };
     }
 
-    return [];
+    return { data: [], total: 0 };
   } catch (error) {
     console.error("Error fetching section data:", error);
-    return [];
+    return { data: [], total: 0 };
   }
+}
+
+/**
+ * Resolves the HomeSection query for a given `headerCategorySlug`.
+ * Centralised so the legacy `getHomeContent` and the new paginated
+ * `getHomeSections` endpoint stay in sync.
+ */
+async function buildHomeSectionQuery(
+  headerCategorySlug?: string,
+): Promise<any> {
+  const homeSectionQuery: any = { isActive: true };
+  if (headerCategorySlug && headerCategorySlug !== "all") {
+    const headerCategory = await HeaderCategory.findOne({
+      slug: headerCategorySlug,
+      status: "Published",
+    }).lean();
+    if (headerCategory) {
+      homeSectionQuery.pageLocation = "header_category";
+      homeSectionQuery.headerCategoryId = headerCategory._id;
+    } else {
+      homeSectionQuery.pageLocation = "home";
+    }
+  } else {
+    homeSectionQuery.pageLocation = "home";
+  }
+  return homeSectionQuery;
 }
 
 // Get Home Page Content
 export const getHomeContent = async (req: Request, res: Response) => {
-  const { headerCategorySlug, latitude, longitude } = req.query; // Get header category slug and location from query params
+  const {
+    headerCategorySlug,
+    latitude,
+    longitude,
+    sectionsLimit,
+    productsPerSection,
+  } = req.query;
+
+  // Optional caps for chunked loading. Defaults preserve the legacy "fetch
+  // everything" behaviour so existing callers (Categories, Search, PromoSection)
+  // keep working unchanged.
+  const parsedSectionsLimit = Math.max(0, parseInt(String(sectionsLimit ?? "0"), 10) || 0);
+  const parsedProductsPerSection = Math.max(
+    0,
+    parseInt(String(productsPerSection ?? "0"), 10) || 0,
+  );
 
   try {
     // Find sellers within user's location range
@@ -532,47 +609,73 @@ export const getHomeContent = async (req: Request, res: Response) => {
 
     // 9. Dynamic Home Sections - Fetch from database
     // Filter by pageLocation: "home" if we are on the main home page
-    const homeSectionQuery: any = { isActive: true };
+    const homeSectionQuery = await buildHomeSectionQuery(
+      headerCategorySlug as string | undefined,
+    );
 
-    if (headerCategorySlug && headerCategorySlug !== "all") {
-      // If we are on a header category page, find the header category ID
-      const headerCategory = await HeaderCategory.findOne({
-        slug: headerCategorySlug,
-        status: "Published",
-      }).lean();
+    // Count first so we can return pagination metadata even when paginating.
+    const totalSections = await HomeSection.countDocuments(homeSectionQuery);
 
-      if (headerCategory) {
-        homeSectionQuery.pageLocation = "header_category";
-        homeSectionQuery.headerCategoryId = headerCategory._id;
-      } else {
-        // Fallback to home page sections if header category not found
-        homeSectionQuery.pageLocation = "home";
-      }
-    } else {
-      homeSectionQuery.pageLocation = "home";
-    }
-
-    const homeSections = await HomeSection.find(homeSectionQuery)
+    const sectionsFindCursor = HomeSection.find(homeSectionQuery)
       .populate("categories", "name slug image")
       .populate("subCategories", "name")
       .populate("headerCategoryId", "name")
-      .sort({ order: 1 })
-      .lean();
+      .sort({ order: 1 });
 
-    // Fetch data for each section
+    // When the client opts into chunked loading, cap how many sections we
+    // load on this request. `parsedSectionsLimit === 0` preserves the legacy
+    // "load everything" behaviour for existing callers.
+    if (parsedSectionsLimit > 0) {
+      sectionsFindCursor.limit(parsedSectionsLimit);
+    }
+
+    const homeSections = await sectionsFindCursor.lean();
+
+    // Fetch data for each section. When the client passed
+    // `productsPerSection`, also include the per-section total so the frontend
+    // can drive "See More" without an extra round-trip on first paint.
     const dynamicSections = await Promise.all(
       homeSections.map(async (section: any) => {
-        const sectionData = await fetchSectionData(section, nearbySellerIds);
+        const wantsPagination = parsedProductsPerSection > 0;
+        const { data, total } = await fetchSectionData(
+          section,
+          nearbySellerIds,
+          {
+            limit: wantsPagination ? parsedProductsPerSection : undefined,
+            skip: 0,
+            withTotal: wantsPagination,
+          },
+        );
         return {
           id: section._id.toString(),
           title: section.title,
           slug: section.slug,
           displayType: section.displayType,
           columns: section.columns,
-          data: sectionData,
+          data,
+          // Only emit per-section pagination when explicitly requested so the
+          // legacy bundle response stays byte-identical.
+          ...(wantsPagination
+            ? {
+              pagination: {
+                page: 1,
+                limit: parsedProductsPerSection,
+                total,
+                hasMore: data.length < total,
+              },
+            }
+            : {}),
         };
       }),
     );
+
+    const homeSectionsPagination = {
+      page: 1,
+      limit: parsedSectionsLimit > 0 ? parsedSectionsLimit : totalSections,
+      total: totalSections,
+      hasMore:
+        parsedSectionsLimit > 0 ? homeSections.length < totalSections : false,
+    };
 
     // 10. Fetch PromoStrip for the current header category (with caching)
     const currentHeaderCategorySlug = (headerCategorySlug as string) || "all";
@@ -659,6 +762,7 @@ export const getHomeContent = async (req: Request, res: Response) => {
         categories,
         // Dynamic sections created by admin
         homeSections: dynamicSections,
+        homeSectionsPagination,
         shops,
         promoBanners:
           promoBanners.length > 0
@@ -693,6 +797,189 @@ export const getHomeContent = async (req: Request, res: Response) => {
     res.status(500).json({
       success: false,
       message: "Error fetching home content",
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * GET /customer/home/sections
+ *
+ * Paginated home sections, each populated with the first
+ * `productsPerSection` items. Used by the customer home page to load sections
+ * in chunks as the user scrolls (e.g. 5 sections per page, 6 products each).
+ *
+ * Query params:
+ *  - page (default 1)
+ *  - limit (default 5)
+ *  - productsPerSection (default 6)
+ *  - headerCategorySlug (default "all")
+ *  - latitude, longitude (for the per-product availability flag)
+ */
+export const getHomeSections = async (req: Request, res: Response) => {
+  try {
+    const {
+      headerCategorySlug,
+      latitude,
+      longitude,
+    } = req.query;
+
+    const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10) || 1);
+    const limit = Math.min(
+      50,
+      Math.max(1, parseInt(String(req.query.limit ?? "5"), 10) || 5),
+    );
+    const productsPerSection = Math.min(
+      50,
+      Math.max(
+        1,
+        parseInt(String(req.query.productsPerSection ?? "6"), 10) || 6,
+      ),
+    );
+    const skip = (page - 1) * limit;
+
+    const userLat = latitude ? parseFloat(latitude as string) : null;
+    const userLng = longitude ? parseFloat(longitude as string) : null;
+    let nearbySellerIds: mongoose.Types.ObjectId[] = [];
+    if (userLat !== null && userLng !== null) {
+      nearbySellerIds = await findSellersWithinRange(userLat, userLng);
+    }
+
+    const homeSectionQuery = await buildHomeSectionQuery(
+      headerCategorySlug as string | undefined,
+    );
+
+    const totalSections = await HomeSection.countDocuments(homeSectionQuery);
+
+    const sections = await HomeSection.find(homeSectionQuery)
+      .populate("categories", "name slug image")
+      .populate("subCategories", "name")
+      .populate("headerCategoryId", "name")
+      .sort({ order: 1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    const data = await Promise.all(
+      sections.map(async (section: any) => {
+        const { data: sectionData, total } = await fetchSectionData(
+          section,
+          nearbySellerIds,
+          { limit: productsPerSection, skip: 0, withTotal: true },
+        );
+        return {
+          id: section._id.toString(),
+          title: section.title,
+          slug: section.slug,
+          displayType: section.displayType,
+          columns: section.columns,
+          data: sectionData,
+          pagination: {
+            page: 1,
+            limit: productsPerSection,
+            total,
+            hasMore: sectionData.length < total,
+          },
+        };
+      }),
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        sections: data,
+        pagination: {
+          page,
+          limit,
+          total: totalSections,
+          hasMore: skip + sections.length < totalSections,
+        },
+      },
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      message: "Error fetching home sections",
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * GET /customer/home/sections/:sectionId/products
+ *
+ * Paginated products for a single home section. Used by the "See More" button
+ * inside a product section to fetch the next page without re-loading the
+ * entire home payload.
+ *
+ * Query params:
+ *  - page (default 1)
+ *  - limit (default 6)
+ *  - latitude, longitude (for the per-product availability flag)
+ */
+export const getHomeSectionProducts = async (req: Request, res: Response) => {
+  try {
+    const { sectionId } = req.params;
+    const { latitude, longitude } = req.query;
+
+    if (!mongoose.Types.ObjectId.isValid(sectionId)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid section id",
+      });
+    }
+
+    const page = Math.max(1, parseInt(String(req.query.page ?? "1"), 10) || 1);
+    const limit = Math.min(
+      50,
+      Math.max(1, parseInt(String(req.query.limit ?? "6"), 10) || 6),
+    );
+    const skip = (page - 1) * limit;
+
+    const section = await HomeSection.findById(sectionId)
+      .populate("categories", "name slug image")
+      .populate("subCategories", "name")
+      .lean();
+
+    if (!section || !section.isActive) {
+      return res.status(404).json({
+        success: false,
+        message: "Section not found",
+      });
+    }
+
+    const userLat = latitude ? parseFloat(latitude as string) : null;
+    const userLng = longitude ? parseFloat(longitude as string) : null;
+    let nearbySellerIds: mongoose.Types.ObjectId[] = [];
+    if (userLat !== null && userLng !== null) {
+      nearbySellerIds = await findSellersWithinRange(userLat, userLng);
+    }
+
+    const { data, total } = await fetchSectionData(section, nearbySellerIds, {
+      limit,
+      skip,
+      withTotal: true,
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        sectionId: String(section._id),
+        title: section.title,
+        displayType: section.displayType,
+        products: data,
+        pagination: {
+          page,
+          limit,
+          total,
+          hasMore: skip + data.length < total,
+        },
+      },
+    });
+  } catch (error: any) {
+    return res.status(500).json({
+      success: false,
+      message: "Error fetching section products",
       error: error.message,
     });
   }
