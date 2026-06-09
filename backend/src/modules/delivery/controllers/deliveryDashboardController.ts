@@ -220,7 +220,7 @@ export const getHelpSupport = asyncHandler(async (_req: Request, res: Response) 
         },
         {
             question: 'What if I have a complaint or issue?',
-            answer: 'You can contact our support team through the Help & Support section or call our helpline at +91 7846940429.',
+            answer: 'You can contact our support team through the Help & Support section or call our helpline at +91 8999475858 / +91 9579257390.',
         },
         {
             question: 'What are the delivery timings?',
@@ -229,7 +229,8 @@ export const getHelpSupport = asyncHandler(async (_req: Request, res: Response) 
     ];
 
     const contactOptions = [
-        { label: 'Call Support', value: '+91 7846940429', icon: 'phone' },
+        { label: 'Call Support', value: '+91 8999475858', icon: 'phone' },
+        { label: 'Alternate Helpline', value: '+91 9579257390', icon: 'phone' },
         { label: 'Email Support', value: 'support@wasgromart.com', icon: 'email' },
         { label: 'Live Chat', value: 'Available 24/7', icon: 'chat' },
     ];

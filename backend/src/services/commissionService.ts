@@ -14,20 +14,34 @@ import PlatformWallet from "../models/PlatformWallet";
 
 /**
  * Get the effective commission rate for a product/item
- * Priority: 1. SubSubCategory -> 2. SubCategory -> 3. Category -> 4. Seller -> 5. Global
+ * Priority: 1. SubSubCategory -> 2. SubCategory -> 3. Category -> 4. Header Category -> 5. Seller -> 6. Global
+ *
+ * IMPORTANT: At every level we treat a stored value as authoritative when the
+ * field is *present and a number*, including 0. The previous implementation
+ * gated each level with `&& rate > 0`, which falsely treated a deliberately-
+ * configured 0% as "unset" and fell through to the global default (which had a
+ * schema-level default of 10) — silently deducting 10% from every seller's
+ * earnings. See the regression-fix commit for details.
+ *
+ * Fail-closed defaults: if anything is missing or throws, we return 0 (no
+ * deduction) rather than a hidden 10%. Admins must opt in to a commission
+ * by setting it explicitly.
  */
+const isNumber = (v: unknown): v is number =>
+    typeof v === "number" && !Number.isNaN(v);
+
 export const getOrderItemCommissionRate = async (
     productId: string,
     sellerId?: string
 ): Promise<number> => {
     try {
         const product = await Product.findById(productId);
-        if (!product) return 10; // Default fallback
+        if (!product) return 0;
 
         // 1. Check SubSubCategory
         if (product.subSubCategory) {
             const subSubCat = await Category.findById(product.subSubCategory);
-            if (subSubCat?.commissionRate && subSubCat.commissionRate > 0) {
+            if (subSubCat && isNumber(subSubCat.commissionRate)) {
                 return subSubCat.commissionRate;
             }
         }
@@ -35,7 +49,7 @@ export const getOrderItemCommissionRate = async (
         // 2. Check SubCategory
         if (product.subcategory) {
             const subCat = await SubCategory.findById(product.subcategory);
-            if (subCat?.commissionRate && subCat.commissionRate > 0) {
+            if (subCat && isNumber(subCat.commissionRate)) {
                 return subCat.commissionRate;
             }
         }
@@ -44,7 +58,7 @@ export const getOrderItemCommissionRate = async (
         let categoryDoc: any = null;
         if (product.category) {
             categoryDoc = await Category.findById(product.category);
-            if (categoryDoc?.commissionRate && categoryDoc.commissionRate > 0) {
+            if (categoryDoc && isNumber(categoryDoc.commissionRate)) {
                 return categoryDoc.commissionRate;
             }
         }
@@ -57,29 +71,36 @@ export const getOrderItemCommissionRate = async (
             const headerCat = await (await import("../models/HeaderCategory")).default.findById(
                 categoryDoc.headerCategoryId
             );
-            if (headerCat?.commissionRate && headerCat.commissionRate > 0) {
+            if (headerCat && isNumber(headerCat.commissionRate)) {
                 return headerCat.commissionRate;
             }
         }
 
-        // 4. Check Seller specific rate
+        // 5. Check Seller specific rate
         const finalSellerId = sellerId || product.seller.toString();
         const seller = await Seller.findById(finalSellerId);
-        if (seller?.commissionRate && seller.commissionRate > 0) {
+        if (seller && isNumber(seller.commissionRate)) {
             return seller.commissionRate;
         }
 
-        // 5. Global Default
+        // 6. Global Default
         const settings = await AppSettings.findOne();
-        return settings?.defaultCommission ?? 10;
+        if (settings && isNumber(settings.defaultCommission)) {
+            return settings.defaultCommission;
+        }
+        return 0;
     } catch (error) {
         console.error("Error calculating commission rate:", error);
-        return 10;
+        return 0;
     }
 };
 
 /**
- * Get commission rate for a seller
+ * Get commission rate for a seller.
+ *
+ * Returns the seller's individual rate when set (including 0), otherwise the
+ * global default. Falls back to 0 (no deduction) if neither is configured —
+ * never the legacy hidden 10%.
  */
 export const getSellerCommissionRate = async (
     sellerId: string,
@@ -90,16 +111,18 @@ export const getSellerCommissionRate = async (
             throw new Error("Seller not found");
         }
 
-        // Use individual rate if set, otherwise use global default
-        if (seller.commissionRate !== undefined && seller.commissionRate !== null) {
+        if (isNumber(seller.commissionRate)) {
             return seller.commissionRate;
         }
 
         const settings = await AppSettings.findOne();
-        return settings?.defaultCommission ?? 10;
+        if (settings && isNumber(settings.defaultCommission)) {
+            return settings.defaultCommission;
+        }
+        return 0;
     } catch (error) {
         console.error("Error getting seller commission rate:", error);
-        return 10; // Default fallback
+        return 0;
     }
 };
 

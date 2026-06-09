@@ -13,6 +13,21 @@ const getIcon = (iconName: string) => {
   return 'ℹ️';
 };
 
+const SUPPORT_PHONES = ['+918999475858', '+919579257390'];
+
+// Build a tap-to-action href from a contact option's raw value.
+const getContactHref = (icon: string, value: string): string | null => {
+  if (!value) return null;
+  if (icon === 'phone') {
+    const digits = value.replace(/[^\d+]/g, '');
+    return digits ? `tel:${digits}` : null;
+  }
+  if (icon === 'email') {
+    return /@/.test(value) ? `mailto:${value}` : null;
+  }
+  return null;
+};
+
 export default function DeliveryHelp() {
   const navigate = useNavigate();
   const [faqs, setFaqs] = useState<any[]>([]);
@@ -71,15 +86,30 @@ export default function DeliveryHelp() {
             <h3 className="text-neutral-900 font-semibold">Contact Us</h3>
           </div>
           <div className="divide-y divide-neutral-200">
-            {contacts.map((option, index) => (
-              <div key={index} className="p-4 flex items-center justify-between">
-                <div>
-                  <p className="text-neutral-900 text-sm font-medium mb-1">{option.label}</p>
-                  <p className="text-neutral-500 text-xs">{option.value}</p>
+            {contacts.map((option, index) => {
+              const href = getContactHref(option.icon, option.value);
+              const content = (
+                <>
+                  <div>
+                    <p className="text-neutral-900 text-sm font-medium mb-1">{option.label}</p>
+                    <p className="text-neutral-500 text-xs">{option.value}</p>
+                  </div>
+                  <div className="text-2xl">{getIcon(option.icon)}</div>
+                </>
+              );
+              return href ? (
+                <a
+                  key={index}
+                  href={href}
+                  className="p-4 flex items-center justify-between hover:bg-neutral-50 active:bg-neutral-100 transition-colors">
+                  {content}
+                </a>
+              ) : (
+                <div key={index} className="p-4 flex items-center justify-between">
+                  {content}
                 </div>
-                <div className="text-2xl">{getIcon(option.icon)}</div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
 
@@ -98,10 +128,20 @@ export default function DeliveryHelp() {
           </div>
         </div>
 
-        {/* Support Button */}
-        <button className="w-full mt-4 bg-orange-500 text-white rounded-xl py-3 font-semibold hover:bg-orange-600 transition-colors shadow-md active:scale-[0.98]">
-          Contact Support
-        </button>
+        {/* Support Buttons - always available even if backend feed fails */}
+        <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {SUPPORT_PHONES.map((phone) => {
+            const display = phone.replace(/^\+91/, '+91 ');
+            return (
+              <a
+                key={phone}
+                href={`tel:${phone}`}
+                className="w-full bg-orange-500 text-white rounded-xl py-3 font-semibold hover:bg-orange-600 transition-colors shadow-md active:scale-[0.98] text-center">
+                Call Support: {display}
+              </a>
+            );
+          })}
+        </div>
       </div>
       <DeliveryBottomNav />
     </div>

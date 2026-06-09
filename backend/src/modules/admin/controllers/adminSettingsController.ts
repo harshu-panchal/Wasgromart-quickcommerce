@@ -15,7 +15,9 @@ export const getAppSettings = asyncHandler(
       settings = await AppSettings.create({
         appName: "wasgromart",
         contactEmail: "contact@wasgromart.com",
-        contactPhone: "1234567890",
+        contactPhone: "8999475858",
+        supportEmail: "support@wasgromart.com",
+        supportPhone: "9579257390",
       });
     }
 
@@ -132,7 +134,9 @@ export const updateSMSGatewaySettings = asyncHandler(
       settings = await AppSettings.create({
         appName: "wasgromart",
         contactEmail: "contact@wasgromart.com",
-        contactPhone: "1234567890",
+        contactPhone: "8999475858",
+        supportEmail: "support@wasgromart.com",
+        supportPhone: "9579257390",
         smsGateway,
       });
     } else {

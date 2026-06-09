@@ -3,6 +3,7 @@ import Seller from '../../../models/Seller';
 import WalletTransaction from '../../../models/WalletTransaction';
 import WithdrawRequest from '../../../models/WithdrawRequest';
 import OrderItem from '../../../models/OrderItem';
+import Commission from '../../../models/Commission';
 import { asyncHandler } from '../../../utils/asyncHandler';
 import mongoose from 'mongoose';
 
@@ -205,16 +206,33 @@ export const getOrderEarnings = asyncHandler(async (req: Request, res: Response)
 
     const total = await OrderItem.countDocuments(query);
 
-    const formattedEarnings = earnings.map(item => ({
-        id: item._id,
-        orderId: item.orderId,
-        source: item.productName,
-        amount: item.subtotal,
-        commission: (item.subtotal * 0.15), // Mock 15% commission if not stored
-        netEarning: item.subtotal * 0.85,
-        date: item.createdAt,
-        status: item.status === 'Delivered' ? 'Settled' : 'Pending'
-    }));
+    // Pull real Commission records for these items so we display the actual
+    // deducted amount, not a hardcoded 15% mock. Items without a Commission
+    // row yet (e.g. status earlier than Paid/Delivered) are treated as 0%.
+    const itemIds = earnings.map((item) => item._id);
+    const commissions = await Commission.find({
+        orderItem: { $in: itemIds },
+        type: 'SELLER',
+    }).select('orderItem commissionAmount').lean();
+    const commissionByItem = new Map<string, number>(
+        commissions.map((c: any) => [String(c.orderItem), Number(c.commissionAmount) || 0]),
+    );
+
+    const formattedEarnings = earnings.map((item) => {
+        const itemTotal = Number((item as any).subtotal) || 0;
+        const commissionAmount = commissionByItem.get(String(item._id)) || 0;
+        const netEarning = itemTotal - commissionAmount;
+        return {
+            id: item._id,
+            orderId: (item as any).orderId,
+            source: (item as any).productName,
+            amount: itemTotal,
+            commission: commissionAmount,
+            netEarning,
+            date: (item as any).createdAt,
+            status: (item as any).status === 'Delivered' ? 'Settled' : 'Pending',
+        };
+    });
 
     return res.status(200).json({
         success: true,

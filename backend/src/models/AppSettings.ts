@@ -244,9 +244,12 @@ const AppSettingsSchema = new Schema<IAppSettings>(
     },
 
     // Commission Settings
+    // Default is 0% — admin must opt in to any platform deduction.
+    // Historically this defaulted to 10, which silently deducted 10% from
+    // every seller's order when no category-level rate was set.
     defaultCommission: {
       type: Number,
-      default: 10,
+      default: 0,
       min: [0, "Commission cannot be negative"],
       max: [100, "Commission cannot exceed 100%"],
     },
@@ -404,7 +407,9 @@ AppSettingsSchema.statics.getSettings = async function (this: mongoose.Model<IAp
     settings = await this.create({
       appName: "Wasgromart",
       contactEmail: "contact@wasgromart.com",
-      contactPhone: "1234567890",
+      contactPhone: "8999475858",
+      supportEmail: "support@wasgromart.com",
+      supportPhone: "9579257390",
     });
   }
   return settings;

@@ -327,7 +327,19 @@ export default function AboutUs() {
                   strokeLinejoin="round"
                 />
               </svg>
-              <span className="text-neutral-700">+91 1800-123-4567</span>
+              <span className="text-neutral-700">
+                <a
+                  href="tel:+918999475858"
+                  className="hover:text-teal-700 hover:underline">
+                  +91 8999475858
+                </a>
+                {" / "}
+                <a
+                  href="tel:+919579257390"
+                  className="hover:text-teal-700 hover:underline">
+                  +91 9579257390
+                </a>
+              </span>
             </div>
             <div className="flex items-center gap-3 text-sm">
               <svg

@@ -2,11 +2,10 @@ import { Request, Response } from "express";
 import Order from "../../../models/Order";
 import OrderItem from "../../../models/OrderItem";
 import { asyncHandler } from "../../../utils/asyncHandler";
-import Seller from "../../../models/Seller";
-import WalletTransaction from "../../../models/WalletTransaction";
 import { notifyDeliveryBoysOfNewOrder } from "../../../services/orderNotificationService";
 import { Server as SocketIOServer } from "socket.io";
 import { calculateOrderBreakdown } from "../../../services/commissionService";
+import { processOrderStatusTransition } from "../../../services/orderService";
 
 /**
  * Get seller's orders with filters, sorting, and pagination
@@ -334,28 +333,21 @@ export const updateOrderStatus = asyncHandler(
         }
     }
 
-    // If order is delivered, credit seller's balance
+    // If the order has transitioned to Delivered, route through the canonical
+    // order-state machine so Commission records are created, the platform
+    // wallet is reconciled, and COD cash collection is recorded. The previous
+    // implementation here did a manual seller.balance credit on
+    // order.grandTotal, which double-counted earnings (full order total
+    // instead of the seller's share) and bypassed the wallet entirely.
     if (status === 'Delivered' && previousStatus !== 'Delivered') {
-      const seller = await Seller.findById(sellerId);
-      if (seller) {
-        // Calculate net earning (sale amount - commission)
-        // Commission is stored in seller model
-        const commissionRate = (seller.commission || 0) / 100;
-        const commissionAmount = order.grandTotal * commissionRate;
-        const netEarning = order.grandTotal - commissionAmount;
-
-        seller.balance = (seller.balance || 0) + netEarning;
-        await seller.save();
-
-        // Log transaction
-        await WalletTransaction.create({
-          sellerId,
-          amount: netEarning,
-          type: 'Credit',
-          description: `Earnings from Order #${order.orderId}`,
-          reference: `ORD-${order.orderId}-${Date.now()}`,
-          status: 'Completed'
-        });
+      try {
+        await processOrderStatusTransition(String(order._id), 'Delivered', previousStatus);
+      } catch (transitionError) {
+        console.error(
+          `[${new Date().toISOString()}] Failed to run order status transition for ${order._id}:`,
+          transitionError,
+        );
+        // Do not fail the status update — the order document is already saved.
       }
     }
 

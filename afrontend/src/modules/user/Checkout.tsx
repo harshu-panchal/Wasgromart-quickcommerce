@@ -2134,8 +2134,25 @@ export default function Checkout() {
                 </h3>
                 <p>
                   For any cancellation requests or queries, please contact our
-                  customer support team at support@wasgromart.com or call
-                  +91-XXXXX-XXXXX
+                  customer support team at{" "}
+                  <a
+                    href="mailto:support@wasgromart.com"
+                    className="text-green-600 font-semibold hover:underline">
+                    support@wasgromart.com
+                  </a>{" "}
+                  or call{" "}
+                  <a
+                    href="tel:+918999475858"
+                    className="text-green-600 font-semibold hover:underline">
+                    +91 8999475858
+                  </a>{" "}
+                  /{" "}
+                  <a
+                    href="tel:+919579257390"
+                    className="text-green-600 font-semibold hover:underline">
+                    +91 9579257390
+                  </a>
+                  .
                 </p>
               </div>
             </div>
