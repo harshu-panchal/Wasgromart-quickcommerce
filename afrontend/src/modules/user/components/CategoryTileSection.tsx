@@ -128,35 +128,34 @@ export default function CategoryTileSection({
                             : (tile as any).sellerId
                               ? `/seller/${(tile as any).sellerId}`
                               : "#"
-                  }
-                  onClick={(e) => {
-                    if (
-                      !tile.categoryId &&
-                      !tile.productId &&
-                      !tile.subcategoryId &&
-                      !(tile as any).sellerId
-                    ) {
-                      e.preventDefault();
-                      handleTileClick(tile);
                     }
-                  }}
-                  className={`block bg-white rounded-xl shadow-sm border border-neutral-200 hover:shadow-md transition-shadow h-full ${showProductCount ? "px-2.5" : "px-1.5"
-                    }`}>
+                    onClick={(e) => {
+                      if (
+                        !tile.categoryId &&
+                        !tile.productId &&
+                        !tile.subcategoryId &&
+                        !(tile as any).sellerId
+                      ) {
+                        e.preventDefault();
+                        handleTileClick(tile);
+                      }
+                    }}
+                    className={`block bg-white rounded-xl shadow-sm border border-neutral-200 hover:shadow-md transition-shadow h-full flex flex-col`}>
                   {/* Image - Single image for non-bestsellers, 2x2 grid for bestsellers */}
                   <div
-                    className={`w-full rounded-lg overflow-hidden ${showProductCount ? "h-32 md:h-36 mb-2" : "aspect-square"
-                      } ${tile.bgColor || "bg-cyan-50"}`}>
+                    className={`w-full rounded-t-xl overflow-hidden ${showProductCount ? "h-32 md:h-36 mb-2" : "aspect-square"
+                      } ${tile.bgColor || "bg-neutral-50"}`}>
                     {hasImages ? (
                       showProductCount ? (
                         // Bestsellers: 2x2 grid
-                        <div className="w-full h-full grid grid-cols-2 gap-0.5 p-0.5">
+                        <div className="w-full h-full grid grid-cols-2">
                           {images.slice(0, 4).map((img, idx) =>
                             img ? (
                               <img
                                 key={idx}
                                 src={img}
                                 alt=""
-                                className="w-full h-full object-contain bg-white rounded-sm"
+                                className="w-full h-full object-cover bg-white rounded-sm"
                                 onError={(e) => {
                                   // Hide broken image
                                   const target = e.target as HTMLImageElement;
@@ -177,7 +176,7 @@ export default function CategoryTileSection({
                         <img
                           src={images[0]}
                           alt={tile.name}
-                          className="w-full h-full object-contain rounded-lg"
+                          className="w-full h-full object-cover rounded-lg"
                           onError={(e) => {
                             // Hide broken image and show fallback
                             const target = e.target as HTMLImageElement;
@@ -198,7 +197,7 @@ export default function CategoryTileSection({
 
                   {/* Product count - shown first (only for bestsellers) */}
                   {showProductCount && tile.productCount && (
-                    <div className="mb-1.5 flex justify-center">
+                    <div className="mb-1.5 flex justify-center px-2">
                       <span className="inline-block bg-neutral-100 text-neutral-600 text-[10px] font-medium px-2 py-0.5 rounded-full leading-tight">
                         +{tile.productCount} more
                       </span>
@@ -207,7 +206,7 @@ export default function CategoryTileSection({
 
                   {/* Tile name - inside card only for bestsellers */}
                   {showProductCount && (
-                    <div className="text-[11px] font-semibold text-neutral-900 line-clamp-2 leading-tight text-center w-full block">
+                    <div className="text-[11px] font-semibold text-neutral-900 line-clamp-2 leading-tight text-center w-full px-2 pb-3">
                       {tile.name}
                     </div>
                   )}

@@ -33,7 +33,7 @@ export default function SimilarProducts({ products, currentProductId }: SimilarP
                 className="flex-shrink-0 w-32 bg-white rounded-xl shadow-sm border border-neutral-200 overflow-hidden cursor-pointer hover:shadow-md transition-shadow"
               >
                 {/* Image */}
-                <div className="w-full h-24 bg-neutral-100 flex items-center justify-center overflow-hidden">
+                <div className="w-full h-24 bg-white flex items-center justify-center overflow-hidden">
                   {product.imageUrl ? (
                     <img
                       src={product.imageUrl}

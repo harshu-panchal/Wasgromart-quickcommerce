@@ -410,7 +410,7 @@ export default function ProductDetail() {
         )}
 
         {/* Product Image Gallery */}
-        <div className="relative w-full bg-gradient-to-br from-neutral-100 to-neutral-200 overflow-hidden">
+        <div className="relative w-full bg-white overflow-hidden">
           {/* Main Product Image - Swipeable on mobile */}
           <div
             className="w-full aspect-square relative overflow-hidden"

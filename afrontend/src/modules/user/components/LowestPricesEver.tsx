@@ -60,12 +60,12 @@ const ProductCard = memo(({
       >
         {/* Product Image Area */}
         <div className="relative block">
-          <div className="w-full h-28 bg-neutral-100 flex items-center justify-center overflow-hidden relative">
+          <div className="w-full h-28 bg-white flex items-center justify-center overflow-hidden relative">
             {product.imageUrl ? (
               <img
                 src={product.imageUrl}
                 alt={product.name}
-                className="w-full h-full object-contain"
+                className="w-full h-full object-cover"
               />
             ) : (
               <div className="w-full h-full flex items-center justify-center bg-neutral-100 text-neutral-400 text-4xl">

@@ -143,7 +143,7 @@ export default function ProductCard({
         onClick={handleCardClick}
         className="cursor-pointer flex-1 flex flex-col"
       >
-        <div className={`w-full ${compact ? 'h-32 md:h-40' : categoryStyle ? 'h-28 md:h-36' : 'h-40 md:h-48'} bg-neutral-100 flex items-center justify-center overflow-hidden relative`}>
+        <div className={`w-full ${compact ? 'h-32 md:h-40' : categoryStyle ? 'h-32 md:h-40' : 'h-44 md:h-52'} bg-white flex items-center justify-center overflow-hidden relative`}>
           {product.imageUrl || product.mainImage ? (
             <img
               ref={imageRef}
