@@ -8,6 +8,7 @@ import Button from '../../../components/ui/button';
 import Badge from '../../../components/ui/badge';
 import StarRating from '../../../components/ui/StarRating';
 import { calculateProductPrice } from '../../../utils/priceUtils';
+import ProductImageCarousel from './ProductImageCarousel';
 
 interface ProductCardProps {
   product: Product;
@@ -144,31 +145,19 @@ export default function ProductCard({
         className="cursor-pointer flex-1 flex flex-col"
       >
         <div className={`w-full ${compact ? 'h-32 md:h-40' : categoryStyle ? 'h-32 md:h-40' : 'h-44 md:h-52'} bg-white flex items-center justify-center overflow-hidden relative`}>
-          {product.imageUrl || product.mainImage ? (
-            <img
-              ref={imageRef}
-              src={product.imageUrl || product.mainImage}
-              alt={product.name || product.productName || 'Product'}
-              className="w-full h-full object-cover"
-              referrerPolicy="no-referrer"
-              onError={(e) => {
-                // Hide broken image and show fallback
-                const target = e.target as HTMLImageElement;
-                target.style.display = 'none';
-                const parent = target.parentElement;
-                if (parent && !parent.querySelector('.fallback-icon')) {
-                  const fallback = document.createElement('div');
-                  fallback.className = 'w-full h-full flex items-center justify-center bg-neutral-100 text-neutral-400 text-4xl fallback-icon';
-                  fallback.textContent = (product.name || product.productName || '?').charAt(0).toUpperCase();
-                  parent.appendChild(fallback);
-                }
-              }}
-            />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center bg-neutral-100 text-neutral-400 text-4xl">
-              {(product.name || product.productName || '?').charAt(0).toUpperCase()}
-            </div>
-          )}
+          <ProductImageCarousel
+            images={Array.from(
+              new Set(
+                [
+                  product.imageUrl || product.mainImage,
+                  ...(product.galleryImages || []),
+                  ...(product.galleryImageUrls || []),
+                ].filter(Boolean) as string[]
+              )
+            )}
+            productName={product.name || product.productName || 'Product'}
+            fallbackText={(product.name || product.productName || '?').charAt(0).toUpperCase()}
+          />
 
           {categoryStyle && showBadge && discount > 0 && (
             <div className="absolute top-2 left-2 z-10 bg-green-600 text-white text-[10px] font-semibold px-2 py-0.5 rounded">

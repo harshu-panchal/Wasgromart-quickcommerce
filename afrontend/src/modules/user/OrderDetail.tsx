@@ -657,7 +657,7 @@ export default function OrderDetail() {
 
   const handleCallStore = () => {
     // Default store number, should be from order/seller data
-    const storeNumber = order?.seller?.phone || "1234567890";
+    const storeNumber = order?.items?.[0]?.seller?.mobile || order?.items?.[0]?.seller?.phone || order?.seller?.mobile || order?.seller?.phone || "1234567890";
     window.location.href = `tel:${storeNumber}`;
   };
 
@@ -1113,9 +1113,19 @@ export default function OrderDetail() {
               <span className="text-2xl">🛒</span>
             </div>
             <div className="flex-1">
-              <p className="font-semibold text-gray-900">Wasgro-mart Store</p>
-              <p className="text-sm text-gray-500">
-                {order.address?.city || "Local Area"}
+              <p className="font-semibold text-gray-900">
+                {order?.items?.[0]?.seller?.storeName || "Wasgro-mart Store"}
+              </p>
+              <p className="text-sm text-gray-500 flex flex-col">
+                <span>{order.address?.city || "Local Area"}</span>
+                {(() => {
+                  const phone = order?.items?.[0]?.seller?.mobile || order?.items?.[0]?.seller?.phone || order?.seller?.mobile || order?.seller?.phone;
+                  return phone ? (
+                    <span className="text-xs text-gray-400 mt-0.5">
+                      +91 {phone}
+                    </span>
+                  ) : null;
+                })()}
               </p>
             </div>
             <motion.button

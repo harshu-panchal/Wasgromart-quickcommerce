@@ -8,6 +8,7 @@ import { useCart } from '../../../context/CartContext';
 import { Product } from '../../../types/domain';
 import { useWishlist } from '../../../hooks/useWishlist';
 import { calculateProductPrice } from '../../../utils/priceUtils';
+import ProductImageCarousel from './ProductImageCarousel';
 
 interface LowestPricesEverProps {
   activeTab?: string;
@@ -61,17 +62,19 @@ const ProductCard = memo(({
         {/* Product Image Area */}
         <div className="relative block">
           <div className="w-full h-28 bg-white flex items-center justify-center overflow-hidden relative">
-            {product.imageUrl ? (
-              <img
-                src={product.imageUrl}
-                alt={product.name}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center bg-neutral-100 text-neutral-400 text-4xl">
-                {(product.name || product.productName || '?').charAt(0).toUpperCase()}
-              </div>
-            )}
+            <ProductImageCarousel
+              images={Array.from(
+                new Set(
+                  [
+                    product.imageUrl || product.mainImage,
+                    ...(product.galleryImages || []),
+                    ...(product.galleryImageUrls || []),
+                  ].filter(Boolean) as string[]
+                )
+              )}
+              productName={product.name || product.productName || 'Product'}
+              fallbackText={(product.name || product.productName || '?').charAt(0).toUpperCase()}
+            />
 
             {/* Red Discount Badge - Top Left */}
             {discount > 0 && (

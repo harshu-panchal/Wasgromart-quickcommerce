@@ -9,6 +9,7 @@ import { calculateDistance } from "../../../utils/locationHelper";
 import { notifySellersOfOrderUpdate } from "../../../services/sellerNotificationService";
 import { generateDeliveryOtp } from "../../../services/deliveryOtpService";
 import { Server as SocketIOServer } from "socket.io";
+import { broadcastPush } from "../../../services/broadcastNotificationService";
 
 // Create a new order
 export const createOrder = async (req: Request, res: Response) => {
@@ -425,6 +426,28 @@ export const createOrder = async (req: Request, res: Response) => {
                     if (isCod || isPaid) {
                         // notifyDeliveryBoysOfNewOrder removed: will be triggered when seller accepts the order
                         await notifySellersOfOrderUpdate(io, savedOrder, 'NEW_ORDER');
+
+                        // Push Notification to Customer
+                        void broadcastPush(
+                            { kind: "user", userId: userId, userType: "Customer" },
+                            {
+                                title: "Order Placed Successfully",
+                                body: `Your order #${savedOrder.orderNumber} has been placed.`,
+                            }
+                        ).catch(console.error);
+
+                        // Push Notification to Sellers
+                        const sellerIdsArray = Array.from(sellerIds);
+                        for (const sId of sellerIdsArray) {
+                            void broadcastPush(
+                                { kind: "user", userId: sId, userType: "Seller" },
+                                {
+                                    title: "New Order Received!",
+                                    body: `You have received a new order #${savedOrder.orderNumber}.`,
+                                    sound: "seller_alert"
+                                }
+                            ).catch(console.error);
+                        }
                     }
                 }
             }

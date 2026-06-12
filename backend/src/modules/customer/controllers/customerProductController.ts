@@ -48,23 +48,8 @@ export const getProducts = async (req: Request, res: Response) => {
       nearbySellerIds = await findSellersWithinRange(userLat, userLng);
 
       if (nearbySellerIds.length === 0) {
-        // No sellers within range, return empty result
-        return res.status(200).json({
-          success: true,
-          data: [],
-          pagination: {
-            page: Number(page),
-            limit: Number(limit),
-            total: 0,
-            pages: 0,
-          },
-          message:
-            "No sellers available in your area. Please update your location.",
-        });
+        // No sellers within range, but we will still fetch products and mark them as unavailable (out of range)
       }
-
-      // Filter products by sellers within range
-      query.$and.push({ seller: { $in: nearbySellerIds } });
     } else {
       // If no location provided, return empty result (strictly enforce location)
       return res.status(200).json({
@@ -215,16 +200,65 @@ export const getProducts = async (req: Request, res: Response) => {
     console.log("DEBUG: getProducts Query:", JSON.stringify(query, null, 2));
     console.log("DEBUG: Nearby Seller IDs:", nearbySellerIds);
 
-    const products = await Product.find(query)
-      .populate("category", "name icon image")
-      .populate("subcategory", "name")
-      .populate("brand", "name")
-      .populate("seller", "storeName status")
-      .sort(sortOptions)
-      .skip(skip)
-      .limit(Number(limit));
+    let products: any[] = [];
+    let total = 0;
+    const effectiveLimit = Number(limit);
 
-    const total = await Product.countDocuments(query);
+    if (nearbySellerIds && nearbySellerIds.length > 0) {
+      const availQuery = { ...query, $and: [...query.$and, { seller: { $in: nearbySellerIds } }] };
+      const unavailQuery = { ...query, $and: [...query.$and, { seller: { $nin: nearbySellerIds } }] };
+
+      const availCount = await Product.countDocuments(availQuery);
+      const unavailCount = await Product.countDocuments(unavailQuery);
+      total = availCount + unavailCount;
+
+      if (skip < availCount) {
+        const availProducts = await Product.find(availQuery)
+          .populate("category", "name icon image")
+          .populate("subcategory", "name")
+          .populate("brand", "name")
+          .populate("seller", "storeName status")
+          .sort(sortOptions)
+          .skip(skip)
+          .limit(effectiveLimit);
+        
+        products = availProducts.map((p: any) => ({ ...p.toObject(), isAvailable: true }));
+
+        if (products.length < effectiveLimit) {
+          const remainder = effectiveLimit - products.length;
+          const unavailProducts = await Product.find(unavailQuery)
+            .populate("category", "name icon image")
+            .populate("subcategory", "name")
+            .populate("brand", "name")
+            .populate("seller", "storeName status")
+            .sort(sortOptions)
+            .limit(remainder);
+          products = [...products, ...unavailProducts.map((p: any) => ({ ...p.toObject(), isAvailable: false }))];
+        }
+      } else {
+        const unavailSkip = skip - availCount;
+        const unavailProducts = await Product.find(unavailQuery)
+          .populate("category", "name icon image")
+          .populate("subcategory", "name")
+          .populate("brand", "name")
+          .populate("seller", "storeName status")
+          .sort(sortOptions)
+          .skip(unavailSkip)
+          .limit(effectiveLimit);
+        products = unavailProducts.map((p: any) => ({ ...p.toObject(), isAvailable: false }));
+      }
+    } else {
+      total = await Product.countDocuments(query);
+      const allProducts = await Product.find(query)
+        .populate("category", "name icon image")
+        .populate("subcategory", "name")
+        .populate("brand", "name")
+        .populate("seller", "storeName status")
+        .sort(sortOptions)
+        .skip(skip)
+        .limit(effectiveLimit);
+      products = allProducts.map((p: any) => ({ ...p.toObject(), isAvailable: false }));
+    }
 
     // --- IMPROVED DIAGNOSTICS FOR EMPTY RESULTS ---
     let extraMessage = "";

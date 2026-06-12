@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
+import BestsellerImageGrid from "./BestsellerImageGrid";
 
 interface CategoryTile {
   id: string;
@@ -147,30 +148,8 @@ export default function CategoryTileSection({
                       } ${tile.bgColor || "bg-neutral-50"}`}>
                     {hasImages ? (
                       showProductCount ? (
-                        // Bestsellers: 2x2 grid
-                        <div className="w-full h-full grid grid-cols-2">
-                          {images.slice(0, 4).map((img, idx) =>
-                            img ? (
-                              <img
-                                key={idx}
-                                src={img}
-                                alt=""
-                                className="w-full h-full object-cover bg-white rounded-sm"
-                                onError={(e) => {
-                                  // Hide broken image
-                                  const target = e.target as HTMLImageElement;
-                                  target.style.display = 'none';
-                                }}
-                              />
-                            ) : (
-                              <div
-                                key={idx}
-                                className="w-full h-full bg-neutral-200 rounded-sm flex items-center justify-center text-xs text-neutral-400">
-                                {idx + 1}
-                              </div>
-                            )
-                          )}
-                        </div>
+                        // Bestsellers: auto-swiping 2x2 grid
+                        <BestsellerImageGrid images={images.filter(Boolean) as string[]} />
                       ) : (
                         // Other sections: Single image - use contain to show full image without cropping
                         <img

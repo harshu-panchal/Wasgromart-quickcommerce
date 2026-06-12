@@ -403,7 +403,10 @@ export default function HomeHero({
               </div>
               {/* Location with dropdown indicator - only show if location is provided */}
               {locationDisplayText && (
-                <div className="text-neutral-700 text-[10px] md:text-xs flex items-center gap-0.5 leading-tight">
+                <div 
+                  className="text-neutral-700 text-[10px] md:text-xs flex items-center gap-0.5 leading-tight cursor-pointer hover:text-neutral-900 transition-colors"
+                  onClick={() => window.dispatchEvent(new Event('openLocationModal'))}
+                >
                   <span className="line-clamp-1" title={locationDisplayText}>
                     {locationDisplayText}
                   </span>

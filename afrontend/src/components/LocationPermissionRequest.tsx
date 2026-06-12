@@ -29,15 +29,15 @@ export default function LocationPermissionRequest({
   const [manualLat, setManualLat] = useState(0);
   const [manualLng, setManualLng] = useState(0);
 
-  // Auto-grant if already enabled or session permission exists
+  // Auto-grant if already enabled or session permission exists (only for mandatory modal)
   useEffect(() => {
-    if (isLocationEnabled) {
+    if (isLocationEnabled && !skipable) {
       console.log(
         "[LocationPermissionRequest] Location is enabled, notifying parent.",
       );
       onLocationGranted();
     }
-  }, [isLocationEnabled, onLocationGranted]);
+  }, [isLocationEnabled, onLocationGranted, skipable]);
 
   const handleAllowLocation = async () => {
     // Clear any previous errors before retrying
@@ -51,7 +51,8 @@ export default function LocationPermissionRequest({
       // This ensures we don't auto-request location on app load
       await requestLocation();
       // If requestLocation succeeds, locationError will be cleared in the context
-      // and isLocationEnabled will be set to true, which will trigger onLocationGranted
+      // and isLocationEnabled will be set to true. We notify parent.
+      onLocationGranted();
     } catch (error) {
       // Error is handled by context and displayed in the error box
       // Location will remain disabled, modal will stay visible
@@ -88,7 +89,7 @@ export default function LocationPermissionRequest({
     }
   };
 
-  if (isLocationEnabled) {
+  if (isLocationEnabled && !skipable) {
     return null;
   }
 

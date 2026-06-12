@@ -181,36 +181,63 @@ async function fetchSectionData(
     // supports pagination via skip + limit).
     if (displayType === "products") {
       const query = buildProductSectionQuery(section);
-      // Cap the total at section.limit so pagination respects the admin's
-      // upper bound on how many products this section is allowed to show.
       const adminCap = section.limit || 200;
+      const selectFields = "productName mainImage price mrp discount rating reviewsCount pack seller";
 
-      const productsPromise = Product.find(query)
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(effectiveLimit)
-        .select(
-          "productName mainImage price mrp discount rating reviewsCount pack seller",
-        )
-        .lean();
-
+      let products: any[] = [];
       let total = 0;
-      if (options.withTotal) {
-        const [products, dbTotal] = await Promise.all([
-          productsPromise,
-          Product.countDocuments(query),
-        ]);
+
+      if (nearbySellerIds && nearbySellerIds.length > 0) {
+        const availQuery = { ...query, seller: { $in: nearbySellerIds } };
+        const unavailQuery = { ...query, seller: { $nin: nearbySellerIds } };
+
+        const availCount = await Product.countDocuments(availQuery);
+        const unavailCount = await Product.countDocuments(unavailQuery);
+        const dbTotal = availCount + unavailCount;
         total = Math.min(dbTotal, adminCap);
-        return {
-          data: products.map((p: any) => shapeProduct(p, nearbySellerIds)),
-          total,
-        };
+
+        if (skip < availCount) {
+          const availProducts = await Product.find(availQuery)
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(effectiveLimit)
+            .select(selectFields)
+            .lean();
+          products = [...availProducts];
+
+          if (products.length < effectiveLimit) {
+            const remainder = effectiveLimit - products.length;
+            const unavailProducts = await Product.find(unavailQuery)
+              .sort({ createdAt: -1 })
+              .limit(remainder)
+              .select(selectFields)
+              .lean();
+            products = [...products, ...unavailProducts];
+          }
+        } else {
+          const unavailSkip = skip - availCount;
+          const unavailProducts = await Product.find(unavailQuery)
+            .sort({ createdAt: -1 })
+            .skip(unavailSkip)
+            .limit(effectiveLimit)
+            .select(selectFields)
+            .lean();
+          products = [...unavailProducts];
+        }
+      } else {
+        const dbTotal = await Product.countDocuments(query);
+        total = Math.min(dbTotal, adminCap);
+        products = await Product.find(query)
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(effectiveLimit)
+          .select(selectFields)
+          .lean();
       }
 
-      const products = await productsPromise;
       return {
         data: products.map((p: any) => shapeProduct(p, nearbySellerIds)),
-        total: skip + products.length,
+        total: options.withTotal ? total : skip + products.length,
       };
     }
 
@@ -327,27 +354,27 @@ export const getHomeContent = async (req: Request, res: Response) => {
           publish: true,
         };
 
-        // Fetch 4 active products from the category for preview images
+        // Fetch active products from the category for preview images
         // We fetch these irrespective of location radius to show category preview
         const categoryProducts = await Product.find(productQuery)
           .select("productName mainImage galleryImages")
           .sort({ createdAt: -1 })
-          .limit(4)
+          .limit(16)
           .lean();
 
-        // Extract exactly 4 product images (prefer mainImage, fallback to galleryImages[0])
+        // Extract product images (prefer mainImage, fallback to galleryImages[0])
         const productImages: string[] = [];
         categoryProducts.forEach((product: any) => {
-          if (productImages.length < 4 && product.mainImage) {
+          if (productImages.length < 16 && product.mainImage) {
             productImages.push(product.mainImage);
           }
         });
 
-        // If we have less than 4 products, try to use gallery images
-        if (productImages.length < 4) {
+        // If we have less than 16 products, try to use gallery images
+        if (productImages.length < 16) {
           categoryProducts.forEach((product: any) => {
             if (
-              productImages.length < 4 &&
+              productImages.length < 16 &&
               product.galleryImages &&
               product.galleryImages.length > 0
             ) {
@@ -356,16 +383,21 @@ export const getHomeContent = async (req: Request, res: Response) => {
           });
         }
 
-        // Ensure we have exactly 4 images (pad with first image if needed)
-        while (productImages.length < 4 && productImages[0]) {
+        // Pad to ensure we have a multiple of 4 images for the grid (pad with first image if needed)
+        while (productImages.length > 0 && productImages.length % 4 !== 0) {
           productImages.push(productImages[0]);
+        }
+        if (productImages.length > 0 && productImages.length < 4) {
+          while (productImages.length < 4) {
+            productImages.push(productImages[0]);
+          }
         }
 
         return {
           id: card._id.toString(),
           categoryId: categoryId.toString(),
           name: card.name,
-          productImages: productImages.slice(0, 4),
+          productImages: productImages.slice(0, 16),
           productCount: categoryProducts.length,
         };
       }),
@@ -429,6 +461,12 @@ export const getHomeContent = async (req: Request, res: Response) => {
         };
       });
 
+    // Sort lowest prices to show available products first
+    validLowestPricesProducts.sort((a, b) => {
+      if (a.isAvailable === b.isAvailable) return 0;
+      return a.isAvailable ? -1 : 1;
+    });
+
     // 3. Categories for Tiles (Grocery, Snacks, etc)
     const categories = await Category.find({
       status: "Active",
@@ -449,7 +487,7 @@ export const getHomeContent = async (req: Request, res: Response) => {
 
         if (shop.products && shop.products.length > 0) {
           const shopProducts = await Product.find({
-            _id: { $in: shop.products.slice(0, 4) },
+            _id: { $in: shop.products.slice(0, 16) },
             status: "Active",
             publish: true,
           })
@@ -459,6 +497,16 @@ export const getHomeContent = async (req: Request, res: Response) => {
           productImages = shopProducts
             .map((p: any) => p.mainImage)
             .filter(Boolean);
+            
+          // Pad to ensure we have a multiple of 4 images for the grid
+          while (productImages.length > 0 && productImages.length % 4 !== 0) {
+            productImages.push(productImages[0]);
+          }
+          if (productImages.length > 0 && productImages.length < 4) {
+            while (productImages.length < 4) {
+              productImages.push(productImages[0]);
+            }
+          }
         }
 
         return {

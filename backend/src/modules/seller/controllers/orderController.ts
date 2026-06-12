@@ -6,6 +6,7 @@ import { notifyDeliveryBoysOfNewOrder } from "../../../services/orderNotificatio
 import { Server as SocketIOServer } from "socket.io";
 import { calculateOrderBreakdown } from "../../../services/commissionService";
 import { processOrderStatusTransition } from "../../../services/orderService";
+import { broadcastPush } from "../../../services/broadcastNotificationService";
 
 /**
  * Get seller's orders with filters, sorting, and pagination
@@ -350,6 +351,15 @@ export const updateOrderStatus = asyncHandler(
         // Do not fail the status update — the order document is already saved.
       }
     }
+
+    // Trigger FCM Notification to the Customer
+    void broadcastPush(
+      { kind: "user", userId: String(order.user), userType: "Customer" },
+      {
+        title: "Order Status Update",
+        body: `Your order #${order.orderNumber} is now ${order.status}.`,
+      }
+    ).catch(console.error);
 
     return res.status(200).json({
       success: true,

@@ -6,6 +6,7 @@ import OrderItem from "../../../models/OrderItem";
 import Seller from "../../../models/Seller";
 import { generateDeliveryOtp, verifyDeliveryOtp } from "../../../services/deliveryOtpService";
 import { processOrderStatusTransition } from "../../../services/orderService";
+import { broadcastPush } from "../../../services/broadcastNotificationService";
 import { calculateOrderCommissions } from "../../../services/commissionService";
 
 /**
@@ -268,6 +269,15 @@ export const updateOrderStatus = asyncHandler(async (req: Request, res: Response
             notifySellersOfOrderUpdate(io, order, 'STATUS_UPDATE');
         }
     }
+
+    // Trigger FCM Notification to the Customer
+    void broadcastPush(
+        { kind: "user", userId: String(order.user), userType: "Customer" },
+        {
+            title: "Delivery Status Update",
+            body: `Your order #${order.orderNumber} is now ${status}.`,
+        }
+    ).catch(console.error);
 
     return res.status(200).json({
         success: true,

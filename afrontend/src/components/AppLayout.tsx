@@ -22,6 +22,12 @@ export default function AppLayout({ children }: AppLayoutProps) {
   const { isLocationEnabled, isLocationLoading, location: userLocation } = useLocationContext();
   const [showLocationRequest, setShowLocationRequest] = useState(false);
   const [showLocationChangeModal, setShowLocationChangeModal] = useState(false);
+
+  useEffect(() => {
+    const handleOpenLocationModal = () => setShowLocationChangeModal(true);
+    window.addEventListener('openLocationModal', handleOpenLocationModal);
+    return () => window.removeEventListener('openLocationModal', handleOpenLocationModal);
+  }, []);
   const { currentTheme } = useThemeContext();
 
   const isActive = (path: string) => location.pathname === path;

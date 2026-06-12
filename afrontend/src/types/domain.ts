@@ -46,5 +46,8 @@ export interface Product {
   maxReturnDays?: number;
   sellerId?: string;
   isAvailable?: boolean;
+  galleryImages?: string[];
+  galleryImageUrls?: string[];
 }
+
 

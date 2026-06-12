@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
+import Admin from "../../../models/Admin";
 import WithdrawRequest from '../../../models/WithdrawRequest';
+import { broadcastPush } from "../../../services/broadcastNotificationService";
 import mongoose from 'mongoose';
 
 /**
@@ -107,6 +109,14 @@ export const approveWithdrawal = async (req: Request, res: Response) => {
         request.processedAt = new Date();
         await request.save();
 
+        void broadcastPush(
+            { kind: "user", userId: String(request.userId), userType: request.userType as any },
+            {
+                title: "Withdrawal Approved",
+                body: `Your withdrawal request for ₹${request.amount} has been approved.`,
+            }
+        ).catch(console.error);
+
         return res.status(200).json({
             success: true,
             message: 'Withdrawal request approved successfully',
@@ -150,6 +160,14 @@ export const rejectWithdrawal = async (req: Request, res: Response) => {
         request.processedAt = new Date();
         if (remarks) request.remarks = remarks;
         await request.save();
+
+        void broadcastPush(
+            { kind: "user", userId: String(request.userId), userType: request.userType as any },
+            {
+                title: "Withdrawal Rejected",
+                body: `Your withdrawal request for ₹${request.amount} has been rejected.`,
+            }
+        ).catch(console.error);
 
         return res.status(200).json({
             success: true,
