@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import DashboardCard from "../components/DashboardCard";
 import OrderChart from "../components/OrderChart";
 import SalesLineChart from "../components/SalesLineChart";
@@ -22,6 +23,7 @@ import {
 } from "../../../services/api/admin/adminDashboardService";
 
 export default function AdminDashboard() {
+  const navigate = useNavigate();
   const { isAuthenticated, token } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [newOrders, setNewOrders] = useState<RecentOrder[]>([]);
@@ -449,60 +451,70 @@ export default function AdminDashboard() {
           title="Total User"
           value={stats.totalUser}
           accentColor="#3b82f6"
+          onClick={() => navigate("/admin/customers")}
         />
         <DashboardCard
           icon={categoryIcon}
           title="Total Category"
           value={stats.totalCategory}
           accentColor="#eab308"
+          onClick={() => navigate("/admin/category")}
         />
         <DashboardCard
           icon={subcategoryIcon}
           title="Total Subcategory"
           value={stats.totalSubcategory ?? 0}
           accentColor="#ec4899"
+          onClick={() => navigate("/admin/subcategory")}
         />
         <DashboardCard
           icon={productIcon}
           title="Total Product"
           value={stats.totalProduct}
           accentColor="#ef4444"
+          onClick={() => navigate("/admin/product/list")}
         />
         <DashboardCard
           icon={ordersIcon}
           title="Total Orders"
           value={stats.totalOrders}
           accentColor="#3b82f6"
+          onClick={() => navigate("/admin/orders/all")}
         />
         <DashboardCard
           icon={completedOrdersIcon}
           title="Completed Orders"
           value={stats.completedOrders}
           accentColor="#16a34a"
+          onClick={() => navigate("/admin/orders/delivered")}
         />
         <DashboardCard
           icon={pendingOrdersIcon}
           title="Pending Orders"
           value={stats.pendingOrders}
           accentColor="#a855f7"
+          onClick={() => navigate("/admin/orders/pending")}
         />
         <DashboardCard
           icon={cancelledOrdersIcon}
           title="Cancelled Orders"
           value={stats.cancelledOrders}
           accentColor="#ef4444"
+          onClick={() => navigate("/admin/orders/cancelled")}
         />
         <DashboardCard
           icon={soldOutIcon}
           title="Product Sold Out"
           value={stats.soldOutProducts}
           accentColor="#ec4899"
+          onClick={() => navigate("/admin/product/list")}
         />
         <DashboardCard
           icon={lowStockIcon}
           title="Product low on Stock"
           value={stats.lowStockProducts}
           accentColor="#eab308"
+          onClick={() => navigate("/admin/product/list")}
         />
       </div>
 

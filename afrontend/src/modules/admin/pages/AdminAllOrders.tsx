@@ -122,25 +122,55 @@ export default function AdminAllOrders() {
       "O. Date",
       "Status",
       "Delivery Boy Assign Status",
-      "Amount",
+      "Seller Name",
+      "Seller Amount",
+      "Total Amount",
     ];
     const csvContent = [
       headers.join(","),
-      ...filteredAndSortedOrders.map((order) =>
-        [
+      ...filteredAndSortedOrders.map((order) => {
+        let sellerNames = "Unknown";
+        let sellerAmount = 0;
+
+        if (order.items && Array.isArray(order.items)) {
+          const names = new Set<string>();
+          order.items.forEach((item: any) => {
+            if (item.seller && typeof item.seller === "object") {
+              names.add(item.seller.storeName || item.seller.sellerName || "Unknown");
+            } else if (typeof item.seller === "string") {
+              names.add(item.seller);
+            }
+            sellerAmount += item.total || item.unitPrice * item.quantity || 0;
+          });
+          if (names.size > 0) {
+            sellerNames = Array.from(names).join(" | ");
+          }
+        } else {
+          sellerAmount = order.total || 0;
+        }
+
+        const cName = order.customerName || (typeof order.customer === "object" ? order.customer.name : "") || "";
+        const addr = order.deliveryAddress?.address || "";
+        
+        return [
           order.orderNumber || "",
-          order.customerName || "",
-          order.deliveryAddress?.address || "",
-          order.estimatedDeliveryDate || "",
-          order.orderDate || "",
+          `"${cName.replace(/"/g, '""')}"`,
+          `"${addr.replace(/"/g, '""')}"`,
+          order.estimatedDeliveryDate ? new Date(order.estimatedDeliveryDate).toLocaleDateString() : "",
+          order.orderDate ? new Date(order.orderDate).toLocaleDateString() : "",
           order.status || "",
           order.deliveryBoyStatus || "Not Assigned",
+          `"${sellerNames.replace(/"/g, '""')}"`,
+          `₹${sellerAmount.toFixed(2)}`,
           `₹${order.total?.toFixed(2) || "0.00"}`,
-        ].join(",")
-      ),
+        ].join(",");
+      }),
     ].join("\n");
 
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    // Fix for Excel encoding: use raw Uint8Array for BOM
+    const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+    const blob = new Blob([bom, csvContent], { type: "text/csv;charset=utf-8" });
+    
     const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
     link.setAttribute("href", url);

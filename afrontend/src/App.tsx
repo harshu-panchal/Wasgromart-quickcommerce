@@ -297,6 +297,12 @@ const AdminSupportInbox = lazy(
 const AdminEditProduct = lazy(
   () => import("./modules/admin/pages/AdminEditProduct"),
 );
+const AdminAddProduct = lazy(
+  () => import("./modules/admin/pages/AdminAddProduct"),
+);
+const AdminBulkUpload = lazy(
+  () => import("./modules/admin/pages/AdminBulkUpload"),
+);
 
 import ProtectedAdminRoute from "./components/ProtectedAdminRoute";
 
@@ -678,8 +684,16 @@ function AppContent() {
                                         element={<AdminStockManagement />}
                                       />
                                       <Route
+                                        path="product/add"
+                                        element={<AdminAddProduct />}
+                                      />
+                                      <Route
                                         path="product/edit/:id"
                                         element={<AdminEditProduct />}
+                                      />
+                                      <Route
+                                        path="product/bulk-upload"
+                                        element={<AdminBulkUpload />}
                                       />
                                       <Route
                                         path="manage-seller/list"

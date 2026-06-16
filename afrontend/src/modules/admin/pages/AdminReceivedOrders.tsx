@@ -88,29 +88,71 @@ export default function AdminReceivedOrders() {
   };
 
   const handleExport = () => {
-    const headers = ['O. Id', 'Customer Details', 'Address', 'D. Date', 'O. Date', 'Status', 'Delivery Boy Assign Status', 'Amount'];
+    const headers = [
+      "O. Id",
+      "Customer Details",
+      "Address",
+      "D. Date",
+      "O. Date",
+      "Status",
+      "Delivery Boy Assign Status",
+      "Seller Name",
+      "Seller Amount",
+      "Total Amount",
+    ];
     const csvContent = [
-      headers.join(','),
-      ...filteredAndSortedOrders.map(order =>
-        [
-          order.orderNumber || '',
-          order.customerName || '',
-          order.deliveryAddress?.address || '',
-          order.estimatedDeliveryDate ? new Date(order.estimatedDeliveryDate).toLocaleDateString() : '',
-          order.orderDate ? new Date(order.orderDate).toLocaleDateString() : '',
-          order.status || '',
-          order.deliveryBoyStatus || 'Not Assigned',
-          `₹${order.total?.toFixed(2) || '0.00'}`
-        ].join(',')
-      )
-    ].join('\n');
+      headers.join(","),
+      ...filteredAndSortedOrders.map((order) => {
+        let sellerNames = "Unknown";
+        let sellerAmount = 0;
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
+        if (order.items && Array.isArray(order.items)) {
+          const names = new Set<string>();
+          order.items.forEach((item: any) => {
+            if (item.seller && typeof item.seller === "object") {
+              names.add(item.seller.storeName || item.seller.sellerName || "Unknown");
+            } else if (typeof item.seller === "string") {
+              names.add(item.seller);
+            }
+            sellerAmount += item.total || item.unitPrice * item.quantity || 0;
+          });
+          if (names.size > 0) {
+            sellerNames = Array.from(names).join(" | ");
+          }
+        } else {
+          sellerAmount = order.total || 0;
+        }
+
+        const cName = order.customerName || (typeof order.customer === "object" ? order.customer.name : "") || "";
+        const addr = order.deliveryAddress?.address || "";
+        
+        return [
+          order.orderNumber || "",
+          `"${cName.replace(/"/g, '""')}"`,
+          `"${addr.replace(/"/g, '""')}"`,
+          order.estimatedDeliveryDate ? new Date(order.estimatedDeliveryDate).toLocaleDateString() : "",
+          order.orderDate ? new Date(order.orderDate).toLocaleDateString() : "",
+          order.status || "",
+          order.deliveryBoyStatus || "Not Assigned",
+          `"${sellerNames.replace(/"/g, '""')}"`,
+          `₹${sellerAmount.toFixed(2)}`,
+          `₹${order.total?.toFixed(2) || "0.00"}`,
+        ].join(",");
+      }),
+    ].join("\n");
+
+    // Fix for Excel encoding: use raw Uint8Array for BOM
+    const bom = new Uint8Array([0xEF, 0xBB, 0xBF]);
+    const blob = new Blob([bom, csvContent], { type: "text/csv;charset=utf-8" });
+    
+    const link = document.createElement("a");
     const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', `received_orders_${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = 'hidden';
+    link.setAttribute("href", url);
+    link.setAttribute(
+      "download",
+      `received_orders_${new Date().toISOString().split("T")[0]}.csv`
+    );
+    link.style.visibility = "hidden";
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

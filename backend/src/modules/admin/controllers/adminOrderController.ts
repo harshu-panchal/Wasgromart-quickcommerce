@@ -56,7 +56,19 @@ export const getAllOrders = asyncHandler(
       Order.find(query)
         .populate("customer", "name email phone")
         .populate("deliveryBoy", "name mobile")
-        .populate("items")
+        .populate({
+          path: "items",
+          populate: [
+            {
+              path: "product",
+              select: "productName mainImage",
+            },
+            {
+              path: "seller",
+              select: "sellerName storeName",
+            },
+          ],
+        })
         .sort({ orderDate: -1 })
         .skip(skip)
         .limit(parseInt(limit as string)),
@@ -181,7 +193,19 @@ export const updateOrderStatus = asyncHandler(
     const populatedOrder = await Order.findById(id)
       .populate("customer", "name email phone")
       .populate("deliveryBoy", "name mobile")
-      .populate("items");
+      .populate({
+        path: "items",
+        populate: [
+          {
+            path: "product",
+            select: "productName mainImage",
+          },
+          {
+            path: "seller",
+            select: "sellerName storeName",
+          },
+        ],
+      });
 
     // Trigger notification if status is "Processed" (Confirmed) or if paymentStatus changed to "Paid"
     if (status === "Processed" || populatedOrder?.paymentStatus === "Paid") {
@@ -260,7 +284,19 @@ export const assignDeliveryBoy = asyncHandler(
     const updatedOrder = await Order.findById(id)
       .populate("customer", "name email phone")
       .populate("deliveryBoy", "name mobile email")
-      .populate("items");
+      .populate({
+        path: "items",
+        populate: [
+          {
+            path: "product",
+            select: "productName mainImage",
+          },
+          {
+            path: "seller",
+            select: "sellerName storeName",
+          },
+        ],
+      });
 
     // Fetch delivery boy's FCM tokens (both web and mobile)
     const tokens = [
@@ -333,7 +369,19 @@ export const getOrdersByStatus = asyncHandler(
       Order.find({ status })
         .populate("customer", "name email phone")
         .populate("deliveryBoy", "name mobile")
-        .populate("items")
+        .populate({
+          path: "items",
+          populate: [
+            {
+              path: "product",
+              select: "productName mainImage",
+            },
+            {
+              path: "seller",
+              select: "sellerName storeName",
+            },
+          ],
+        })
         .sort({ orderDate: -1 })
         .skip(skip)
         .limit(parseInt(limit as string)),

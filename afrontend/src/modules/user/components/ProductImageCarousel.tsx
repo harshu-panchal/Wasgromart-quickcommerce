@@ -19,11 +19,18 @@ const ProductImageCarousel = memo(({
   const [hasError, setHasError] = useState<Record<number, boolean>>({});
 
   useEffect(() => {
-    if (images.length <= 1 || isHovered) return;
+    // If not hovered, reset to first image and stop auto-swipe
+    if (!isHovered) {
+      setCurrentIndex(0);
+      return;
+    }
 
+    if (images.length <= 1) return;
+
+    // Only auto-swipe when hovered
     const interval = setInterval(() => {
       setCurrentIndex((prevIndex) => (prevIndex + 1) % images.length);
-    }, 3000); // swipe every 3 seconds
+    }, 1500); // swipe every 1.5 seconds on hover
 
     return () => clearInterval(interval);
   }, [images.length, isHovered]);

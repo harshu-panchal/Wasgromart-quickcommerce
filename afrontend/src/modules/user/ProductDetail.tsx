@@ -179,6 +179,19 @@ export default function ProductDetail() {
     setSelectedImageIndex(0);
   }, [selectedVariantIndex, allImages.length]);
 
+  // Auto-swipe functionality
+  useEffect(() => {
+    if (allImages.length <= 1) return;
+
+    const interval = setInterval(() => {
+      setIsTransitioning(true);
+      setSelectedImageIndex((prevIndex) => (prevIndex + 1) % allImages.length);
+      setTimeout(() => setIsTransitioning(false), 300);
+    }, 4000); // Swipe every 4 seconds
+
+    return () => clearInterval(interval);
+  }, [allImages.length]);
+
   const currentImage = allImages[selectedImageIndex] || product?.imageUrl || "";
 
   // Minimum swipe distance (in pixels)

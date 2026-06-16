@@ -8,6 +8,7 @@ import {
   getSellerWithdrawals,
   getSellerCommissions,
 } from '../../../services/api/sellerWalletService';
+import { getSellerProfile, updateSellerProfile } from '../../../services/api/auth/sellerAuthService';
 
 type Tab = 'transactions' | 'withdrawals' | 'commissions';
 
@@ -23,6 +24,14 @@ export default function SellerWallet() {
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<'Bank Transfer' | 'UPI'>('Bank Transfer');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showBankModal, setShowBankModal] = useState(false);
+  const [bankDetails, setBankDetails] = useState({
+    accountName: '',
+    bankName: '',
+    accountNumber: '',
+    ifsc: '',
+  });
+  const [isSavingBank, setIsSavingBank] = useState(false);
 
   useEffect(() => {
     fetchWalletData();
@@ -71,9 +80,70 @@ export default function SellerWallet() {
         fetchWalletData();
       }
     } catch (error: any) {
-      showToast(error.response?.data?.message || 'Failed to request withdrawal', 'error');
+      const msg = error.response?.data?.message || '';
+      if (msg.includes('complete your bank account details') || msg.includes('bank account details')) {
+        // Load profile to pre-fill
+        try {
+          const profileRes = await getSellerProfile();
+          if (profileRes.success && profileRes.data) {
+            setBankDetails({
+              accountName: profileRes.data.accountName || '',
+              bankName: profileRes.data.bankName || '',
+              accountNumber: profileRes.data.accountNumber || '',
+              ifsc: profileRes.data.ifsc || profileRes.data.ifscCode || '',
+            });
+          }
+        } catch (profileErr) {
+          console.error("Failed to fetch seller profile for bank details:", profileErr);
+        }
+        setShowWithdrawModal(false);
+        setShowBankModal(true);
+      } else {
+        showToast(msg || 'Failed to request withdrawal', 'error');
+      }
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleSaveBankDetails = async () => {
+    try {
+      if (!bankDetails.accountName.trim()) {
+        showToast('Account Holder Name is required', 'error');
+        return;
+      }
+      if (!bankDetails.bankName.trim()) {
+        showToast('Bank Name is required', 'error');
+        return;
+      }
+      if (!bankDetails.accountNumber.trim()) {
+        showToast('Account Number is required', 'error');
+        return;
+      }
+      if (!bankDetails.ifsc.trim()) {
+        showToast('IFSC Code is required', 'error');
+        return;
+      }
+
+      setIsSavingBank(true);
+      const res = await updateSellerProfile({
+        accountName: bankDetails.accountName,
+        bankName: bankDetails.bankName,
+        accountNumber: bankDetails.accountNumber,
+        ifsc: bankDetails.ifsc,
+      });
+
+      if (res.success) {
+        showToast('Bank details saved successfully', 'success');
+        setShowBankModal(false);
+        setShowWithdrawModal(true);
+      } else {
+        showToast(res.message || 'Failed to save bank details', 'error');
+      }
+    } catch (error: any) {
+      showToast(error.response?.data?.message || 'Failed to save bank details', 'error');
+    } finally {
+      setIsSavingBank(false);
     }
   };
 
@@ -361,6 +431,89 @@ export default function SellerWallet() {
                     disabled={isSubmitting}
                   >
                     {isSubmitting ? 'Processing...' : 'Confirm Request'}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )
+      }
+
+      {/* Bank Details Modal */}
+      {
+        showBankModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <motion.div
+              initial={{ opacity: 0, y: 100 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="bg-white rounded-t-[2.5rem] sm:rounded-3xl p-6 sm:p-10 max-w-md w-full relative sm:bottom-auto bottom-0 mt-auto sm:mt-0 shadow-2xl"
+            >
+              <div className="w-12 h-1.5 bg-neutral-200 rounded-full mx-auto mb-6 sm:hidden" />
+              <h2 className="text-2xl sm:text-3xl font-black text-neutral-900 mb-2">Bank Account Details</h2>
+              <p className="text-xs text-neutral-500 mb-6 font-medium">Please enter your banking information to proceed with withdrawals.</p>
+              
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-widest mb-2">Account Holder Name</label>
+                  <input
+                    type="text"
+                    value={bankDetails.accountName}
+                    onChange={(e) => setBankDetails({ ...bankDetails, accountName: e.target.value })}
+                    className="w-full bg-neutral-50 border-2 border-neutral-100 rounded-xl px-4 py-3 text-sm font-bold focus:ring-4 focus:ring-teal-500/10 focus:border-teal-500 outline-none transition-all"
+                    placeholder="John Doe"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-widest mb-2">Bank Name</label>
+                  <input
+                    type="text"
+                    value={bankDetails.bankName}
+                    onChange={(e) => setBankDetails({ ...bankDetails, bankName: e.target.value })}
+                    className="w-full bg-neutral-50 border-2 border-neutral-100 rounded-xl px-4 py-3 text-sm font-bold focus:ring-4 focus:ring-teal-500/10 focus:border-teal-500 outline-none transition-all"
+                    placeholder="State Bank of India"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-widest mb-2">Account Number</label>
+                  <input
+                    type="text"
+                    value={bankDetails.accountNumber}
+                    onChange={(e) => setBankDetails({ ...bankDetails, accountNumber: e.target.value })}
+                    className="w-full bg-neutral-50 border-2 border-neutral-100 rounded-xl px-4 py-3 text-sm font-bold focus:ring-4 focus:ring-teal-500/10 focus:border-teal-500 outline-none transition-all"
+                    placeholder="1234567890"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-black text-neutral-400 uppercase tracking-widest mb-2">IFSC Code</label>
+                  <input
+                    type="text"
+                    value={bankDetails.ifsc}
+                    onChange={(e) => setBankDetails({ ...bankDetails, ifsc: e.target.value.toUpperCase() })}
+                    className="w-full bg-neutral-50 border-2 border-neutral-100 rounded-xl px-4 py-3 text-sm font-bold focus:ring-4 focus:ring-teal-500/10 focus:border-teal-500 outline-none transition-all"
+                    placeholder="SBIN0001234"
+                  />
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-3 pt-4 pb-2">
+                  <button
+                    onClick={() => {
+                      setShowBankModal(false);
+                      setShowWithdrawModal(true);
+                    }}
+                    className="order-2 sm:order-1 flex-1 bg-neutral-100 text-neutral-500 rounded-2xl py-4 font-bold hover:bg-neutral-200 transition active:scale-95 shadow-sm"
+                    disabled={isSavingBank}
+                  >
+                    Back
+                  </button>
+                  <button
+                    onClick={handleSaveBankDetails}
+                    className="order-1 sm:order-2 flex-[2] bg-teal-700 text-white rounded-2xl py-4 font-bold hover:bg-teal-800 transition shadow-lg shadow-teal-700/30 active:scale-95 disabled:opacity-50"
+                    disabled={isSavingBank}
+                  >
+                    {isSavingBank ? 'Saving...' : 'Save & Continue'}
                   </button>
                 </div>
               </div>

@@ -847,8 +847,8 @@ export const createProduct = asyncHandler(
         await Inventory.create({
           product: product._id,
           seller: productData.seller,
-          currentStock: Number(productData.stock) || 0,
-          availableStock: Number(productData.stock) || 0,
+          currentStock: Number(product.stock) || 0,
+          availableStock: Number(product.stock) || 0,
         });
       } catch (invError) {
         // If inventory creation fails, delete the product to maintain consistency
@@ -1167,8 +1167,8 @@ export const bulkImportProducts = asyncHandler(
         await Inventory.create({
           product: product._id,
           seller: productData.seller,
-          currentStock: productData.stock || 0,
-          availableStock: productData.stock || 0,
+          currentStock: product.stock || 0,
+          availableStock: product.stock || 0,
         });
 
         results.success++;
