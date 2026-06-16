@@ -33,7 +33,6 @@ const SubCategorySchema = new Schema<ISubCategory>(
     },
     commissionRate: {
       type: Number,
-      default: 0,
       min: [0, "Commission rate cannot be negative"],
       max: [100, "Commission rate cannot exceed 100%"],
     },

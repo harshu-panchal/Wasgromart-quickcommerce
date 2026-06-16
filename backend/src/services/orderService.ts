@@ -26,9 +26,28 @@ export const processOrderStatusTransition = async (
   // Handle status-specific logic
   switch (newStatus) {
     case "Cancelled":
+    case "Rejected":
+    case "Failed":
       // Restore inventory if order was confirmed
-      if (["Processed", "Shipped"].includes(previousStatus)) {
+      if (["Processed", "Shipped", "Out for Delivery", "Delivered"].includes(previousStatus)) {
         await restoreInventory(order.items as any[]);
+      }
+      // Reverse any distributed commissions
+      try {
+        const { reverseCommissions } = await import("./commissionService");
+        await reverseCommissions(orderId);
+      } catch (revError) {
+        console.error("Error reversing commissions on order cancellation/failure:", revError);
+      }
+      break;
+
+    case "Returned":
+      // Reverse any distributed commissions
+      try {
+        const { reverseCommissions } = await import("./commissionService");
+        await reverseCommissions(orderId);
+      } catch (revError) {
+        console.error("Error reversing commissions on return:", revError);
       }
       break;
 

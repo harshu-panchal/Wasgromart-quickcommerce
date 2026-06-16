@@ -8,6 +8,7 @@ import Return from "../../../models/Return";
 import { notifySellersOfOrderUpdate } from "../../../services/sellerNotificationService";
 import { Server as SocketIOServer } from "socket.io";
 import { sendPushNotification } from "../../../services/firebaseAdmin";
+import { processOrderStatusTransition } from "../../../services/orderService";
 
 /**
  * Get all orders with filters
@@ -143,25 +144,7 @@ export const updateOrderStatus = asyncHandler(
       });
     }
 
-    const updateData: any = { status };
-    if (adminNotes) updateData.adminNotes = adminNotes;
-
-    if (status === "Delivered") {
-      updateData.deliveredAt = new Date();
-    }
-
-    if (status === "Cancelled") {
-      updateData.cancelledAt = new Date();
-      updateData.cancelledBy = req.user?.userId;
-    }
-
-    const order = await Order.findByIdAndUpdate(id, updateData, {
-      new: true,
-      runValidators: true,
-    })
-      .populate("customer", "name email phone")
-      .populate("deliveryBoy", "name mobile")
-      .populate("items");
+    const order = await Order.findById(id);
 
     if (!order) {
       return res.status(404).json({
@@ -170,18 +153,48 @@ export const updateOrderStatus = asyncHandler(
       });
     }
 
+    const previousStatus = order.status;
+
+    order.status = status;
+    if (adminNotes) order.adminNotes = adminNotes;
+
+    if (status === "Delivered") {
+      order.deliveredAt = new Date();
+    }
+
+    if (status === "Cancelled") {
+      order.cancelledAt = new Date();
+      order.cancelledBy = req.user?.userId;
+    }
+
+    await order.save();
+
+    // Trigger canonical status transition handling
+    if (status !== previousStatus) {
+      try {
+        await processOrderStatusTransition(id, status, previousStatus);
+      } catch (transitionError) {
+        console.error("Error processing order status transition in admin update:", transitionError);
+      }
+    }
+
+    const populatedOrder = await Order.findById(id)
+      .populate("customer", "name email phone")
+      .populate("deliveryBoy", "name mobile")
+      .populate("items");
+
     // Trigger notification if status is "Processed" (Confirmed) or if paymentStatus changed to "Paid"
-    if (status === "Processed" || order.paymentStatus === "Paid") {
+    if (status === "Processed" || populatedOrder?.paymentStatus === "Paid") {
       const io: SocketIOServer = req.app.get("io");
-      if (io) {
-        notifySellersOfOrderUpdate(io, order, "STATUS_UPDATE");
+      if (io && populatedOrder) {
+        notifySellersOfOrderUpdate(io, populatedOrder, "STATUS_UPDATE");
       }
     }
 
     return res.status(200).json({
       success: true,
       message: "Order status updated successfully",
-      data: order,
+      data: populatedOrder,
     });
   }
 );

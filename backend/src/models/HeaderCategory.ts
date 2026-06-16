@@ -26,7 +26,6 @@ const HeaderCategorySchema: Schema = new Schema(
             type: Number,
             min: [0, 'Commission rate cannot be negative'],
             max: [100, 'Commission rate cannot exceed 100%'],
-            default: 0,
         },
     },
     { timestamps: true }

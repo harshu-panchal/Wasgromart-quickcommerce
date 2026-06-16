@@ -302,9 +302,7 @@ export const createPendingCommissions = async (orderId: string) => {
                 `[Commission] Item: ${item.product}, Rate: ${commissionRate}%, Amount: ${commissionAmount}, Net: ${netEarning}`,
             );
 
-            // Create commission record as PAID immediately for online orders, PENDING for COD
-            const isCOD = order.paymentMethod === "COD";
-
+            // Create commission record as Pending for all orders until delivered
             const commission = await Commission.create({
                 order: item.order,
                 orderItem: item._id,
@@ -313,21 +311,9 @@ export const createPendingCommissions = async (orderId: string) => {
                 orderAmount: item.total,
                 commissionRate,
                 commissionAmount,
-                status: isCOD ? "Pending" : "Paid",
-                paidAt: isCOD ? null : new Date(),
+                status: "Pending",
+                paidAt: null,
             });
-
-            // Credit Wallet Immediately only for non-COD
-            if (!isCOD && seller) {
-                await creditWallet(
-                    seller._id.toString(),
-                    "SELLER",
-                    netEarning,
-                    `Sale proceeds from Order #${order.orderNumber}`,
-                    item.order.toString(),
-                    commission._id.toString(),
-                );
-            }
         }
 
         console.log(`Commissions processed for order ${orderId}`);
@@ -741,10 +727,14 @@ export const reverseCommissions = async (orderId: string) => {
 
                 if (userId) {
                     const { debitWallet } = await import("./walletManagementService");
+                    const amountToDebit = userType === "SELLER"
+                        ? (commission.orderAmount - commission.commissionAmount)
+                        : commission.commissionAmount;
+
                     await debitWallet(
                         userId.toString(),
                         userType,
-                        commission.commissionAmount,
+                        amountToDebit,
                         `Commission reversal for cancelled order`,
                         orderId,
                         session,
@@ -920,10 +910,6 @@ export const processCODOrderDelivery = async (
             throw new Error("This function is only for COD orders");
         }
 
-        if (!order.deliveryBoy) {
-            throw new Error("Order must have a delivery boy assigned");
-        }
-
         // Calculate complete breakdown
         const breakdown = await calculateOrderBreakdown(orderId, session);
 
@@ -931,56 +917,73 @@ export const processCODOrderDelivery = async (
         const PlatformWallet = (await import("../models/PlatformWallet")).default;
 
         // Check if already processed to avoid double-counting
-        const existingTx = await WalletTransaction.findOne({
-            userId: order.deliveryBoy.toString(),
-            relatedOrder: orderId,
-            description: { $regex: /Delivery earning for COD order/i }
-        }).session(session);
+        const checkQuery = order.deliveryBoy
+            ? {
+                userId: order.deliveryBoy.toString(),
+                relatedOrder: orderId,
+                description: { $regex: /Delivery earning for COD order/i }
+              }
+            : {
+                relatedOrder: orderId,
+                type: "SELLER"
+              };
+
+        const existingTx = order.deliveryBoy
+            ? await WalletTransaction.findOne(checkQuery).session(session)
+            : await Commission.findOne(checkQuery).session(session);
 
         if (existingTx) {
             console.log(`[COD Delivery] Order ${order.orderNumber} already processed. Skipping all financial updates.`);
         } else {
-            // 1. Update Delivery Boy Wallet
-            const deliveryBoy = await Delivery.findById(order.deliveryBoy).session(session);
-            if (!deliveryBoy) {
-                throw new Error("Delivery boy not found");
+            if (order.deliveryBoy) {
+                // 1. Update Delivery Boy Wallet
+                const deliveryBoy = await Delivery.findById(order.deliveryBoy).session(session);
+                if (!deliveryBoy) {
+                    throw new Error("Delivery boy not found");
+                }
+
+                deliveryBoy.pendingAdminPayout = (deliveryBoy.pendingAdminPayout || 0) + breakdown.amountDeliveryBoyOwesAdmin;
+                deliveryBoy.cashCollected = (deliveryBoy.cashCollected || 0) + breakdown.totalOrderAmount;
+
+                await deliveryBoy.save({ session });
+
+                // Create wallet transaction for delivery boy commission
+                await creditWallet(
+                    order.deliveryBoy.toString(),
+                    "DELIVERY_BOY",
+                    breakdown.deliveryBoyCommission,
+                    `Delivery earning for COD order ${order.orderNumber}`,
+                    orderId,
+                    undefined,
+                    session
+                );
+
+                // 2. Update Platform Wallet
+                const wallet = await (PlatformWallet as any).getWallet();
+                wallet.pendingFromDeliveryBoy += breakdown.amountDeliveryBoyOwesAdmin;
+                wallet.totalAdminEarning += breakdown.totalAdminEarning;
+                await wallet.save({ session });
+
+                // 3. Create Commission Records
+                const deliveryCommission = new Commission({
+                    order: orderId,
+                    deliveryBoy: order.deliveryBoy,
+                    type: "DELIVERY_BOY",
+                    orderAmount: breakdown.deliveryDistanceKm || breakdown.totalDeliveryCharge,
+                    commissionRate: breakdown.deliveryDistanceKm
+                        ? (breakdown.deliveryDistanceKm > 0 ? breakdown.deliveryBoyCommission / breakdown.deliveryDistanceKm : 0)
+                        : (breakdown.totalDeliveryCharge > 0 ? (breakdown.deliveryBoyCommission / breakdown.totalDeliveryCharge) * 100 : 0),
+                    commissionAmount: breakdown.deliveryBoyCommission,
+                    status: "Paid",
+                    paidAt: new Date(),
+                });
+                await deliveryCommission.save({ session });
+            } else {
+                // 2. Update Platform Wallet without delivery boy
+                const wallet = await (PlatformWallet as any).getWallet();
+                wallet.totalAdminEarning += breakdown.totalAdminEarning;
+                await wallet.save({ session });
             }
-
-            deliveryBoy.pendingAdminPayout = (deliveryBoy.pendingAdminPayout || 0) + breakdown.amountDeliveryBoyOwesAdmin;
-            deliveryBoy.cashCollected = (deliveryBoy.cashCollected || 0) + breakdown.totalOrderAmount;
-
-            await deliveryBoy.save({ session });
-
-            // Create wallet transaction for delivery boy commission
-            await creditWallet(
-                order.deliveryBoy.toString(),
-                "DELIVERY_BOY",
-                breakdown.deliveryBoyCommission,
-                `Delivery earning for COD order ${order.orderNumber}`,
-                orderId,
-                undefined,
-                session
-            );
-
-            // 2. Update Platform Wallet
-            const wallet = await (PlatformWallet as any).getWallet();
-            wallet.pendingFromDeliveryBoy += breakdown.amountDeliveryBoyOwesAdmin;
-            await wallet.save({ session });
-
-            // 3. Create Commission Records
-            const deliveryCommission = new Commission({
-                order: orderId,
-                deliveryBoy: order.deliveryBoy,
-                type: "DELIVERY_BOY",
-                orderAmount: breakdown.deliveryDistanceKm || breakdown.totalDeliveryCharge,
-                commissionRate: breakdown.deliveryDistanceKm
-                    ? breakdown.deliveryBoyCommission / breakdown.deliveryDistanceKm
-                    : (breakdown.deliveryBoyCommission / breakdown.totalDeliveryCharge) * 100,
-                commissionAmount: breakdown.deliveryBoyCommission,
-                status: "Paid",
-                paidAt: new Date(),
-            });
-            await deliveryCommission.save({ session });
 
             const sellerEarningsArray = Array.from(breakdown.sellerEarnings.entries());
             for (const [sellerId] of sellerEarningsArray) {
@@ -989,9 +992,14 @@ export const processCODOrderDelivery = async (
                     seller: sellerId
                 }).session(session);
 
+                let sellerTotalNetEarning = 0;
+                let firstCommissionId: string | undefined;
+
                 for (const item of orderItems) {
                     const commRate = item.commissionRate || await getOrderItemCommissionRate(item.product.toString(), item.seller.toString());
                     const itemCommission = (item.total * commRate) / 100;
+                    const netEarning = item.total - itemCommission;
+                    sellerTotalNetEarning += netEarning;
 
                     const sellerCommission = new Commission({
                         order: orderId,
@@ -1001,10 +1009,25 @@ export const processCODOrderDelivery = async (
                         orderAmount: item.total,
                         commissionRate: commRate,
                         commissionAmount: itemCommission,
-                        status: "Pending",
-                        paidAt: null,
+                        status: "Paid",
+                        paidAt: new Date(),
                     });
                     await sellerCommission.save({ session });
+                    if (!firstCommissionId) {
+                        firstCommissionId = sellerCommission._id.toString();
+                    }
+                }
+
+                if (sellerTotalNetEarning > 0) {
+                    await creditWallet(
+                        sellerId,
+                        "SELLER",
+                        sellerTotalNetEarning,
+                        `Sale proceeds for COD order ${order.orderNumber}`,
+                        orderId,
+                        firstCommissionId,
+                        session
+                    );
                 }
             }
         }
