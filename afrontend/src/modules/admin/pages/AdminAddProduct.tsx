@@ -8,11 +8,9 @@ import {
 import {
   createProduct,
   getCategories,
-  getSubCategories,
   getBrands,
   getSellers,
   type Category,
-  type SubCategory,
   type Brand,
   type Seller,
 } from "../../../services/api/admin/adminProductService";
@@ -27,7 +25,7 @@ export default function AdminAddProduct() {
 
   const [headerCategories, setHeaderCategories] = useState<HeaderCategory[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [subcategories, setSubcategories] = useState<SubCategory[]>([]);
+  const [subcategories, setSubcategories] = useState<Category[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [taxes, setTaxes] = useState<Tax[]>([]);
   const [sellers, setSellers] = useState<Seller[]>([]);
@@ -85,7 +83,6 @@ export default function AdminAddProduct() {
       try {
         setLoading(true);
         const results = await Promise.allSettled([
-          getCategories(),
           getActiveTaxes(),
           getBrands(),
           getHeaderCategoriesPublic(),
@@ -93,26 +90,22 @@ export default function AdminAddProduct() {
         ]);
 
         if (results[0].status === "fulfilled" && results[0].value.success) {
-          setCategories(results[0].value.data);
+          setTaxes(results[0].value.data);
         }
 
         if (results[1].status === "fulfilled" && results[1].value.success) {
-          setTaxes(results[1].value.data);
+          setBrands(results[1].value.data);
         }
 
-        if (results[2].status === "fulfilled" && results[2].value.success) {
-          setBrands(results[2].value.data);
-        }
-
-        if (results[3].status === "fulfilled") {
-          const headerCatRes = results[3].value;
+        if (results[2].status === "fulfilled") {
+          const headerCatRes = results[2].value;
           if (headerCatRes && Array.isArray(headerCatRes)) {
             setHeaderCategories(headerCatRes.filter((hc: HeaderCategory) => hc.status === "Published"));
           }
         }
 
-        if (results[4].status === "fulfilled" && results[4].value.success) {
-          setSellers(results[4].value.data);
+        if (results[3].status === "fulfilled" && results[3].value.success) {
+          setSellers(results[3].value.data);
         }
       } catch (err) {
         console.error("Error fetching form data:", err);
@@ -124,10 +117,26 @@ export default function AdminAddProduct() {
   }, []);
 
   useEffect(() => {
+    const fetchCats = async () => {
+      if (formData.headerCategory) {
+        try {
+          const res = await getCategories({ headerCategoryId: formData.headerCategory, status: "Active" });
+          if (res.success) setCategories(res.data);
+        } catch (err) {
+          console.error("Error fetching categories:", err);
+        }
+      } else {
+        setCategories([]);
+      }
+    };
+    fetchCats();
+  }, [formData.headerCategory]);
+
+  useEffect(() => {
     const fetchSubs = async () => {
       if (formData.category) {
         try {
-          const res = await getSubCategories({ category: formData.category });
+          const res = await getCategories({ parentId: formData.category, status: "Active" });
           if (res.success) setSubcategories(res.data);
         } catch (err) {
           console.error("Error fetching subcategories:", err);
@@ -136,9 +145,7 @@ export default function AdminAddProduct() {
         setSubcategories([]);
       }
     };
-    if (formData.category) {
-      fetchSubs();
-    }
+    fetchSubs();
   }, [formData.category]);
 
   const handleChange = (
@@ -147,7 +154,22 @@ export default function AdminAddProduct() {
     >
   ) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    if (name === "headerCategory") {
+      setFormData((prev) => ({
+        ...prev,
+        headerCategory: value,
+        category: "",
+        subcategory: "",
+      }));
+    } else if (name === "category") {
+      setFormData((prev) => ({
+        ...prev,
+        category: value,
+        subcategory: "",
+      }));
+    } else {
+      setFormData((prev) => ({ ...prev, [name]: value }));
+    }
   };
 
   const handleMainImageChange = async (

@@ -234,8 +234,9 @@ export const calculateOrderCommissions = async (orderId: string) => {
                 if (isDistanceBased) {
                     const kmRate = settings?.deliveryConfig?.deliveryBoyKmRate || 0;
                     const distanceKm = order.deliveryDistanceKm || 0;
+                    const baseCharge = settings?.deliveryConfig?.baseCharge || 0;
                     commissionRate = kmRate;
-                    commissionAmount = kmRate * distanceKm;
+                    commissionAmount = Math.max(baseCharge, kmRate * distanceKm);
                     orderAmountRef = distanceKm;
                 } else {
                     commissionAmount = order.shipping || 0;
@@ -435,8 +436,9 @@ export const distributeCommissions = async (orderId: string) => {
                     if (isDistanceBased) {
                         const kmRate = settings?.deliveryConfig?.deliveryBoyKmRate || 0;
                         const distanceKm = order.deliveryDistanceKm || 0;
+                        const baseCharge = settings?.deliveryConfig?.baseCharge || 0;
                         commissionRate = kmRate;
-                        commissionAmount = kmRate * distanceKm;
+                        commissionAmount = Math.max(baseCharge, kmRate * distanceKm);
                         orderAmountRef = distanceKm;
                     } else {
                         commissionAmount = order.shipping || 0;
@@ -856,7 +858,8 @@ export const calculateOrderBreakdown = async (
             if (isDistanceBased) {
                 const deliveryBoyKmRate = settings?.deliveryConfig?.deliveryBoyKmRate || 0;
                 const distanceKm = order.deliveryDistanceKm || 0;
-                breakdown.deliveryBoyCommission = deliveryBoyKmRate * distanceKm;
+                const baseCharge = settings?.deliveryConfig?.baseCharge || 0;
+                breakdown.deliveryBoyCommission = Math.max(baseCharge, deliveryBoyKmRate * distanceKm);
             } else {
                 breakdown.deliveryBoyCommission = breakdown.totalDeliveryCharge;
             }

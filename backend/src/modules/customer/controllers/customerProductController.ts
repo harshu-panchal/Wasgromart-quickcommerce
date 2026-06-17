@@ -48,7 +48,18 @@ export const getProducts = async (req: Request, res: Response) => {
       nearbySellerIds = await findSellersWithinRange(userLat, userLng);
 
       if (nearbySellerIds.length === 0) {
-        // No sellers within range, but we will still fetch products and mark them as unavailable (out of range)
+        // No sellers within range, return empty response immediately
+        return res.status(200).json({
+          success: true,
+          data: [],
+          pagination: {
+            page: Number(page),
+            limit: Number(limit),
+            total: 0,
+            pages: 0,
+          },
+          message: "No sellers available in your area. Please update your location.",
+        });
       }
     } else {
       // If no location provided, return empty result (strictly enforce location)
@@ -204,61 +215,20 @@ export const getProducts = async (req: Request, res: Response) => {
     let total = 0;
     const effectiveLimit = Number(limit);
 
-    if (nearbySellerIds && nearbySellerIds.length > 0) {
-      const availQuery = { ...query, $and: [...query.$and, { seller: { $in: nearbySellerIds } }] };
-      const unavailQuery = { ...query, $and: [...query.$and, { seller: { $nin: nearbySellerIds } }] };
+    // Filter products strictly to sellers within customer's range
+    const filteredQuery = { ...query, $and: [...query.$and, { seller: { $in: nearbySellerIds } }] };
 
-      const availCount = await Product.countDocuments(availQuery);
-      const unavailCount = await Product.countDocuments(unavailQuery);
-      total = availCount + unavailCount;
+    total = await Product.countDocuments(filteredQuery);
+    const fetchedProducts = await Product.find(filteredQuery)
+      .populate("category", "name icon image")
+      .populate("subcategory", "name")
+      .populate("brand", "name")
+      .populate("seller", "storeName status")
+      .sort(sortOptions)
+      .skip(skip)
+      .limit(effectiveLimit);
 
-      if (skip < availCount) {
-        const availProducts = await Product.find(availQuery)
-          .populate("category", "name icon image")
-          .populate("subcategory", "name")
-          .populate("brand", "name")
-          .populate("seller", "storeName status")
-          .sort(sortOptions)
-          .skip(skip)
-          .limit(effectiveLimit);
-        
-        products = availProducts.map((p: any) => ({ ...p.toObject(), isAvailable: true }));
-
-        if (products.length < effectiveLimit) {
-          const remainder = effectiveLimit - products.length;
-          const unavailProducts = await Product.find(unavailQuery)
-            .populate("category", "name icon image")
-            .populate("subcategory", "name")
-            .populate("brand", "name")
-            .populate("seller", "storeName status")
-            .sort(sortOptions)
-            .limit(remainder);
-          products = [...products, ...unavailProducts.map((p: any) => ({ ...p.toObject(), isAvailable: false }))];
-        }
-      } else {
-        const unavailSkip = skip - availCount;
-        const unavailProducts = await Product.find(unavailQuery)
-          .populate("category", "name icon image")
-          .populate("subcategory", "name")
-          .populate("brand", "name")
-          .populate("seller", "storeName status")
-          .sort(sortOptions)
-          .skip(unavailSkip)
-          .limit(effectiveLimit);
-        products = unavailProducts.map((p: any) => ({ ...p.toObject(), isAvailable: false }));
-      }
-    } else {
-      total = await Product.countDocuments(query);
-      const allProducts = await Product.find(query)
-        .populate("category", "name icon image")
-        .populate("subcategory", "name")
-        .populate("brand", "name")
-        .populate("seller", "storeName status")
-        .sort(sortOptions)
-        .skip(skip)
-        .limit(effectiveLimit);
-      products = allProducts.map((p: any) => ({ ...p.toObject(), isAvailable: false }));
-    }
+    products = fetchedProducts.map((p: any) => ({ ...p.toObject(), isAvailable: true }));
 
     // --- IMPROVED DIAGNOSTICS FOR EMPTY RESULTS ---
     let extraMessage = "";
@@ -344,10 +314,15 @@ export const getProductById = async (req: Request, res: Response) => {
     // Parse location
     const userLat = latitude ? parseFloat(latitude as string) : null;
     const userLng = longitude ? parseFloat(longitude as string) : null;
-    const seller = product.seller as any;
 
-    // Initialize availability flag
-    let isAvailableAtLocation = false;
+    if (!userLat || !userLng || isNaN(userLat) || isNaN(userLng)) {
+      return res.status(400).json({
+        success: false,
+        message: "Location (latitude and longitude) is required to view product details.",
+      });
+    }
+
+    const seller = product.seller as any;
 
     // Safely get seller ID - handle both populated and unpopulated cases
     let sellerId: mongoose.Types.ObjectId | null = null;
@@ -364,19 +339,17 @@ export const getProductById = async (req: Request, res: Response) => {
       }
     }
 
-    // Check location availability if coordinates are provided
-    if (
-      userLat &&
-      userLng &&
-      !isNaN(userLat) &&
-      !isNaN(userLng) &&
-      sellerId &&
-      seller?.location
-    ) {
-      const nearbySellerIds = await findSellersWithinRange(userLat, userLng);
-      isAvailableAtLocation = nearbySellerIds.some(
-        (id) => id.toString() === sellerId!.toString()
-      );
+    // Check location availability
+    const nearbySellerIds = await findSellersWithinRange(userLat, userLng);
+    const isAvailableAtLocation = sellerId
+      ? nearbySellerIds.some((id) => id.toString() === sellerId!.toString())
+      : false;
+
+    if (!isAvailableAtLocation) {
+      return res.status(404).json({
+        success: false,
+        message: "Product is not available in your area.",
+      });
     }
 
     // Find similar products (by category)
@@ -390,6 +363,7 @@ export const getProductById = async (req: Request, res: Response) => {
         { isShopByStoreOnly: { $ne: true } },
         { isShopByStoreOnly: { $exists: false } },
       ],
+      seller: { $in: nearbySellerIds } // Filter similar products strictly to sellers in range
     };
 
     // Safely get category ID - handle both populated and unpopulated cases
@@ -413,17 +387,6 @@ export const getProductById = async (req: Request, res: Response) => {
     // Only add category filter if we have a valid category ID
     if (categoryId) {
       similarProductsQuery.category = categoryId;
-    }
-
-    // Filter similar products by location
-    if (userLat && userLng && !isNaN(userLat) && !isNaN(userLng)) {
-      const nearbySellerIds = await findSellersWithinRange(userLat, userLng);
-      if (nearbySellerIds.length > 0) {
-        similarProductsQuery.seller = { $in: nearbySellerIds };
-      } else {
-        // No sellers nearby, return empty similar products
-        similarProductsQuery.seller = { $in: [] };
-      }
     }
 
     const similarProducts = await Product.find(similarProductsQuery)

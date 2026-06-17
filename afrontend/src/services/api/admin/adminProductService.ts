@@ -239,6 +239,7 @@ export const getCategories = async (params?: {
   parentId?: string | null;
   includeChildren?: boolean;
   status?: "Active" | "Inactive";
+  headerCategoryId?: string;
 }): Promise<ApiResponse<Category[]>> => {
   const queryParams: any = { ...params };
   if (params?.includeChildren !== undefined) {

@@ -143,37 +143,59 @@ async function fetchSectionData(
         .limit(effectiveLimit)
         .lean();
 
-      if (subcategoryDocs.length > 0) {
-        const data = subcategoryDocs.map((sub: any) => ({
-          id: sub._id.toString(),
-          subcategoryId: sub._id.toString(),
-          categoryId: sub.parentId?.toString() || "",
-          name: sub.name,
-          image: sub.image || "",
-          slug: sub.slug || sub.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
-          type: "subcategory",
-        }));
-        return { data, total: data.length };
+      const data: any[] = [];
+      if (nearbySellerIds && nearbySellerIds.length > 0) {
+        if (subcategoryDocs.length > 0) {
+          for (const sub of subcategoryDocs) {
+            const productCount = await Product.countDocuments({
+              subcategory: sub._id,
+              status: "Active",
+              publish: true,
+              seller: { $in: nearbySellerIds },
+            });
+            if (productCount > 0) {
+              data.push({
+                id: sub._id.toString(),
+                subcategoryId: sub._id.toString(),
+                categoryId: sub.parentId?.toString() || "",
+                name: sub.name,
+                image: sub.image || "",
+                slug: sub.slug || sub.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+                type: "subcategory",
+              });
+            }
+          }
+        } else {
+          // Fallback: Try fetching from SubCategory model (legacy)
+          const legacySubcategories = await SubCategory.find({
+            category: { $in: categoryIds },
+          })
+            .select("name image order category")
+            .sort({ order: 1 })
+            .limit(effectiveLimit)
+            .lean();
+
+          for (const sub of legacySubcategories) {
+            const productCount = await Product.countDocuments({
+              subcategory: sub._id,
+              status: "Active",
+              publish: true,
+              seller: { $in: nearbySellerIds },
+            });
+            if (productCount > 0) {
+              data.push({
+                id: sub._id.toString(),
+                subcategoryId: sub._id.toString(),
+                categoryId: sub.category?.toString() || "",
+                name: sub.name,
+                image: sub.image || "",
+                slug: sub.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+                type: "subcategory",
+              });
+            }
+          }
+        }
       }
-
-      // Fallback: Try fetching from SubCategory model (legacy)
-      const legacySubcategories = await SubCategory.find({
-        category: { $in: categoryIds },
-      })
-        .select("name image order category")
-        .sort({ order: 1 })
-        .limit(effectiveLimit)
-        .lean();
-
-      const data = legacySubcategories.map((sub: any) => ({
-        id: sub._id.toString(),
-        subcategoryId: sub._id.toString(),
-        categoryId: sub.category?.toString() || "",
-        name: sub.name,
-        image: sub.image || "",
-        slug: sub.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
-        type: "subcategory",
-      }));
       return { data, total: data.length };
     }
 
@@ -189,50 +211,19 @@ async function fetchSectionData(
 
       if (nearbySellerIds && nearbySellerIds.length > 0) {
         const availQuery = { ...query, seller: { $in: nearbySellerIds } };
-        const unavailQuery = { ...query, seller: { $nin: nearbySellerIds } };
 
-        const availCount = await Product.countDocuments(availQuery);
-        const unavailCount = await Product.countDocuments(unavailQuery);
-        const dbTotal = availCount + unavailCount;
-        total = Math.min(dbTotal, adminCap);
+        total = await Product.countDocuments(availQuery);
+        total = Math.min(total, adminCap);
 
-        if (skip < availCount) {
-          const availProducts = await Product.find(availQuery)
-            .sort({ createdAt: -1 })
-            .skip(skip)
-            .limit(effectiveLimit)
-            .select(selectFields)
-            .lean();
-          products = [...availProducts];
-
-          if (products.length < effectiveLimit) {
-            const remainder = effectiveLimit - products.length;
-            const unavailProducts = await Product.find(unavailQuery)
-              .sort({ createdAt: -1 })
-              .limit(remainder)
-              .select(selectFields)
-              .lean();
-            products = [...products, ...unavailProducts];
-          }
-        } else {
-          const unavailSkip = skip - availCount;
-          const unavailProducts = await Product.find(unavailQuery)
-            .sort({ createdAt: -1 })
-            .skip(unavailSkip)
-            .limit(effectiveLimit)
-            .select(selectFields)
-            .lean();
-          products = [...unavailProducts];
-        }
-      } else {
-        const dbTotal = await Product.countDocuments(query);
-        total = Math.min(dbTotal, adminCap);
-        products = await Product.find(query)
+        products = await Product.find(availQuery)
           .sort({ createdAt: -1 })
           .skip(skip)
           .limit(effectiveLimit)
           .select(selectFields)
           .lean();
+      } else {
+        total = 0;
+        products = [];
       }
 
       return {
@@ -255,14 +246,27 @@ async function fetchSectionData(
           .limit(effectiveLimit)
           .lean();
 
-        const data = fetchedCategories.map((c: any) => ({
-          id: c._id.toString(),
-          categoryId: c.slug || c._id.toString(),
-          name: c.name,
-          image: c.image,
-          slug: c.slug,
-          type: "category",
-        }));
+        const data: any[] = [];
+        if (nearbySellerIds && nearbySellerIds.length > 0) {
+          for (const c of fetchedCategories) {
+            const productCount = await Product.countDocuments({
+              category: c._id,
+              status: "Active",
+              publish: true,
+              seller: { $in: nearbySellerIds },
+            });
+            if (productCount > 0) {
+              data.push({
+                id: c._id.toString(),
+                categoryId: c.slug || c._id.toString(),
+                name: c.name,
+                image: c.image,
+                slug: c.slug,
+                type: "category",
+              });
+            }
+          }
+        }
         return { data, total: data.length };
       }
       return { data: [], total: 0 };
@@ -425,7 +429,7 @@ export const getHomeContent = async (req: Request, res: Response) => {
       .sort({ order: 1 })
       .lean();
 
-    // Filter out any products that were null (due to match condition)
+    // Filter out any products that were null (due to match condition) and only keep those available at customer location
     const validLowestPricesProducts = lowestPricesProducts
       .filter((item: any) => item.product !== null)
       .map((item: any) => {
@@ -459,13 +463,8 @@ export const getHomeContent = async (req: Request, res: Response) => {
           isAvailable,
           seller: product.seller,
         };
-      });
-
-    // Sort lowest prices to show available products first
-    validLowestPricesProducts.sort((a, b) => {
-      if (a.isAvailable === b.isAvailable) return 0;
-      return a.isAvailable ? -1 : 1;
-    });
+      })
+      .filter((p: any) => p.isAvailable); // ONLY show products in customer location radius!
 
     // 3. Categories for Tiles (Grocery, Snacks, etc)
     const categories = await Category.find({
@@ -490,6 +489,7 @@ export const getHomeContent = async (req: Request, res: Response) => {
             _id: { $in: shop.products.slice(0, 16) },
             status: "Active",
             publish: true,
+            seller: { $in: nearbySellerIds }
           })
             .select("mainImage")
             .lean();
@@ -513,7 +513,7 @@ export const getHomeContent = async (req: Request, res: Response) => {
           id: shop.storeId || shop._id.toString(),
           name: shop.name,
           image: shop.image,
-          productImages, // Include preview images irrespective of location
+          productImages, // Include preview images within range
           slug: shop.storeId || shop._id.toString(),
           category: shop.category,
           productIds: shop.products?.map((p: any) => p.toString()) || [],
@@ -521,6 +521,9 @@ export const getHomeContent = async (req: Request, res: Response) => {
         };
       }),
     );
+
+    // Only return shops that have products available in the customer's area
+    const validShops = shops.filter((s: any) => s.productImages && s.productImages.length > 0);
 
     // 5. Trending Items (Fetch some popular categories or products)
     const trendingCategories = await Category.find({
@@ -539,10 +542,11 @@ export const getHomeContent = async (req: Request, res: Response) => {
     // 6. Personal Care Subcategories - Now handled by dynamic sections
 
     // 7. Cooking Ideas (Fetch some products from 'Food' or 'Grocery' categories)
-    // We fetch these irrespective of location radius to show preview images
+    // Only fetch products within the customer's location radius
     const foodProductsQuery: any = {
       status: "Active",
       publish: true,
+      seller: { $in: nearbySellerIds }
     };
 
     const foodProducts = await Product.find(foodProductsQuery)
@@ -725,6 +729,11 @@ export const getHomeContent = async (req: Request, res: Response) => {
       }),
     );
 
+    // Only return sections that have products or items to display
+    const filteredDynamicSections = dynamicSections.filter(
+      (section: any) => section.data && section.data.length > 0
+    );
+
     const homeSectionsPagination = {
       page: 1,
       limit: parsedSectionsLimit > 0 ? parsedSectionsLimit : totalSections,
@@ -758,19 +767,21 @@ export const getHomeContent = async (req: Request, res: Response) => {
 
       promoStrip = promoStripDoc;
 
-      // If we have promoStrip, add availability flag to featured products
+      // If we have promoStrip, filter featured products to only those available at customer location
       if (promoStrip && (promoStrip as any).featuredProducts) {
         (promoStrip as any).featuredProducts = (
           promoStrip as any
-        ).featuredProducts.map((p: any) => {
-          const isAvailable =
-            nearbySellerIds && nearbySellerIds.length > 0 && p.seller
-              ? nearbySellerIds.some(
-                (id) => id.toString() === p.seller.toString(),
-              )
-              : false;
-          return { ...p, isAvailable };
-        });
+        ).featuredProducts
+          .map((p: any) => {
+            const isAvailable =
+              nearbySellerIds && nearbySellerIds.length > 0 && p.seller
+                ? nearbySellerIds.some(
+                  (id) => id.toString() === p.seller.toString(),
+                )
+                : false;
+            return { ...p, isAvailable };
+          })
+          .filter((p: any) => p.isAvailable); // ONLY show products in customer location radius!
       }
 
       // Cache for 3 minutes (PromoStrip data doesn't change frequently)
@@ -817,9 +828,9 @@ export const getHomeContent = async (req: Request, res: Response) => {
         lowestPrices: validLowestPricesProducts, // Admin-selected products for LowestPricesEver section
         categories,
         // Dynamic sections created by admin
-        homeSections: dynamicSections,
+        homeSections: filteredDynamicSections,
         homeSectionsPagination,
-        shops,
+        shops: validShops,
         promoBanners:
           promoBanners.length > 0
             ? promoBanners
@@ -948,10 +959,13 @@ export const getHomeSections = async (req: Request, res: Response) => {
       }),
     );
 
+    // Only return sections that have products or items to display
+    const filteredSections = data.filter((s: any) => s.data && s.data.length > 0);
+
     return res.status(200).json({
       success: true,
       data: {
-        sections: data,
+        sections: filteredSections,
         pagination: {
           page,
           limit,
