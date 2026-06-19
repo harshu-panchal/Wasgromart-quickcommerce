@@ -362,12 +362,12 @@ export const getTodaySales = async (): Promise<{ salesToday: number; salesLastWe
     const lastWeekNextDay = new Date(lastWeekSameDay);
     lastWeekNextDay.setDate(lastWeekNextDay.getDate() + 1);
     
-    // Get active orders booked today (excluding cancelled, rejected, returned, and failed payment)
+    // Get active orders delivered today (excluding failed payment)
     const todayOrders = await Order.aggregate([
       {
         $match: {
-          orderDate: { $gte: today, $lt: tomorrow },
-          status: { $nin: ["Cancelled", "Rejected", "Returned"] },
+          deliveredAt: { $gte: today, $lt: tomorrow },
+          status: "Delivered",
           paymentStatus: { $ne: "Failed" }
         }
       },
@@ -379,12 +379,12 @@ export const getTodaySales = async (): Promise<{ salesToday: number; salesLastWe
       }
     ]).catch(() => []);
     
-    // Get active orders from same day last week (excluding cancelled, rejected, returned, and failed payment)
+    // Get active orders delivered from same day last week (excluding failed payment)
     const lastWeekOrders = await Order.aggregate([
       {
         $match: {
-          orderDate: { $gte: lastWeekSameDay, $lt: lastWeekNextDay },
-          status: { $nin: ["Cancelled", "Rejected", "Returned"] },
+          deliveredAt: { $gte: lastWeekSameDay, $lt: lastWeekNextDay },
+          status: "Delivered",
           paymentStatus: { $ne: "Failed" }
         }
       },

@@ -83,7 +83,8 @@ export const getDashboardStats = asyncHandler(
             }
 
             return {
-                id: order.orderNumber || order._id.toString(), // Use orderNumber if available
+                id: order._id.toString(), // Use the ObjectId for routing
+                orderId: order.orderNumber || order._id.toString(), // Provide orderNumber for display
                 orderDate: new Date(order.orderDate).toLocaleDateString('en-GB'),
                 status: order.status === 'Out for Delivery' ? 'Out For Delivery' : order.status,
                 amount: sellerEarning, // Use net earning instead of grand total

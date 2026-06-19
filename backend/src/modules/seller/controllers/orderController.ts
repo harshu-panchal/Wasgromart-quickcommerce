@@ -305,6 +305,11 @@ export const updateOrderStatus = asyncHandler(
     const previousStatus = order.status;
     // Automatically cancel the order if the seller rejects it
     order.status = status === 'Rejected' ? 'Cancelled' : status;
+    
+    if (status === 'Delivered') {
+      order.deliveredAt = new Date();
+    }
+
     await order.save();
 
     // Trigger delivery notification if seller accepts the order

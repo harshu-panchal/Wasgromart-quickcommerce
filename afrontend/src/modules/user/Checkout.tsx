@@ -246,6 +246,9 @@ export default function Checkout() {
   const displayItems = (cart?.items || []).filter(
     (item) => item && item.product
   );
+  
+  const hasUndeliverableItems = displayItems.some(item => item.isDeliverable === false);
+
   const displayCart = {
     ...cart,
     items: displayItems,
@@ -1199,6 +1202,13 @@ export default function Checkout() {
                       })()}
                     </div>
                   </div>
+                  {/* Undeliverable Warning */}
+                  {item.isDeliverable === false && (
+                    <div className="mt-1.5 bg-red-50 text-red-600 text-[10px] p-1.5 rounded border border-red-100 flex items-center gap-1.5">
+                      <span>⚠️</span>
+                      <span>Not deliverable to selected address. Remove to proceed.</span>
+                    </div>
+                  )}
                 </div>
               ))}
           </div>
@@ -1451,10 +1461,10 @@ export default function Checkout() {
                           <path d="M0 0L8 4L0 8Z" fill="#16a34a" />
                         </svg>
                       </div>
-                    </div>
                   </div>
                 </div>
               </div>
+            </div>
             );
           })}
         </div>
@@ -2331,15 +2341,23 @@ export default function Checkout() {
       {/* Bottom Sticky Button */}
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-neutral-200 z-[60] shadow-lg">
         {selectedAddress ? (
-          <button
-            onClick={handlePlaceOrder}
-            disabled={cart.items.length === 0}
-            className={`w-full py-3 px-4 font-bold text-sm uppercase tracking-wide transition-colors ${cart.items.length > 0
-              ? "bg-green-600 text-white hover:bg-green-700"
-              : "bg-neutral-300 text-neutral-500 cursor-not-allowed"
-              }`}>
-            Place Order
-          </button>
+          <div className="flex flex-col">
+            {hasUndeliverableItems && (
+              <div className="p-2.5 bg-red-50 text-red-600 text-xs font-medium border-b border-red-100 flex items-center justify-center gap-2">
+                <span>⚠️</span>
+                <span>Some items cannot be delivered to this address</span>
+              </div>
+            )}
+            <button
+              onClick={handlePlaceOrder}
+              disabled={cart.items.length === 0 || hasUndeliverableItems}
+              className={`w-full py-3 px-4 font-bold text-sm uppercase tracking-wide transition-colors ${(cart.items.length > 0 && !hasUndeliverableItems)
+                ? "bg-green-600 text-white hover:bg-green-700"
+                : "bg-neutral-300 text-neutral-500 cursor-not-allowed"
+                }`}>
+              Place Order
+            </button>
+          </div>
         ) : (
           <button
             onClick={() =>

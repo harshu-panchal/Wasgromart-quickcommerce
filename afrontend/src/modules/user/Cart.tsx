@@ -12,6 +12,8 @@ export default function Cart() {
   const deliveryFee = cart.estimatedDeliveryFee ?? (cart.total >= threshold ? 0 : appConfig.deliveryFee);
   const platformFee = cart.platformFee ?? appConfig.platformFee;
   const totalAmount = cart.total + deliveryFee + platformFee;
+  
+  const hasUndeliverableItems = cart.items.some(item => item.isDeliverable === false);
 
   const handleCheckout = () => {
     navigate('/checkout');
@@ -133,6 +135,14 @@ export default function Cart() {
                   ✕
                 </button>
               </div>
+              
+              {/* Undeliverable Warning */}
+              {item.isDeliverable === false && (
+                <div className="mt-3 bg-red-50 text-red-600 text-xs md:text-sm p-2 rounded border border-red-100 flex items-center gap-2">
+                  <span>⚠️</span>
+                  <span>This item is not deliverable to your current location/address. Please remove it to proceed.</span>
+                </div>
+              )}
             </div>
           );
         })}
@@ -174,9 +184,10 @@ export default function Cart() {
               variant="default"
               size="lg"
               onClick={handleCheckout}
-              className="w-full md:py-3 md:text-lg"
+              disabled={hasUndeliverableItems}
+              className={`w-full md:py-3 md:text-lg ${hasUndeliverableItems ? 'opacity-70 cursor-not-allowed' : ''}`}
             >
-              Proceed to Checkout
+              {hasUndeliverableItems ? "Remove undeliverable items to proceed" : "Proceed to Checkout"}
             </Button>
           </div>
         </div>

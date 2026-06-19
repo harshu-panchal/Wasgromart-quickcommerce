@@ -180,8 +180,13 @@ export const getCart = async (req: Request, res: Response) => {
             const product = item.product;
             if (product && product.status === 'Active' && product.publish) {
                 const isAvailable = nearbySellerIds.some(id => id.toString() === product.seller.toString());
+                
+                filteredItems.push({
+                    ...(item.toObject ? item.toObject() : item),
+                    isDeliverable: isAvailable
+                });
+
                 if (isAvailable) {
-                    filteredItems.push(item);
                     const price = calculateItemPrice(product, item.variation);
                     total += price * item.quantity;
                 }
@@ -303,9 +308,13 @@ export const addToCart = async (req: Request, res: Response) => {
             }
         });
 
-        const filteredItems = (updatedCart?.items as any[] || []).filter(item => {
+        const filteredItems = (updatedCart?.items as any[] || []).map(item => {
             const prod = item.product;
-            return prod && nearbySellerIds.some(id => id.toString() === prod.seller.toString());
+            const isAvailable = prod && nearbySellerIds.some(id => id.toString() === prod.seller.toString());
+            return {
+                ...(item.toObject ? item.toObject() : item),
+                isDeliverable: isAvailable
+            };
         });
 
         // Calculate fees
@@ -391,9 +400,13 @@ export const updateCartItem = async (req: Request, res: Response) => {
             }
         });
 
-        const filteredItems = (updatedCart?.items as any[] || []).filter(item => {
+        const filteredItems = (updatedCart?.items as any[] || []).map(item => {
             const prod = item.product;
-            return prod && nearbySellerIds.some(id => id.toString() === prod.seller.toString());
+            const isAvailable = prod && nearbySellerIds.some(id => id.toString() === prod.seller.toString());
+            return {
+                ...(item.toObject ? item.toObject() : item),
+                isDeliverable: isAvailable
+            };
         });
 
         // Calculate fees
@@ -456,12 +469,16 @@ export const removeFromCart = async (req: Request, res: Response) => {
             }
         });
 
-        const filteredItems = (updatedCart?.items as any[] || []).filter(item => {
+        const filteredItems = (updatedCart?.items as any[] || []).map(item => {
             const prod = item.product;
+            let isAvailable = true;
             if (nearbySellerIds.length > 0) {
-                return prod && nearbySellerIds.some(id => id.toString() === prod.seller.toString());
+                isAvailable = !!(prod && nearbySellerIds.some(id => id.toString() === prod.seller.toString()));
             }
-            return true; // If no location provided for removal, just return all (though getCart will filter)
+            return {
+                ...(item.toObject ? item.toObject() : item),
+                isDeliverable: isAvailable
+            };
         });
 
         // Calculate fees

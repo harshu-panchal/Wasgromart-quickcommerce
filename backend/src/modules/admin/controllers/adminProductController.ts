@@ -936,14 +936,26 @@ export const getProducts = asyncHandler(async (req: Request, res: Response) => {
   const [products, total] = await Promise.all([
     Product.find(query)
       .populate("category", "name")
-      .populate("subcategory", "name")
       .populate("brand", "name")
       .populate("seller", "sellerName storeName")
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(parseInt(limit as string)),
+      .limit(parseInt(limit as string))
+      .lean(),
     Product.countDocuments(query),
   ]);
+
+  for (const product of products) {
+    if (product.subcategory && !(product.subcategory as any).name) {
+      let subcat = await SubCategory.findById(product.subcategory).select("name").lean();
+      if (!subcat) {
+        subcat = await Category.findById(product.subcategory).select("name").lean();
+      }
+      if (subcat) {
+        (product as any).subcategory = subcat;
+      }
+    }
+  }
 
   return res.status(200).json({
     success: true,
@@ -967,10 +979,20 @@ export const getProductById = asyncHandler(
 
     const product = await Product.findById(id)
       .populate("category", "name")
-      .populate("subcategory", "name")
       .populate("brand", "name")
       .populate("seller", "sellerName storeName")
-      .populate("approvedBy", "firstName lastName");
+      .populate("approvedBy", "firstName lastName")
+      .lean();
+
+    if (product && product.subcategory && !(product.subcategory as any).name) {
+      let subcat = await SubCategory.findById(product.subcategory).select("name").lean();
+      if (!subcat) {
+        subcat = await Category.findById(product.subcategory).select("name").lean();
+      }
+      if (subcat) {
+        (product as any).subcategory = subcat;
+      }
+    }
 
     if (!product) {
       return res.status(404).json({
