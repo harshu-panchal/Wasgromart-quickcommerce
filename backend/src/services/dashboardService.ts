@@ -54,8 +54,8 @@ export const getDashboardStats = async (): Promise<DashboardStats> => {
       avgOrderValue,
     ] = await Promise.all([
       Customer.countDocuments({ status: "Active" }).catch(() => 0),
-      Category.countDocuments().catch(() => 0),
-      SubCategory.countDocuments().catch((err) => {
+      Category.countDocuments({ parentId: null }).catch(() => 0),
+      Category.countDocuments({ parentId: { $ne: null } }).catch((err) => {
         console.error("Error counting subcategories:", err);
         return 0;
       }),
@@ -63,9 +63,11 @@ export const getDashboardStats = async (): Promise<DashboardStats> => {
       Order.countDocuments().catch(() => 0),
       Order.countDocuments({ status: "Delivered" }).catch(() => 0),
       Order.countDocuments({
-        status: { $in: ["Received", "Pending", "Processed"] },
+        status: { $in: ["Received", "Accepted", "Pending", "Processed", "Shipped", "Out for Delivery", "Placed"] },
       }).catch(() => 0),
-      Order.countDocuments({ status: "Cancelled" }).catch(() => 0),
+      Order.countDocuments({
+        status: { $in: ["Cancelled", "Rejected", "Returned"] },
+      }).catch(() => 0),
       Product.countDocuments({ stock: 0, status: "Active" }).catch(() => 0),
       Product.countDocuments({ stock: { $lte: 10, $gt: 0 }, status: "Active" }).catch(() => 0),
       Order.aggregate([

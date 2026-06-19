@@ -4,6 +4,7 @@ import {
   getAllOrders,
   type Order,
 } from "../../../services/api/admin/adminOrderService";
+import { getSellers } from "../../../services/api/admin/adminProductService";
 import { useAuth } from "../../../context/AuthContext";
 
 type SortField =
@@ -20,7 +21,9 @@ type SortDirection = "asc" | "desc";
 export default function AdminAllOrders() {
   const { isAuthenticated, token } = useAuth();
   const [orders, setOrders] = useState<Order[]>([]);
-  const [dateRange, setDateRange] = useState("");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [sellersList, setSellersList] = useState<any[]>([]);
   const [seller, setSeller] = useState("All Sellers");
   const [status, setStatus] = useState("All Status");
   const [entriesPerPage, setEntriesPerPage] = useState("10");
@@ -30,6 +33,22 @@ export default function AdminAllOrders() {
   const [sortDirection, setSortDirection] = useState<SortDirection>("asc");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Fetch sellers
+  useEffect(() => {
+    if (!isAuthenticated || !token) return;
+    const fetchSellers = async () => {
+      try {
+        const response = await getSellers();
+        if (response.success) {
+          setSellersList(response.data);
+        }
+      } catch (err) {
+        console.error("Error fetching sellers:", err);
+      }
+    };
+    fetchSellers();
+  }, [isAuthenticated, token]);
 
   // Fetch orders on component mount
   useEffect(() => {
@@ -56,20 +75,14 @@ export default function AdminAllOrders() {
           params.search = searchQuery;
         }
 
-        // Parse date range if provided
-        if (dateRange && dateRange.includes(" - ")) {
-          const [dateFrom, dateTo] = dateRange.split(" - ").map((d) => {
-            // Convert MM/DD/YYYY to YYYY-MM-DD
-            const parts = d.trim().split("/");
-            if (parts.length === 3) {
-              return `${parts[2]}-${parts[0].padStart(
-                2,
-                "0"
-              )}-${parts[1].padStart(2, "0")}`;
-            }
-            return d.trim();
-          });
+        if (seller !== "All Sellers") {
+          params.seller = seller;
+        }
+
+        if (dateFrom) {
           params.dateFrom = dateFrom;
+        }
+        if (dateTo) {
           params.dateTo = dateTo;
         }
 
@@ -96,11 +109,14 @@ export default function AdminAllOrders() {
     entriesPerPage,
     status,
     searchQuery,
-    dateRange,
+    seller,
+    dateFrom,
+    dateTo,
   ]);
 
   const handleClearDate = () => {
-    setDateRange("");
+    setDateFrom("");
+    setDateTo("");
     setCurrentPage(1);
   };
 
@@ -350,16 +366,25 @@ export default function AdminAllOrders() {
                     />
                   </svg>
                   <input
-                    type="text"
-                    value={dateRange}
+                    type="date"
+                    value={dateFrom}
                     onChange={(e) => {
-                      setDateRange(e.target.value);
+                      setDateFrom(e.target.value);
                       setCurrentPage(1);
                     }}
-                    className="flex-1 sm:w-48 text-xs sm:text-sm text-neutral-600 bg-transparent focus:outline-none placeholder:text-neutral-400"
-                    placeholder="MM/DD/YYYY - MM/DD/YYYY"
+                    className="text-xs sm:text-sm text-neutral-600 bg-transparent focus:outline-none cursor-pointer"
                   />
-                  {dateRange && (
+                  <span className="text-neutral-400 text-xs">to</span>
+                  <input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => {
+                      setDateTo(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    className="text-xs sm:text-sm text-neutral-600 bg-transparent focus:outline-none cursor-pointer"
+                  />
+                  {(dateFrom || dateTo) && (
                     <button
                       onClick={handleClearDate}
                       className="ml-2 px-2 py-1 text-xs font-medium text-neutral-700 bg-neutral-200 hover:bg-neutral-300 rounded transition-colors flex-shrink-0">
@@ -381,10 +406,12 @@ export default function AdminAllOrders() {
                     setCurrentPage(1);
                   }}
                   className="w-full sm:w-auto px-3 py-2 border border-neutral-300 rounded text-xs sm:text-sm text-neutral-900 bg-white focus:outline-none focus:ring-1 focus:ring-green-500 focus:border-green-500">
-                  <option>All Sellers</option>
-                  <option>Seller 1</option>
-                  <option>Seller 2</option>
-                  <option>Seller 3</option>
+                  <option value="All Sellers">All Sellers</option>
+                  {sellersList.map((s) => (
+                    <option key={s._id} value={s._id}>
+                      {s.storeName || s.sellerName || "Unnamed Seller"}
+                    </option>
+                  ))}
                 </select>
               </div>
 

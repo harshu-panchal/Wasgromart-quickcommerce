@@ -1,8 +1,7 @@
 import { Request, Response } from "express";
 import Order from "../../../models/Order";
 import Product from "../../../models/Product";
-// import Category from "../../../models/Category";
-// import Category from "../../../models/Category";
+import Category from "../../../models/Category";
 import OrderItem from "../../../models/OrderItem";
 import { asyncHandler } from "../../../utils/asyncHandler";
 import mongoose from "mongoose";
@@ -27,19 +26,38 @@ export const getDashboardStats = asyncHandler(
             pendingOrders,
             cancelledOrders,
             totalProduct,
-            totalCategoryCount,
-            totalSubcategoryCount,
+            distinctCategories,
+            distinctSubcategories,
             totalCustomerCount,
         ] = await Promise.all([
             Order.countDocuments({ _id: { $in: sellerOrderIds } }),
             Order.countDocuments({ _id: { $in: sellerOrderIds }, status: "Delivered" }),
-            Order.countDocuments({ _id: { $in: sellerOrderIds }, status: "Pending" }),
-            Order.countDocuments({ _id: { $in: sellerOrderIds }, status: "Cancelled" }),
-            Product.countDocuments({ seller: sellerId }), // Note: Product model uses 'seller' (ref) or 'sellerId'? Checking schema... Product.ts usually uses 'seller' as ref. Checking prev file... Product.countDocuments({ sellerId }) was used. Let's verify Product model.
-            Product.distinct("category", { seller: sellerId }).then(ids => ids.length),
-            Product.distinct("subcategory", { seller: sellerId }).then(ids => ids.length),
+            Order.countDocuments({ _id: { $in: sellerOrderIds }, status: { $in: ["Received", "Accepted", "Pending", "Processed", "Shipped", "Out for Delivery", "Placed"] } }),
+            Order.countDocuments({ _id: { $in: sellerOrderIds }, status: { $in: ["Cancelled", "Rejected", "Returned"] } }),
+            Product.countDocuments({ seller: sellerId }),
+            Product.distinct("category", { seller: sellerId }),
+            Product.distinct("subcategory", { seller: sellerId }),
             Order.distinct("customer", { _id: { $in: sellerOrderIds } }).then(ids => ids.length),
         ]);
+
+        // Process distinct category & subcategory IDs to count parent categories and subcategories
+        const allCategoryIds = [...new Set([...distinctCategories, ...distinctSubcategories])].filter(id => id);
+        const categoriesInDb = await Category.find({ _id: { $in: allCategoryIds } }).lean();
+
+        // Subcategories are the ones with a parentId
+        const subCategoryDocs = categoriesInDb.filter(c => c.parentId);
+        const totalSubcategoryCount = subCategoryDocs.length;
+
+        // Parent categories are directly referenced categories without a parentId, plus the parentId of subcategories
+        const parentCategoryIds = new Set<string>();
+        categoriesInDb.forEach(c => {
+            if (c.parentId) {
+                parentCategoryIds.add(c.parentId.toString());
+            } else {
+                parentCategoryIds.add(c._id.toString());
+            }
+        });
+        const totalCategoryCount = parentCategoryIds.size;
 
         // 2. Alert Metrics (Low Stock < 5)
         // Check Product model usage

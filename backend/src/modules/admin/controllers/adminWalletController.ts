@@ -6,6 +6,7 @@ import WithdrawRequest from '../../../models/WithdrawRequest';
 import PlatformWallet from '../../../models/PlatformWallet';
 import { asyncHandler } from '../../../utils/asyncHandler';
 import { approveWithdrawal, rejectWithdrawal, completeWithdrawal } from './adminWithdrawalController';
+import { creditWallet, debitWallet } from '../../../services/walletManagementService';
 
 /**
  * Get Financial Dashboard Stats
@@ -213,4 +214,83 @@ export const processWithdrawalWrapper = asyncHandler(async (req: Request, res: R
       message: 'Invalid action. Must be "Approve", "Reject", or "Complete"'
     });
   }
+});
+
+/**
+ * Get Wallet Transactions for a specific Seller
+ */
+export const getSellerTransactions = asyncHandler(async (req: Request, res: Response) => {
+  const { sellerId } = req.params;
+  const { page = 1, limit = 50 } = req.query;
+
+  const skip = (Number(page) - 1) * Number(limit);
+
+  const transactions = await WalletTransaction.find({ userId: sellerId, userType: 'SELLER' })
+    .populate('relatedOrder', 'orderNumber')
+    .sort({ createdAt: -1 })
+    .skip(skip)
+    .limit(Number(limit));
+
+  const total = await WalletTransaction.countDocuments({ userId: sellerId, userType: 'SELLER' });
+
+  const formattedTransactions = transactions.map((t: any) => ({
+    id: t._id,
+    amount: t.amount,
+    transactionType: t.type.toLowerCase(),
+    date: t.createdAt,
+    type: t.type,
+    status: t.status,
+    description: t.description || t.reference,
+    orderId: t.relatedOrder ? t.relatedOrder.orderNumber : undefined,
+  }));
+
+  return res.status(200).json({
+    success: true,
+    data: formattedTransactions,
+    pagination: {
+      page: Number(page),
+      limit: Number(limit),
+      total,
+      pages: Math.ceil(total / Number(limit))
+    }
+  });
+});
+
+/**
+ * Manual Fund Transfer (Credit or Debit)
+ */
+export const transferFunds = asyncHandler(async (req: Request, res: Response) => {
+  const { userId, userType, amount, type, description } = req.body;
+
+  if (!userId || !userType || !amount || !type || !description) {
+    return res.status(400).json({
+      success: false,
+      message: 'Missing required fields (userId, userType, amount, type, description)'
+    });
+  }
+
+  if (amount <= 0) {
+    return res.status(400).json({
+      success: false,
+      message: 'Amount must be greater than 0'
+    });
+  }
+
+  let result;
+  if (type === 'Credit') {
+    result = await creditWallet(userId, userType, Number(amount), description);
+  } else if (type === 'Debit') {
+    result = await debitWallet(userId, userType, Number(amount), description);
+  } else {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid transaction type (must be Credit or Debit)'
+    });
+  }
+
+  if (!result.success) {
+    return res.status(400).json(result);
+  }
+
+  return res.status(200).json(result);
 });

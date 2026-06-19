@@ -31,9 +31,13 @@ export const getCategories = asyncHandler(
     // Get subcategory and product counts for each category
     const categoriesWithCounts = await Promise.all(
       categories.map(async (category) => {
-        const subcategoryCount = await SubCategory.countDocuments({
+        const subcategoryCountOld = await SubCategory.countDocuments({
           category: category._id,
         });
+        const subcategoryCountNew = await Category.countDocuments({
+          parentId: category._id,
+        });
+        const subcategoryCount = subcategoryCountOld + subcategoryCountNew;
 
         const productCount = await Product.countDocuments({
           category: category._id, // Note: Product model uses 'category', not 'categoryId'
@@ -269,32 +273,71 @@ export const getAllCategoriesWithSubcategories = asyncHandler(
     // Get all subcategories grouped by parent
     const categoriesWithSubcategories = await Promise.all(
       parentCategories.map(async (category) => {
-        const subcategories = await SubCategory.find({
-          category: category._id,
-        }).sort({ name: 1 });
+        // Fetch from new model (Category with parentId)
+        const subcategoriesNew = await Category.find({
+          parentId: category._id,
+          status: "Active"
+        }).sort({ name: 1 }).lean();
 
-        // Get product counts
+        // Fetch from old model (SubCategory)
+        const subcategoriesOld = await SubCategory.find({
+          category: category._id,
+        }).sort({ name: 1 }).lean();
+
+        // Combine
+        const combinedSubcategories = [
+          ...subcategoriesNew.map(cat => ({
+            _id: cat._id,
+            name: cat.name,
+            category: category._id,
+            image: cat.image,
+            order: cat.order || 0,
+            isNewModel: true
+          })),
+          ...subcategoriesOld.map(sub => ({
+            _id: sub._id,
+            name: sub.name,
+            category: sub.category,
+            image: sub.image,
+            order: sub.order || 0,
+            isNewModel: false
+          }))
+        ];
+
+        // Deduplicate
+        const uniqueSubcategories = Array.from(
+          new Map(
+            combinedSubcategories.map((item) => [item._id.toString(), item])
+          ).values()
+        );
+
+        uniqueSubcategories.sort((a, b) => a.name.localeCompare(b.name));
+
+        // Get product counts for combined subcategories
         const subcategoriesWithCounts = await Promise.all(
-          subcategories.map(async (subcategory) => {
-            const productCount = await Product.countDocuments({
+          uniqueSubcategories.map(async (subcategory) => {
+            const productCountOld = await Product.countDocuments({
               subcategory: subcategory._id,
             });
+            const productCountNew = await Product.countDocuments({
+              category: subcategory._id,
+            });
+            const productCount = productCountOld + productCountNew;
 
             return {
-              ...subcategory.toObject(),
+              ...subcategory,
               totalProduct: productCount,
             };
           })
         );
 
-        const subcategoryCount = subcategories.length;
         const productCount = await Product.countDocuments({
           category: category._id,
         });
 
         return {
           ...category.toObject(),
-          totalSubcategory: subcategoryCount,
+          totalSubcategory: uniqueSubcategories.length,
           totalProduct: productCount,
           subcategories: subcategoriesWithCounts,
         };
@@ -322,53 +365,101 @@ export const getAllSubcategories = asyncHandler(
       sortOrder = "asc",
     } = req.query;
 
-    const query: any = {};
-
-    // Search filter
-    if (search) {
-      query.name = { $regex: search, $options: "i" };
-    }
-
-    // Pagination
     const pageNum = parseInt(page as string);
     const limitNum = parseInt(limit as string);
     const skip = (pageNum - 1) * limitNum;
 
+    // 1. Fetch subcategories from new Category model (where parentId != null)
+    const categoryQuery: any = { parentId: { $ne: null } };
+    if (search) {
+      categoryQuery.name = { $regex: search as string, $options: "i" };
+    }
+    const categorySubcategories = await Category.find(categoryQuery)
+      .populate("parentId", "name")
+      .lean();
+
+    // 2. Fetch subcategories from old SubCategory model
+    const subcategoryQuery: any = {};
+    if (search) {
+      subcategoryQuery.name = { $regex: search as string, $options: "i" };
+    }
+    const oldSubcategories = await SubCategory.find(subcategoryQuery)
+      .populate("category", "name")
+      .lean();
+
+    // 3. Combine both lists
+    const allSubcategories = [
+      ...categorySubcategories.map((cat) => ({
+        _id: cat._id.toString(),
+        id: cat._id.toString(),
+        categoryName: (cat.parentId as any)?.name || "Unknown",
+        subcategoryName: cat.name,
+        subcategoryImage: cat.image || "",
+        order: cat.order || 0,
+        isNewModel: true,
+      })),
+      ...oldSubcategories.map((sub) => ({
+        _id: sub._id.toString(),
+        id: sub._id.toString(),
+        categoryName: (sub.category as any)?.name || "Unknown",
+        subcategoryName: sub.name,
+        subcategoryImage: sub.image || "",
+        order: sub.order || 0,
+        isNewModel: false,
+      })),
+    ];
+
+    // Deduplicate
+    const uniqueSubcategories = Array.from(
+      new Map(
+        allSubcategories.map((item) => [item._id, item])
+      ).values()
+    );
+
     // Sort
-    const sort: any = {};
     const sortField =
-      sortBy === "subcategoryName" ? "name" : (sortBy as string);
-    sort[sortField] = sortOrder === "asc" ? 1 : -1;
+      sortBy === "subcategoryName" ? "subcategoryName" : sortBy === "categoryName" ? "categoryName" : "order";
+    
+    uniqueSubcategories.sort((a: any, b: any) => {
+      const aValue = a[sortField] !== undefined ? a[sortField] : "";
+      const bValue = b[sortField] !== undefined ? b[sortField] : "";
 
-    // Fetch subcategories from the SubCategory model instead of Category model
-    // This fixes the issue where subcategories created by Admin (in SubCategory collection)
-    // were not visible to Sellers because this controller was looking in Category collection
-    const subcategories = await SubCategory.find(query)
-      .populate("category", "name image")
-      .sort(sort)
-      .skip(skip)
-      .limit(limitNum);
+      if (typeof aValue === "string" && typeof bValue === "string") {
+        return sortOrder === "desc"
+          ? bValue.localeCompare(aValue)
+          : aValue.localeCompare(bValue);
+      } else {
+        return sortOrder === "desc"
+          ? (aValue < bValue ? 1 : -1)
+          : (aValue > bValue ? 1 : -1);
+      }
+    });
 
-    // Get product counts and format response
+    const total = uniqueSubcategories.length;
+
+    // Paginate
+    const paginatedSubcategories = uniqueSubcategories.slice(
+      skip,
+      skip + limitNum
+    );
+
+    // Get product counts
     const subcategoriesWithCounts = await Promise.all(
-      subcategories.map(async (subcategory) => {
-        const productCount = await Product.countDocuments({
-          subcategory: subcategory._id, // Note: Product model uses 'subcategory', not 'subcategoryId'
+      paginatedSubcategories.map(async (subcategory: any) => {
+        const productCountOld = await Product.countDocuments({
+          subcategory: subcategory._id,
         });
-
-        const parentCategory = subcategory.category as any;
+        const productCountNew = await Product.countDocuments({
+          category: subcategory._id,
+        });
+        const productCount = productCountOld + productCountNew;
 
         return {
-          id: subcategory._id,
-          categoryName: parentCategory?.name || "Unknown",
-          subcategoryName: subcategory.name,
-          subcategoryImage: subcategory.image || "",
+          ...subcategory,
           totalProduct: productCount,
         };
       })
     );
-
-    const total = await SubCategory.countDocuments(query);
 
     return res.status(200).json({
       success: true,

@@ -5,6 +5,7 @@ import {
 } from "../../../services/api/admin/adminWalletService";
 import { getAllSellers as getSellers } from "../../../services/api/sellerService";
 import { useAuth } from "../../../context/AuthContext";
+import FundTransferModal from "../components/FundTransferModal";
 
 interface Transaction {
   id: string;
@@ -26,6 +27,7 @@ interface Seller {
   _id: string;
   sellerName: string;
   storeName: string;
+  balance?: number;
 }
 
 export default function AdminSellerTransaction() {
@@ -43,6 +45,8 @@ export default function AdminSellerTransaction() {
   const [sellers, setSellers] = useState<Seller[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   // Fetch sellers on component mount
   useEffect(() => {
@@ -60,6 +64,7 @@ export default function AdminSellerTransaction() {
               _id: seller._id,
               sellerName: seller.sellerName,
               storeName: seller.storeName,
+              balance: seller.balance,
             }))
           );
         }
@@ -111,6 +116,7 @@ export default function AdminSellerTransaction() {
                     type: tx.type,
                     status: tx.status,
                     remark: tx.description,
+                    orderId: tx.orderId,
                   })
                 );
                 allTransactions.push(...sellerTransactions);
@@ -148,6 +154,7 @@ export default function AdminSellerTransaction() {
                 type: tx.type,
                 status: tx.status,
                 remark: tx.description,
+                orderId: tx.orderId,
               })
             );
             setTransactions(sellerTransactions);
@@ -174,6 +181,7 @@ export default function AdminSellerTransaction() {
     isAuthenticated,
     token,
     sellers,
+    refreshTrigger,
   ]);
 
   const handleSort = (column: string) => {
@@ -259,7 +267,10 @@ export default function AdminSellerTransaction() {
         <h1 className="text-white text-xl sm:text-2xl font-semibold">
           View Seller List
         </h1>
-        <button className="bg-white text-teal-600 border-2 border-teal-600 hover:bg-teal-50 px-4 py-2 rounded text-sm font-medium flex items-center gap-2 transition-colors">
+        <button
+          onClick={() => setIsTransferModalOpen(true)}
+          className="bg-white text-teal-600 border-2 border-teal-600 hover:bg-teal-50 px-4 py-2 rounded text-sm font-medium flex items-center gap-2 transition-colors"
+        >
           <svg
             width="16"
             height="16"
@@ -822,6 +833,14 @@ export default function AdminSellerTransaction() {
           </div>
         </div>
       </div>
+
+      {/* Modals */}
+      <FundTransferModal
+        isOpen={isTransferModalOpen}
+        onClose={() => setIsTransferModalOpen(false)}
+        onSuccess={() => setRefreshTrigger((prev) => prev + 1)}
+        sellers={sellers}
+      />
 
       {/* Footer */}
       <div className="text-center text-sm text-neutral-500 py-4">
