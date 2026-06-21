@@ -3,6 +3,11 @@ import { asyncHandler } from "../../../utils/asyncHandler";
 import Delivery from "../../../models/Delivery";
 import DeliveryAssignment from "../../../models/DeliveryAssignment";
 import CashCollection from "../../../models/CashCollection";
+import {
+  buildAvailableFilter,
+  buildNotAvailableFilter,
+  withResolvedAvailability,
+} from "../../../utils/deliveryAvailability";
 
 /**
  * Create a new delivery boy
@@ -57,7 +62,7 @@ export const createDeliveryBoy = asyncHandler(
     return res.status(201).json({
       success: true,
       message: "Delivery boy created successfully",
-      data: deliveryBoy,
+      data: withResolvedAvailability(deliveryBoy),
     });
   }
 );
@@ -78,16 +83,29 @@ export const getAllDeliveryBoys = asyncHandler(
     } = req.query;
 
     const query: any = {};
+    const andConditions: Record<string, unknown>[] = [];
 
     if (status) query.status = status;
-    if (available) query.available = available;
+    if (available === "Available") {
+      andConditions.push(buildAvailableFilter());
+    } else if (available === "Not Available") {
+      andConditions.push(buildNotAvailableFilter());
+    }
     if (search) {
-      query.$or = [
-        { name: { $regex: search as string, $options: "i" } },
-        { mobile: { $regex: search as string, $options: "i" } },
-        { email: { $regex: search as string, $options: "i" } },
-        { address: { $regex: search as string, $options: "i" } },
-      ];
+      andConditions.push({
+        $or: [
+          { name: { $regex: search as string, $options: "i" } },
+          { mobile: { $regex: search as string, $options: "i" } },
+          { email: { $regex: search as string, $options: "i" } },
+          { address: { $regex: search as string, $options: "i" } },
+        ],
+      });
+    }
+
+    if (andConditions.length === 1) {
+      Object.assign(query, andConditions[0]);
+    } else if (andConditions.length > 1) {
+      query.$and = andConditions;
     }
 
     const sort: any = {};
@@ -107,7 +125,7 @@ export const getAllDeliveryBoys = asyncHandler(
     return res.status(200).json({
       success: true,
       message: "Delivery boys fetched successfully",
-      data: deliveryBoys,
+      data: deliveryBoys.map((boy) => withResolvedAvailability(boy)),
       pagination: {
         page: parseInt(page as string),
         limit: parseInt(limit as string),
@@ -137,7 +155,7 @@ export const getDeliveryBoyById = asyncHandler(
     return res.status(200).json({
       success: true,
       message: "Delivery boy fetched successfully",
-      data: deliveryBoy,
+      data: withResolvedAvailability(deliveryBoy),
     });
   }
 );
@@ -168,7 +186,7 @@ export const updateDeliveryBoy = asyncHandler(
     return res.status(200).json({
       success: true,
       message: "Delivery boy updated successfully",
-      data: deliveryBoy,
+      data: withResolvedAvailability(deliveryBoy),
     });
   }
 );
@@ -249,7 +267,7 @@ export const updateDeliveryStatus = asyncHandler(
     return res.status(200).json({
       success: true,
       message: "Delivery boy status updated successfully",
-      data: deliveryBoy,
+      data: withResolvedAvailability(deliveryBoy),
     });
   }
 );
@@ -285,7 +303,7 @@ export const updateDeliveryBoyAvailability = asyncHandler(
     return res.status(200).json({
       success: true,
       message: "Delivery boy availability updated successfully",
-      data: deliveryBoy,
+      data: withResolvedAvailability(deliveryBoy),
     });
   }
 );

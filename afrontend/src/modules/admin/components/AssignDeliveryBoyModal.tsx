@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getDeliveryBoys, type DeliveryBoy } from '../../../services/api/admin/adminDeliveryService';
 import { assignDeliveryBoy } from '../../../services/api/admin/adminOrderService';
+import { resolveDeliveryAvailability } from '../../../utils/deliveryAvailability';
 
 interface AssignDeliveryBoyModalProps {
     isOpen: boolean;
@@ -168,12 +169,15 @@ export default function AssignDeliveryBoyModal({
                                 disabled={submitting}
                             >
                                 <option value="">-- Select Delivery Boy --</option>
-                                {deliveryBoys.map((deliveryBoy) => (
+                                {deliveryBoys.map((deliveryBoy) => {
+                                    const availability = resolveDeliveryAvailability(deliveryBoy);
+                                    return (
                                     <option key={deliveryBoy._id} value={deliveryBoy._id}>
                                         {deliveryBoy.name} - {deliveryBoy.mobile}
-                                        {deliveryBoy.available === 'Available' ? ' (Available)' : ' (Not Available)'}
+                                        {availability === 'Available' ? ' (Available)' : ' (Not Available)'}
                                     </option>
-                                ))}
+                                    );
+                                })}
                             </select>
                         )}
                     </div>
@@ -184,19 +188,23 @@ export default function AssignDeliveryBoyModal({
                             {(() => {
                                 const selected = deliveryBoys.find((db) => db._id === selectedDeliveryBoyId);
                                 if (!selected) return null;
+                                const availability = resolveDeliveryAvailability(selected);
                                 return (
                                     <div className="space-y-1">
                                         <p className="text-sm font-medium text-blue-900">{selected.name}</p>
                                         <p className="text-xs text-blue-700">Mobile: {selected.mobile}</p>
                                         <p className="text-xs text-blue-700">City: {selected.city}</p>
+                                        <p className="text-xs text-blue-700">
+                                            App status: {selected.isOnline ? 'Online' : 'Offline'}
+                                        </p>
                                         <p className="text-xs">
                                             <span
-                                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${selected.available === 'Available'
+                                                className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${availability === 'Available'
                                                         ? 'bg-green-100 text-green-800'
                                                         : 'bg-red-100 text-red-800'
                                                     }`}
                                             >
-                                                {selected.available}
+                                                {availability}
                                             </span>
                                         </p>
                                     </div>

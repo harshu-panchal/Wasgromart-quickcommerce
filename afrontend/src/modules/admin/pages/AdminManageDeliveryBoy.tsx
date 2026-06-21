@@ -6,6 +6,7 @@ import {
     deleteDeliveryBoy,
     type DeliveryBoy,
 } from '../../../services/api/admin/adminDeliveryService';
+import { resolveDeliveryAvailability } from '../../../utils/deliveryAvailability';
 import { useAuth } from '../../../context/AuthContext';
 
 export default function AdminManageDeliveryBoy() {
@@ -56,7 +57,10 @@ export default function AdminManageDeliveryBoy() {
                 const response = await getDeliveryBoys(params);
 
                 if (response.success) {
-                    setDeliveryBoys(response.data);
+                    setDeliveryBoys(response.data.map((boy) => ({
+                        ...boy,
+                        available: resolveDeliveryAvailability(boy),
+                    })));
                     // Update pagination info from backend
                     if (response.pagination) {
                         setTotalPages(response.pagination.pages);
@@ -130,7 +134,10 @@ export default function AdminManageDeliveryBoy() {
                 if (availabilityFilter !== 'All') params.available = availabilityFilter;
                 const refreshResponse = await getDeliveryBoys(params);
                 if (refreshResponse.success && refreshResponse.data) {
-                    setDeliveryBoys(refreshResponse.data);
+                    setDeliveryBoys(refreshResponse.data.map((boy) => ({
+                        ...boy,
+                        available: resolveDeliveryAvailability(boy),
+                    })));
                     if (refreshResponse.pagination) {
                         setTotalPages(refreshResponse.pagination.pages);
                         setTotalDeliveryBoys(refreshResponse.pagination.total);
@@ -173,7 +180,10 @@ export default function AdminManageDeliveryBoy() {
                 if (availabilityFilter !== 'All') params.available = availabilityFilter;
                 const refreshResponse = await getDeliveryBoys(params);
                 if (refreshResponse.success && refreshResponse.data) {
-                    setDeliveryBoys(refreshResponse.data);
+                    setDeliveryBoys(refreshResponse.data.map((boy) => ({
+                        ...boy,
+                        available: resolveDeliveryAvailability(boy),
+                    })));
                     if (refreshResponse.pagination) {
                         setTotalPages(refreshResponse.pagination.pages);
                         setTotalDeliveryBoys(refreshResponse.pagination.total);
@@ -216,7 +226,10 @@ export default function AdminManageDeliveryBoy() {
                 if (availabilityFilter !== 'All') params.available = availabilityFilter;
                 const refreshResponse = await getDeliveryBoys(params);
                 if (refreshResponse.success && refreshResponse.data) {
-                    setDeliveryBoys(refreshResponse.data);
+                    setDeliveryBoys(refreshResponse.data.map((boy) => ({
+                        ...boy,
+                        available: resolveDeliveryAvailability(boy),
+                    })));
                     if (refreshResponse.pagination) {
                         setTotalPages(refreshResponse.pagination.pages);
                         setTotalDeliveryBoys(refreshResponse.pagination.total);
@@ -552,12 +565,17 @@ export default function AdminManageDeliveryBoy() {
                                                 </span>
                                             </td>
                                             <td className="p-4 align-middle">
-                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${deliveryBoy.available === 'Available'
+                                                {(() => {
+                                                    const availability = resolveDeliveryAvailability(deliveryBoy);
+                                                    return (
+                                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${availability === 'Available'
                                                     ? 'bg-green-100 text-green-800'
                                                     : 'bg-red-100 text-red-800'
                                                     }`}>
-                                                    {deliveryBoy.available}
+                                                    {availability}
                                                 </span>
+                                                    );
+                                                })()}
                                             </td>
                                             <td className="p-4 align-middle">
                                                 <div className="flex items-center gap-2">
@@ -582,13 +600,19 @@ export default function AdminManageDeliveryBoy() {
                                                         )}
                                                     </button>
                                                     <button
-                                                        onClick={() => handleAvailabilityChange(deliveryBoy._id, deliveryBoy.available === 'Available' ? 'Not Available' : 'Available')}
+                                                        onClick={() => {
+                                                            const current = resolveDeliveryAvailability(deliveryBoy);
+                                                            handleAvailabilityChange(
+                                                                deliveryBoy._id,
+                                                                current === 'Available' ? 'Not Available' : 'Available'
+                                                            );
+                                                        }}
                                                         disabled={processing === deliveryBoy._id}
-                                                        className={`p-1.5 rounded transition-colors ${deliveryBoy.available === 'Available'
+                                                        className={`p-1.5 rounded transition-colors ${resolveDeliveryAvailability(deliveryBoy) === 'Available'
                                                             ? 'text-yellow-600 hover:bg-yellow-50'
                                                             : 'text-green-600 hover:bg-green-50'
                                                             }`}
-                                                        title={deliveryBoy.available === 'Available' ? 'Mark as Not Available' : 'Mark as Available'}
+                                                        title={resolveDeliveryAvailability(deliveryBoy) === 'Available' ? 'Mark as Not Available' : 'Mark as Available'}
                                                     >
                                                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                                                             <circle cx="12" cy="12" r="10"></circle>

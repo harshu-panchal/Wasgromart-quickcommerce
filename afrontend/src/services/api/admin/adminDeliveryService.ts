@@ -27,6 +27,7 @@ export interface DeliveryBoy {
   cashCollected: number;
   status: "Active" | "Inactive";
   available: "Available" | "Not Available";
+  isOnline?: boolean;
   currentLocation?: {
     latitude: number;
     longitude: number;
