@@ -6,8 +6,8 @@ import {
 } from "../../../services/otpService";
 import { generateToken } from "../../../services/jwtService";
 import { asyncHandler } from "../../../utils/asyncHandler";
-import { uploadDocumentFromBuffer } from "../../../services/cloudinaryService";
-import { CLOUDINARY_FOLDERS } from "../../../config/cloudinary";
+import { uploadDocumentFromBuffer } from "../../../services/storageService";
+import { UPLOAD_FOLDERS } from "../../../config/storage";
 
 /**
  * Send SMS OTP to delivery mobile number
@@ -123,7 +123,8 @@ export const uploadSignupDocument = asyncHandler(async (req: Request, res: Respo
 
   const isImage = file.mimetype.startsWith("image/");
   const result = await uploadDocumentFromBuffer(file.buffer, {
-    folder: CLOUDINARY_FOLDERS.DELIVERY_DOCUMENTS,
+    folder: UPLOAD_FOLDERS.DELIVERY_DOCUMENTS,
+    mimetype: file.mimetype,
     resourceType: isImage ? "image" : "raw",
   });
 

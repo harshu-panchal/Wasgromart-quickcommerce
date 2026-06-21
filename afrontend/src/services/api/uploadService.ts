@@ -2,6 +2,7 @@ import api from "./config";
 
 export interface UploadResult {
   url: string;
+  /** Relative storage path, e.g. products/uuid.webp (used by DELETE) */
   publicId: string;
   secureUrl: string;
   width?: number;
@@ -17,7 +18,7 @@ export interface UploadResponse {
 }
 
 /**
- * Upload a single image to Cloudinary via backend
+ * Upload a single image to server storage via backend
  */
 export async function uploadImage(
   file: File,
@@ -45,7 +46,7 @@ export async function uploadImage(
 }
 
 /**
- * Upload multiple images to Cloudinary via backend
+ * Upload multiple images to server storage via backend
  */
 export async function uploadImages(
   files: File[],
@@ -75,7 +76,7 @@ export async function uploadImages(
 }
 
 /**
- * Upload a document (image or PDF) to Cloudinary via backend
+ * Upload a document (image or PDF) to server storage via backend
  */
 export async function uploadDocument(
   file: File,
@@ -135,7 +136,7 @@ export async function uploadDeliverySignupDocument(
 }
 
 /**
- * Upload multiple documents to Cloudinary via backend
+ * Upload multiple documents to server storage via backend
  */
 export async function uploadDocuments(
   files: File[],
@@ -169,11 +170,12 @@ export async function uploadDocuments(
 }
 
 /**
- * Delete an image from Cloudinary by public_id
+ * Delete an uploaded file by storage path (publicId from upload response)
  */
-export async function deleteImage(publicId: string): Promise<void> {
+export async function deleteImage(storagePath: string): Promise<void> {
   const response = await api.delete<{ success: boolean; message?: string }>(
-    `/upload/${publicId}`
+    "/upload",
+    { data: { path: storagePath } }
   );
 
   if (!response.data.success) {

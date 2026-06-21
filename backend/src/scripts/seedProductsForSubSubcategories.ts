@@ -2,7 +2,8 @@ import mongoose from "mongoose";
 import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
-import { v2 as cloudinary } from "cloudinary";
+import { uploadImage } from "../services/storageService";
+import { UPLOAD_FOLDERS } from "../config/storage";
 import Category from "../models/Category";
 import HeaderCategory from "../models/HeaderCategory";
 import Product from "../models/Product";
@@ -35,13 +36,6 @@ const PRODUCT_IMAGES_PATH = path.join(
 log("Starting Seed Products for Sub-Subcategories Script");
 log(`MONGO_URI: ${MONGO_URI}`);
 log(`PRODUCT_IMAGES_PATH: ${PRODUCT_IMAGES_PATH}`);
-
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
 
 // Category name mapping for folder structure
 const categoryFolderMap: { [key: string]: string } = {
@@ -213,30 +207,19 @@ function findProductImage(
 
 async function uploadToCloudinary(
   localPath: string,
-  folder: string = "products"
+  folder: string = UPLOAD_FOLDERS.PRODUCTS
 ): Promise<string | null> {
-  if (!process.env.CLOUDINARY_CLOUD_NAME) {
-    log("Cloudinary not configured, using local path");
-    const relativePath = path.relative(FRONTEND_ASSETS_PATH, localPath);
-    return `/${relativePath.replace(/\\/g, "/")}`;
-  }
-
   if (!fs.existsSync(localPath)) {
     log(`Warning: File not found: ${localPath}`);
     return null;
   }
 
   try {
-    const result = await cloudinary.uploader.upload(localPath, {
-      folder: `kosil/${folder}`,
-      resource_type: "image",
-      use_filename: true,
-      unique_filename: false,
-    });
-    log(`Uploaded to Cloudinary: ${result.secure_url}`);
-    return result.secure_url;
+    const result = await uploadImage(localPath, { folder });
+    log(`Uploaded: ${result.secureUrl}`);
+    return result.secureUrl;
   } catch (error: any) {
-    log(`Cloudinary upload failed: ${error.message}, using local path`);
+    log(`Upload failed: ${error.message}`);
     const relativePath = path.relative(FRONTEND_ASSETS_PATH, localPath);
     return `/${relativePath.replace(/\\/g, "/")}`;
   }

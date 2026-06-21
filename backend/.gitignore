@@ -32,3 +32,6 @@ Thumbs.db
 # Firebase
 config/firebase-service-account.json
 
+# Local/server upload storage (never commit user uploads)
+uploads/
+**/uploads/**

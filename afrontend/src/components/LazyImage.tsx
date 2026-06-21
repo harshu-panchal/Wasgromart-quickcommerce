@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { resolveMediaUrl } from '../utils/resolveMediaUrl';
 
 interface LazyImageProps {
   src: string;
@@ -29,6 +30,8 @@ export default function LazyImage({
   useEffect(() => {
     if (!src) return;
 
+    const resolvedSrc = resolveMediaUrl(src);
+
     // Use Intersection Observer for lazy loading
     const observer = new IntersectionObserver(
       (entries) => {
@@ -36,9 +39,9 @@ export default function LazyImage({
           if (entry.isIntersecting) {
             // Start loading the image
             const img = new Image();
-            img.src = src;
+            img.src = resolvedSrc;
             img.onload = () => {
-              setImageSrc(src);
+              setImageSrc(resolvedSrc);
               setIsLoaded(true);
             };
             img.onerror = () => {

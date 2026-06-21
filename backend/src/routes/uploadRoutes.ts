@@ -11,8 +11,8 @@ import {
   uploadImageFromBuffer,
   uploadDocumentFromBuffer,
   deleteImage,
-} from "../services/cloudinaryService";
-import { CLOUDINARY_FOLDERS } from "../config/cloudinary";
+} from "../services/storageService";
+import { UPLOAD_FOLDERS, sanitizeUploadFolder } from "../config/storage";
 import { asyncHandler } from "../utils/asyncHandler";
 
 const router = Router();
@@ -37,10 +37,15 @@ router.post(
       });
     }
 
-    const folder = (req.body.folder as string) || CLOUDINARY_FOLDERS.PRODUCTS;
-    const result = await uploadImageFromBuffer((req as any).file.buffer, {
+    const file = (req as any).file;
+    const folder = sanitizeUploadFolder(
+      req.body.folder as string,
+      UPLOAD_FOLDERS.PRODUCTS
+    );
+
+    const result = await uploadImageFromBuffer(file.buffer, {
       folder,
-      resourceType: "image",
+      mimetype: file.mimetype,
     });
 
     return res.status(200).json({
@@ -57,7 +62,7 @@ router.post(
 router.post(
   "/images",
   requireUserType("Admin", "Seller"),
-  uploadMultipleImages.array("images", 10), // Max 10 images
+  uploadMultipleImages.array("images", 10),
   handleUploadError,
   asyncHandler(async (req: Request, res: Response) => {
     if (!(req as any).files || ((req as any).files as any[]).length === 0) {
@@ -67,13 +72,16 @@ router.post(
       });
     }
 
-    const folder = (req.body.folder as string) || CLOUDINARY_FOLDERS.PRODUCTS;
+    const folder = sanitizeUploadFolder(
+      req.body.folder as string,
+      UPLOAD_FOLDERS.PRODUCTS
+    );
     const files = (req as any).files as any[];
 
     const uploadPromises = files.map((file) =>
       uploadImageFromBuffer(file.buffer, {
         folder,
-        resourceType: "image",
+        mimetype: file.mimetype,
       })
     );
 
@@ -92,7 +100,7 @@ router.post(
  */
 router.post(
   "/document",
-  authenticate, // All authenticated users can upload documents
+  authenticate,
   uploadDocument.single("document"),
   handleUploadError,
   asyncHandler(async (req: Request, res: Response) => {
@@ -103,23 +111,22 @@ router.post(
       });
     }
 
-    // Determine folder based on user type
-    let folder: string = CLOUDINARY_FOLDERS.SELLER_DOCUMENTS;
+    let folder: string = UPLOAD_FOLDERS.SELLER_DOCUMENTS;
     const userType = (req as any).user?.userType;
 
     if (userType === "Delivery") {
-      folder = CLOUDINARY_FOLDERS.DELIVERY_DOCUMENTS;
+      folder = UPLOAD_FOLDERS.DELIVERY_DOCUMENTS;
     } else if (userType === "Seller") {
-      folder = CLOUDINARY_FOLDERS.SELLER_DOCUMENTS;
+      folder = UPLOAD_FOLDERS.SELLER_DOCUMENTS;
     }
 
-    // Check if it's an image or PDF
-    const isImage = (req as any).file.mimetype.startsWith("image/");
-    const resourceType = isImage ? "image" : "raw";
+    const file = (req as any).file;
+    const isImage = file.mimetype.startsWith("image/");
 
-    const result = await uploadDocumentFromBuffer((req as any).file.buffer, {
+    const result = await uploadDocumentFromBuffer(file.buffer, {
       folder,
-      resourceType,
+      mimetype: file.mimetype,
+      resourceType: isImage ? "image" : "raw",
     });
 
     return res.status(200).json({
@@ -136,7 +143,7 @@ router.post(
 router.post(
   "/documents",
   authenticate,
-  uploadMultipleDocuments.array("documents", 5), // Max 5 documents
+  uploadMultipleDocuments.array("documents", 5),
   handleUploadError,
   asyncHandler(async (req: Request, res: Response) => {
     if (!(req as any).files || ((req as any).files as any[]).length === 0) {
@@ -146,24 +153,23 @@ router.post(
       });
     }
 
-    // Determine folder based on user type
-    let folder: string = CLOUDINARY_FOLDERS.SELLER_DOCUMENTS;
+    let folder: string = UPLOAD_FOLDERS.SELLER_DOCUMENTS;
     const userType = (req as any).user?.userType;
 
     if (userType === "Delivery") {
-      folder = CLOUDINARY_FOLDERS.DELIVERY_DOCUMENTS;
+      folder = UPLOAD_FOLDERS.DELIVERY_DOCUMENTS;
     } else if (userType === "Seller") {
-      folder = CLOUDINARY_FOLDERS.SELLER_DOCUMENTS;
+      folder = UPLOAD_FOLDERS.SELLER_DOCUMENTS;
     }
 
     const files = (req as any).files as any[];
 
     const uploadPromises = files.map((file) => {
       const isImage = file.mimetype.startsWith("image/");
-      const resourceType = isImage ? "image" : "raw";
       return uploadDocumentFromBuffer(file.buffer, {
         folder,
-        resourceType,
+        mimetype: file.mimetype,
+        resourceType: isImage ? "image" : "raw",
       });
     });
 
@@ -177,27 +183,27 @@ router.post(
 );
 
 /**
- * DELETE /api/v1/upload/:publicId
- * Delete an image from Cloudinary
+ * DELETE /api/v1/upload
+ * Delete a file by storage path (body: { path: "products/uuid.webp" })
  */
 router.delete(
-  "/:publicId",
+  "/",
   requireUserType("Admin", "Seller"),
   asyncHandler(async (req: Request, res: Response) => {
-    const { publicId } = req.params;
+    const storagePath = req.body?.path as string;
 
-    if (!publicId) {
+    if (!storagePath || typeof storagePath !== "string") {
       return res.status(400).json({
         success: false,
-        message: "Public ID is required",
+        message: "Storage path is required (body.path)",
       });
     }
 
-    await deleteImage(publicId);
+    await deleteImage(storagePath);
 
     return res.status(200).json({
       success: true,
-      message: "Image deleted successfully",
+      message: "File deleted successfully",
     });
   })
 );

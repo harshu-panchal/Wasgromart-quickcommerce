@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
-import { v2 as cloudinary } from "cloudinary";
+import { uploadSeedImage, UPLOAD_FOLDERS } from "./utils/seedImageUpload";
 import Category from "../models/Category";
 import HeaderCategory from "../models/HeaderCategory";
 
@@ -27,25 +27,10 @@ log("Starting Categories Under Header Categories Seed Script");
 log(`MONGO_URI: ${MONGO_URI}`);
 log(`FRONTEND_ASSETS_PATH: ${FRONTEND_ASSETS_PATH}`);
 
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
-
-// Helper to upload to Cloudinary
 async function uploadToCloudinary(
   localPath: string,
-  folder: string = "categories"
+  folder: string = UPLOAD_FOLDERS.CATEGORIES
 ): Promise<string | null> {
-  if (!process.env.CLOUDINARY_CLOUD_NAME) {
-    log("Cloudinary not configured, using local path");
-    return localPath.startsWith("http")
-      ? localPath
-      : `/assets/${path.basename(localPath)}`;
-  }
-
   const fullPath = path.join(
     FRONTEND_ASSETS_PATH,
     localPath.replace("/assets/", "")
@@ -56,17 +41,12 @@ async function uploadToCloudinary(
     return "https://placehold.co/300x300/f5f5f5/737373?text=Category";
   }
 
-  try {
-    const result = await cloudinary.uploader.upload(fullPath, {
-      folder: folder,
-      resource_type: "image",
-    });
-    log(`Uploaded to Cloudinary: ${result.secure_url}`);
-    return result.secure_url;
-  } catch (error: any) {
-    log(`Cloudinary upload failed: ${error.message}, using placeholder`);
-    return "https://placehold.co/300x300/f5f5f5/737373?text=Category";
+  const url = await uploadSeedImage(localPath, folder, FRONTEND_ASSETS_PATH);
+  if (url) {
+    log(`Uploaded: ${url}`);
+    return url;
   }
+  return "https://placehold.co/300x300/f5f5f5/737373?text=Category";
 }
 
 // Get placeholder image URL

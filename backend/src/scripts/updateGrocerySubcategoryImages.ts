@@ -2,7 +2,8 @@ import mongoose from "mongoose";
 import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
-import { v2 as cloudinary } from "cloudinary";
+import { uploadImage } from "../services/storageService";
+import { UPLOAD_FOLDERS } from "../config/storage";
 import Category from "../models/Category";
 import HeaderCategory from "../models/HeaderCategory";
 
@@ -30,12 +31,24 @@ log("Starting Update Grocery Subcategory Images Script");
 log(`MONGO_URI: ${MONGO_URI}`);
 log(`SUB_CATEGORY_IMAGES_PATH: ${SUB_CATEGORY_IMAGES_PATH}`);
 
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+async function uploadToCloudinary(
+  localPath: string,
+  folder: string = UPLOAD_FOLDERS.SUBCATEGORIES
+): Promise<string | null> {
+  if (!fs.existsSync(localPath)) {
+    log(`Warning: File not found: ${localPath}`);
+    return null;
+  }
+  try {
+    const result = await uploadImage(localPath, { folder });
+    log(`Uploaded: ${result.secureUrl}`);
+    return result.secureUrl;
+  } catch (error: any) {
+    log(`Upload failed: ${error.message}`);
+    const relativePath = path.relative(FRONTEND_ASSETS_PATH, localPath);
+    return `/${relativePath.replace(/\\/g, "/")}`;
+  }
+}
 
 // Category name to folder name mapping (some category names might differ from folder names)
 const categoryFolderMap: { [key: string]: string } = {
@@ -219,37 +232,6 @@ function findBestMatchImage(
 
   // Only return if we have a reasonable match (at least one significant word matched)
   return bestScore > 3 ? bestMatch : null;
-}
-
-// Helper to upload to Cloudinary
-async function uploadToCloudinary(
-  localPath: string,
-  folder: string = "subcategories"
-): Promise<string | null> {
-  if (!process.env.CLOUDINARY_CLOUD_NAME) {
-    log("Cloudinary not configured, using local path");
-    // Return relative path from frontend/assets
-    const relativePath = path.relative(FRONTEND_ASSETS_PATH, localPath);
-    return `/${relativePath.replace(/\\/g, "/")}`;
-  }
-
-  if (!fs.existsSync(localPath)) {
-    log(`Warning: File not found: ${localPath}`);
-    return null;
-  }
-
-  try {
-    const result = await cloudinary.uploader.upload(localPath, {
-      folder: folder,
-      resource_type: "image",
-    });
-    log(`Uploaded to Cloudinary: ${result.secure_url}`);
-    return result.secure_url;
-  } catch (error: any) {
-    log(`Cloudinary upload failed: ${error.message}, using local path`);
-    const relativePath = path.relative(FRONTEND_ASSETS_PATH, localPath);
-    return `/${relativePath.replace(/\\/g, "/")}`;
-  }
 }
 
 async function updateSubcategoryImages() {

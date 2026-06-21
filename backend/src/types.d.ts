@@ -1,13 +1,4 @@
 
-// Manually declare cloudinary if missing
-declare module 'cloudinary' {
-    export const v2: any;
-    export interface UploadApiErrorResponse {
-        message: string;
-        [key: string]: any;
-    }
-}
-
 // Manually declare multer if missing/unresolvable
 declare module 'multer' {
     import * as express from 'express';

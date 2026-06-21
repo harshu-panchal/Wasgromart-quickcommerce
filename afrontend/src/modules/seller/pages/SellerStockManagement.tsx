@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getProducts, updateStock, Product } from '../../../services/api/productService';
 import { getCategories } from '../../../services/api/categoryService';
-import { getApiOrigin } from '../../../services/api/config';
+import { resolveMediaUrl } from '../../../utils/resolveMediaUrl';
 import { useAuth } from '../../../context/AuthContext';
 
 interface StockItem {
@@ -48,16 +48,7 @@ export default function SellerStockManagement() {
         fetchCats();
     }, []);
 
-    // Helper to resolve image URL
-    const resolveImageUrl = (url: string | undefined) => {
-        if (!url) return '/assets/product-placeholder.jpg';
-        if (url.startsWith('http') || url.startsWith('data:') || url.startsWith('blob:')) return url;
-
-        const origin = getApiOrigin();
-        const cleanUrl = url.replace(/\\/g, '/');
-        if (!origin) return cleanUrl;
-        return `${origin}/${cleanUrl.startsWith('/') ? cleanUrl.slice(1) : cleanUrl}`;
-    };
+    const resolveImageUrl = (url: string | undefined) => resolveMediaUrl(url);
 
     // Fetch products and convert to stock items
     useEffect(() => {

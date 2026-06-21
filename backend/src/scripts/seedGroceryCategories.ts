@@ -2,7 +2,7 @@ import mongoose, { Types } from "mongoose";
 import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
-import { v2 as cloudinary } from "cloudinary";
+import { uploadLocalImageForSeed, UPLOAD_FOLDERS } from "./utils/seedImageUpload";
 import Category from "../models/Category";
 import HeaderCategory from "../models/HeaderCategory";
 
@@ -24,14 +24,16 @@ log("Starting Grocery Categories Seed Script");
 log(`MONGO_URI: ${MONGO_URI}`);
 log(`FRONTEND_ASSETS_PATH: ${FRONTEND_ASSETS_PATH}`);
 
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
-
-// Helper to generate slug from name
+// Helper to upload to server storage
+async function uploadToStorage(
+  localPath: string,
+  folder: string = UPLOAD_FOLDERS.CATEGORIES
+): Promise<string> {
+  const fullPath = path.join(FRONTEND_ASSETS_PATH, "category", path.basename(localPath));
+  const url = await uploadLocalImageForSeed(fullPath, folder);
+  log(`Uploaded: ${url}`);
+  return url;
+}
 function generateSlug(name: string, parentSlug?: string): string {
   let slug = name
     .toLowerCase()
@@ -82,61 +84,18 @@ async function findOrGenerateUniqueSlug(
   }
 }
 
-// Helper to upload to Cloudinary
-async function uploadToCloudinary(
-  localPath: string,
-  folder: string = "categories"
-): Promise<string | null> {
-  if (!process.env.CLOUDINARY_CLOUD_NAME) {
-    log("Cloudinary not configured, using local path");
-    return localPath.startsWith("http")
-      ? localPath
-      : `/assets/category/${path.basename(localPath)}`;
-  }
-
-  const fullPath = path.join(FRONTEND_ASSETS_PATH, "category", path.basename(localPath));
-
-  if (!fs.existsSync(fullPath)) {
-    log(`Warning: File not found: ${fullPath}, using path as-is`);
-    return localPath.startsWith("http")
-      ? localPath
-      : `/assets/category/${path.basename(localPath)}`;
-  }
-
-  try {
-    const result = await cloudinary.uploader.upload(fullPath, {
-      folder: folder,
-      resource_type: "image",
-    });
-    log(`Uploaded to Cloudinary: ${result.secure_url}`);
-    return result.secure_url;
-  } catch (error: any) {
-    log(`Cloudinary upload failed: ${error.message}, using local path`);
-    return localPath.startsWith("http")
-      ? localPath
-      : `/assets/category/${path.basename(localPath)}`;
-  }
-}
-
 // Get the default image path
 async function getDefaultImage(): Promise<string> {
   const imageFileName = "Breakfast & Instant Food.png";
   const imagePath = `/assets/category/${imageFileName}`;
 
-  // Check if file exists locally
   const fullPath = path.join(FRONTEND_ASSETS_PATH, "category", imageFileName);
   if (!fs.existsSync(fullPath)) {
     log(`Warning: Image file not found at ${fullPath}, using path as-is`);
     return imagePath;
   }
 
-  // Try to upload to Cloudinary if configured
-  const uploadedUrl = await uploadToCloudinary(imageFileName, "categories");
-  if (uploadedUrl) {
-    return uploadedUrl;
-  }
-
-  return imagePath;
+  return uploadToStorage(imageFileName, UPLOAD_FOLDERS.CATEGORIES);
 }
 
 // Grocery Categories Data Structure (Categories and Subcategories only - no items)

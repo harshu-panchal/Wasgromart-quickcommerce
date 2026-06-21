@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
-import { v2 as cloudinary } from "cloudinary";
+import { uploadSeedImage, UPLOAD_FOLDERS } from "./utils/seedImageUpload";
 import Category from "../models/Category";
 import SubCategory from "../models/SubCategory";
 
@@ -24,50 +24,18 @@ log("Starting Personal Care Seed Script");
 log(`MONGO_URI: ${MONGO_URI}`);
 log(`FRONTEND_ASSETS_PATH: ${FRONTEND_ASSETS_PATH}`);
 
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
-
-// Helper to upload to Cloudinary
 async function uploadToCloudinary(
   localPath: string,
-  folder: string = "categories"
+  folder: string = UPLOAD_FOLDERS.CATEGORIES
 ): Promise<string | null> {
-  if (!process.env.CLOUDINARY_CLOUD_NAME) {
-    log("Cloudinary not configured, using local path");
-    return localPath.startsWith("http")
-      ? localPath
-      : `/assets/${path.basename(localPath)}`;
+  const url = await uploadSeedImage(localPath, folder, FRONTEND_ASSETS_PATH);
+  if (url) {
+    log(`Uploaded: ${url}`);
+    return url;
   }
-
-  const fullPath = path.join(
-    FRONTEND_ASSETS_PATH,
-    localPath.replace("/assets/", "")
-  );
-
-  if (!fs.existsSync(fullPath)) {
-    log(`Warning: File not found: ${fullPath}, using path as-is`);
-    return localPath.startsWith("http")
-      ? localPath
-      : `/assets/${path.basename(localPath)}`;
-  }
-
-  try {
-    const result = await cloudinary.uploader.upload(fullPath, {
-      folder: folder,
-      resource_type: "image",
-    });
-    log(`Uploaded to Cloudinary: ${result.secure_url}`);
-    return result.secure_url;
-  } catch (error: any) {
-    log(`Cloudinary upload failed: ${error.message}, using local path`);
-    return localPath.startsWith("http")
-      ? localPath
-      : `/assets/${path.basename(localPath)}`;
-  }
+  return localPath.startsWith("http")
+    ? localPath
+    : `/assets/${path.basename(localPath)}`;
 }
 
 // Personal Care Subcategories Data

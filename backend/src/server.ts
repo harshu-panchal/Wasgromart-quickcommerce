@@ -27,9 +27,24 @@ import { ensureDefaultAdmin } from "./utils/ensureDefaultAdmin";
 import { seedHeaderCategories } from "./utils/seedHeaderCategories";
 import { initializeSocket } from "./socket/socketService";
 import razorpayWebhookRoutes from "./webhooks/razorpay/razorpayWebhookRoutes";
+import { UPLOAD_DIR, ensureUploadDir } from "./config/storage";
 
 const app: Application = express();
 const httpServer = createServer(app);
+
+// Ensure persistent upload directory exists (outside nodejs/ on Hostinger)
+ensureUploadDir();
+
+// Serve uploaded files at https://api.wasgromart.com/uploads/...
+app.use(
+  "/uploads",
+  express.static(UPLOAD_DIR, {
+    maxAge: "7d",
+    setHeaders: (res) => {
+      res.set("Cache-Control", "public, max-age=604800");
+    },
+  })
+);
 
 // Simple CORS configuration - Standard and reliable
 const allowedOrigins = [

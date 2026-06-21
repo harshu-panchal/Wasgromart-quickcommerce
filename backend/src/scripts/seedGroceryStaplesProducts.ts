@@ -3,7 +3,8 @@ import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
 import readline from "readline";
-import { v2 as cloudinary } from "cloudinary";
+import { uploadImage } from "../services/storageService";
+import { UPLOAD_FOLDERS } from "../config/storage";
 import Category from "../models/Category";
 import HeaderCategory from "../models/HeaderCategory";
 import Product from "../models/Product";
@@ -38,31 +39,14 @@ const PRODUCT_IMAGES_BASE = path.join(
   "product"
 );
 
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
-
-// Helper to upload to Cloudinary
 async function uploadToCloudinary(
   localPath: string,
-  folder: string = "products"
+  folder: string = UPLOAD_FOLDERS.PRODUCTS
 ): Promise<string | null> {
-  if (!process.env.CLOUDINARY_CLOUD_NAME) {
-    log("Cloudinary not configured, using local path");
-    return localPath.startsWith("http")
-      ? localPath
-      : `/assets/${path.basename(localPath)}`;
-  }
-
-  // If the path is already an absolute path and exists, use it directly
   let fullPath: string | null = null;
   if (path.isAbsolute(localPath) && fs.existsSync(localPath)) {
     fullPath = localPath;
   } else {
-    // Try multiple possible paths for relative paths
     const possiblePaths = [
       path.join(FRONTEND_ASSETS_PATH, localPath.replace("/assets/", "")),
       path.join(
@@ -85,21 +69,16 @@ async function uploadToCloudinary(
 
   if (!fullPath) {
     log(`Warning: File not found for ${localPath}`);
-    return null; // Return null - we'll skip products without images
+    return null;
   }
 
   try {
-    const result = await cloudinary.uploader.upload(fullPath, {
-      folder: `kosil/${folder}`,
-      resource_type: "image",
-      use_filename: true,
-      unique_filename: false,
-    });
-    log(`Uploaded to Cloudinary: ${result.secure_url}`);
-    return result.secure_url;
+    const result = await uploadImage(fullPath, { folder });
+    log(`Uploaded: ${result.secureUrl}`);
+    return result.secureUrl;
   } catch (error: any) {
-    log(`Cloudinary upload failed: ${error.message}`);
-    return null; // Return null instead of placeholder - we'll skip products without images
+    log(`Upload failed: ${error.message}`);
+    return null;
   }
 }
 

@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
-import { v2 as cloudinary } from "cloudinary";
+import { uploadSeedImage, UPLOAD_FOLDERS } from "./utils/seedImageUpload";
 import Category from "../models/Category";
 import Product from "../models/Product";
 import Seller from "../models/Seller";
@@ -24,14 +24,19 @@ const FRONTEND_ASSETS_PATH = path.join(__dirname, "../../../frontend/public");
 log("Starting Seed Script");
 log(`MONGO_URI: ${MONGO_URI}`);
 log(`FRONTEND_ASSETS_PATH: ${FRONTEND_ASSETS_PATH}`);
-log(`CLOUDINARY_CLOUD_NAME: ${process.env.CLOUDINARY_CLOUD_NAME || "MISSING"}`);
 
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
+async function uploadToCloudinary(
+  localPath: string,
+  folder: string = UPLOAD_FOLDERS.PRODUCTS
+): Promise<string | null> {
+  if (!localPath) return null;
+  const url = await uploadSeedImage(localPath, folder, FRONTEND_ASSETS_PATH);
+  if (url) {
+    console.log(`Uploaded ${localPath} -> ${url}`);
+    return url;
+  }
+  return null;
+}
 
 // --- Data ---
 // Extracted from frontend/src/data/categories.ts
@@ -930,41 +935,6 @@ const productsData = [
     tags: ["bestseller"],
   },
 ];
-
-// --- Helpers ---
-
-// Helper to upload to Cloudinary
-async function uploadToCloudinary(
-  localPath: string,
-  folder: string = "products"
-): Promise<string | null> {
-  try {
-    if (!localPath) return null;
-
-    // Remove leading slash if present
-    const cleanPath = localPath.startsWith("/")
-      ? localPath.slice(1)
-      : localPath;
-    const fullPath = path.join(FRONTEND_ASSETS_PATH, cleanPath);
-
-    if (!fs.existsSync(fullPath)) {
-      console.warn(`File not found: ${fullPath}`);
-      return null;
-    }
-
-    const result = await cloudinary.uploader.upload(fullPath, {
-      folder: `kosil/${folder}`,
-      use_filename: true,
-      unique_filename: false,
-    });
-
-    console.log(`Uploaded ${cleanPath} -> ${result.secure_url}`);
-    return result.secure_url;
-  } catch (error) {
-    log(`Upload failed for ${localPath}: ${error}`);
-    return null;
-  }
-}
 
 async function seed() {
   try {

@@ -2,7 +2,8 @@ import mongoose from "mongoose";
 import dotenv from "dotenv";
 import path from "path";
 import fs from "fs";
-import { v2 as cloudinary } from "cloudinary";
+import { uploadImage } from "../services/storageService";
+import { UPLOAD_FOLDERS } from "../config/storage";
 import Category from "../models/Category";
 
 // Explicitly load .env from backend root
@@ -31,13 +32,6 @@ log("Starting Sub-Subcategories Seed Script");
 log(`MONGO_URI: ${MONGO_URI}`);
 log(`FRONTEND_ASSETS_PATH: ${FRONTEND_ASSETS_PATH}`);
 log(`PRODUCT_IMAGES_PATH: ${PRODUCT_IMAGES_PATH}`);
-
-// Configure Cloudinary
-cloudinary.config({
-  cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-  api_key: process.env.CLOUDINARY_API_KEY,
-  api_secret: process.env.CLOUDINARY_API_SECRET,
-});
 
 // Sub-subcategories data structure
 const subSubcategoriesData: {
@@ -333,31 +327,21 @@ function findProductImage(
   return null;
 }
 
-// Helper to upload to Cloudinary
 async function uploadToCloudinary(
   localPath: string,
-  folder: string = "sub-subcategories"
+  folder: string = UPLOAD_FOLDERS.SUBCATEGORIES
 ): Promise<string | null> {
-  if (!process.env.CLOUDINARY_CLOUD_NAME) {
-    log("Cloudinary not configured, using local path");
-    const relativePath = path.relative(FRONTEND_ASSETS_PATH, localPath);
-    return `/${relativePath.replace(/\\/g, "/")}`;
-  }
-
   if (!fs.existsSync(localPath)) {
     log(`Warning: File not found: ${localPath}`);
     return null;
   }
 
   try {
-    const result = await cloudinary.uploader.upload(localPath, {
-      folder: folder,
-      resource_type: "image",
-    });
-    log(`Uploaded to Cloudinary: ${result.secure_url}`);
-    return result.secure_url;
+    const result = await uploadImage(localPath, { folder });
+    log(`Uploaded: ${result.secureUrl}`);
+    return result.secureUrl;
   } catch (error: any) {
-    log(`Cloudinary upload failed: ${error.message}, using local path`);
+    log(`Upload failed: ${error.message}`);
     const relativePath = path.relative(FRONTEND_ASSETS_PATH, localPath);
     return `/${relativePath.replace(/\\/g, "/")}`;
   }
