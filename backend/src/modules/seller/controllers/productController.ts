@@ -281,12 +281,24 @@ export const getProducts = asyncHandler(async (req: Request, res: Response) => {
 
   const products = await Product.find(query)
     .populate("category", "name")
-    .populate("subcategory", "name")
     .populate("brand", "name")
     .populate("tax", "name rate")
     .sort(sort)
     .skip(skip)
-    .limit(limitNum);
+    .limit(limitNum)
+    .lean();
+
+  for (const product of products) {
+    if (product.subcategory && !(product.subcategory as any).name) {
+      let subcat = await SubCategory.findById(product.subcategory).select("name").lean();
+      if (!subcat) {
+        subcat = await Category.findById(product.subcategory).select("name").lean();
+      }
+      if (subcat) {
+        (product as any).subcategory = subcat;
+      }
+    }
+  }
 
   const total = await Product.countDocuments(query);
 
@@ -322,10 +334,20 @@ export const getProductById = asyncHandler(
 
     const product = await Product.findOne({ _id: id, seller: sellerId })
       .populate("category", "name")
-      .populate("subcategory", "subcategoryName")
       .populate("headerCategoryId", "name slug")
       .populate("brand", "name")
-      .populate("tax", "name rate");
+      .populate("tax", "name rate")
+      .lean();
+
+    if (product && product.subcategory && !(product.subcategory as any).name) {
+      let subcat = await SubCategory.findById(product.subcategory).select("name").lean();
+      if (!subcat) {
+        subcat = await Category.findById(product.subcategory).select("name").lean();
+      }
+      if (subcat) {
+        (product as any).subcategory = subcat;
+      }
+    }
 
     if (!product) {
       return res.status(404).json({

@@ -567,30 +567,89 @@ export const getSubCategories = asyncHandler(
   async (req: Request, res: Response) => {
     const { category, search, sortBy = "order", sortOrder = "asc" } = req.query;
 
-    const query: any = {};
-    if (category) {
-      query.category = category;
-    }
+    // 1. Fetch subcategories from new Category model
+    const categoryQuery: any = { parentId: category ? category : { $ne: null } };
     if (search) {
-      query.name = { $regex: search as string, $options: "i" };
+      categoryQuery.name = { $regex: search as string, $options: "i" };
     }
+    const categorySubcategories = await Category.find(categoryQuery)
+      .populate("parentId", "name")
+      .lean();
 
-    const sort: any = {};
-    sort[sortBy as string] = sortOrder === "desc" ? -1 : 1;
-
-    const subcategories = await SubCategory.find(query)
+    // 2. Fetch subcategories from old SubCategory model
+    const subcategoryQuery: any = category ? { category } : {};
+    if (search) {
+      subcategoryQuery.name = { $regex: search as string, $options: "i" };
+    }
+    const oldSubcategories = await SubCategory.find(subcategoryQuery)
       .populate("category", "name")
-      .sort(sort);
+      .lean();
 
-    // Get product counts for each subcategory
+    // 3. Combine both lists
+    const allSubcategories = [
+      ...categorySubcategories.map((cat) => ({
+        _id: cat._id,
+        name: cat.name,
+        category: {
+          _id: (cat.parentId as any)?._id || cat.parentId,
+          name: (cat.parentId as any)?.name || "Unknown",
+        },
+        image: cat.image || "",
+        order: cat.order || 0,
+        commissionRate: cat.commissionRate || 0,
+        isNewModel: true,
+      })),
+      ...oldSubcategories.map((sub) => ({
+        _id: sub._id,
+        name: sub.name,
+        category: {
+          _id: (sub.category as any)?._id || sub.category,
+          name: (sub.category as any)?.name || "Unknown",
+        },
+        image: sub.image || "",
+        order: sub.order || 0,
+        commissionRate: sub.commissionRate || 0,
+        isNewModel: false,
+      })),
+    ];
+
+    // Deduplicate
+    const uniqueSubcategories = Array.from(
+      new Map(
+        allSubcategories.map((item) => [item._id.toString(), item])
+      ).values()
+    );
+
+    // Sort
+    const sortField = sortBy === "name" ? "name" : (sortBy as string);
+    uniqueSubcategories.sort((a: any, b: any) => {
+      const aValue = a[sortField] !== undefined ? a[sortField] : "";
+      const bValue = b[sortField] !== undefined ? b[sortField] : "";
+
+      if (typeof aValue === "string" && typeof bValue === "string") {
+        return sortOrder === "desc"
+          ? bValue.localeCompare(aValue)
+          : aValue.localeCompare(bValue);
+      } else {
+        return sortOrder === "desc"
+          ? (aValue < bValue ? 1 : -1)
+          : (aValue > bValue ? 1 : -1);
+      }
+    });
+
+    // Get product counts for combined list
     const subcategoriesWithCounts = await Promise.all(
-      subcategories.map(async (subcategory) => {
-        const productCount = await Product.countDocuments({
+      uniqueSubcategories.map(async (subcategory: any) => {
+        const productCountOld = await Product.countDocuments({
           subcategory: subcategory._id,
         });
+        const productCountNew = await Product.countDocuments({
+          category: subcategory._id,
+        });
+        const productCount = productCountOld + productCountNew;
 
         return {
-          ...subcategory.toObject(),
+          ...subcategory,
           totalProduct: productCount,
         };
       })
@@ -936,14 +995,26 @@ export const getProducts = asyncHandler(async (req: Request, res: Response) => {
   const [products, total] = await Promise.all([
     Product.find(query)
       .populate("category", "name")
-      .populate("subcategory", "name")
       .populate("brand", "name")
       .populate("seller", "sellerName storeName")
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(parseInt(limit as string)),
+      .limit(parseInt(limit as string))
+      .lean(),
     Product.countDocuments(query),
   ]);
+
+  for (const product of products) {
+    if (product.subcategory && !(product.subcategory as any).name) {
+      let subcat = await SubCategory.findById(product.subcategory).select("name").lean();
+      if (!subcat) {
+        subcat = await Category.findById(product.subcategory).select("name").lean();
+      }
+      if (subcat) {
+        (product as any).subcategory = subcat;
+      }
+    }
+  }
 
   return res.status(200).json({
     success: true,
@@ -967,10 +1038,20 @@ export const getProductById = asyncHandler(
 
     const product = await Product.findById(id)
       .populate("category", "name")
-      .populate("subcategory", "name")
       .populate("brand", "name")
       .populate("seller", "sellerName storeName")
-      .populate("approvedBy", "firstName lastName");
+      .populate("approvedBy", "firstName lastName")
+      .lean();
+
+    if (product && product.subcategory && !(product.subcategory as any).name) {
+      let subcat = await SubCategory.findById(product.subcategory).select("name").lean();
+      if (!subcat) {
+        subcat = await Category.findById(product.subcategory).select("name").lean();
+      }
+      if (subcat) {
+        (product as any).subcategory = subcat;
+      }
+    }
 
     if (!product) {
       return res.status(404).json({

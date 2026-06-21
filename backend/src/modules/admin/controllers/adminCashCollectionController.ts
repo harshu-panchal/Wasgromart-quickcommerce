@@ -15,7 +15,7 @@ export const getCashCollections = asyncHandler(
             deliveryBoyId,
             fromDate,
             toDate,
-            // search = "",
+            search = "",
             sortBy = "collectedAt",
             sortOrder = "desc",
         } = req.query;
@@ -42,6 +42,33 @@ export const getCashCollections = asyncHandler(
         const sort: any = {};
         sort[sortBy as string] = sortOrder === "asc" ? 1 : -1;
 
+        // Filter by search
+        if (search) {
+            const searchRegex = new RegExp(search as string, 'i');
+            
+            // Find matching delivery boys
+            const matchingDeliveryBoys = await Delivery.find({
+                name: searchRegex
+            }).select('_id');
+            const deliveryBoyIds = matchingDeliveryBoys.map(d => d._id);
+
+            // Find matching orders
+            const matchingOrders = await Order.find({
+                orderNumber: searchRegex
+            }).select('_id');
+            const orderIds = matchingOrders.map(o => o._id);
+
+            query.$or = [
+                { deliveryBoy: { $in: deliveryBoyIds } },
+                { order: { $in: orderIds } }
+            ];
+            
+            // If they search by amount or remark
+            if (!isNaN(Number(search))) {
+                query.$or.push({ amount: Number(search) });
+            }
+        }
+
         const [collections, total] = await Promise.all([
             CashCollection.find(query)
                 .populate("deliveryBoy", "name mobile")
@@ -58,7 +85,7 @@ export const getCashCollections = asyncHandler(
             _id: collection._id,
             deliveryBoyId: collection.deliveryBoy?._id,
             deliveryBoyName: collection.deliveryBoy?.name || "Unknown",
-            orderId: collection.order?._id,
+            orderId: collection.order?.orderNumber || collection.order?._id,
             total: collection.order?.total || 0,
             amount: collection.amount,
             remark: collection.remark,
@@ -112,12 +139,12 @@ export const getCashCollectionById = asyncHandler(
  */
 export const createCashCollection = asyncHandler(
     async (req: Request, res: Response) => {
-        const { deliveryBoyId, orderId, amount, remark } = req.body;
+        const { deliveryBoyId, orderId, orderNumber, amount, remark } = req.body;
 
-        if (!deliveryBoyId || !orderId || !amount) {
+        if (!deliveryBoyId || (!orderId && !orderNumber) || amount === undefined) {
             return res.status(400).json({
                 success: false,
-                message: "Delivery boy ID, order ID, and amount are required",
+                message: "Delivery boy ID, order ID/Number, and amount are required",
             });
         }
 
@@ -131,7 +158,13 @@ export const createCashCollection = asyncHandler(
         }
 
         // Verify order exists
-        const order = await Order.findById(orderId);
+        let order;
+        if (orderNumber) {
+            order = await Order.findOne({ orderNumber });
+        } else if (orderId) {
+            order = await Order.findById(orderId);
+        }
+        
         if (!order) {
             return res.status(404).json({
                 success: false,
@@ -142,7 +175,7 @@ export const createCashCollection = asyncHandler(
         // Create cash collection
         const collection = await CashCollection.create({
             deliveryBoy: deliveryBoyId,
-            order: orderId,
+            order: order._id,
             amount,
             remark,
             collectedBy: req.user?.userId,

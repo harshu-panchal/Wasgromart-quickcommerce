@@ -7,7 +7,7 @@ import Seller from "../../../models/Seller";
  */
 export const getAllSellers = asyncHandler(async (_req: Request, res: Response) => {
     const sellers = await Seller.find({})
-        .select("sellerName storeName profile status")
+        .select("sellerName storeName profile status balance")
         .sort({ storeName: 1 });
 
     return res.status(200).json({

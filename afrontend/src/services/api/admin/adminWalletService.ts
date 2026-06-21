@@ -55,6 +55,7 @@ export interface SellerTransaction {
   type: string;
   status: string;
   description: string;
+  orderId?: string;
 }
 
 // API METHODS
@@ -150,5 +151,19 @@ export const getSellerTransactions = async (
     `/admin/wallet/seller/${sellerId}`,
     { params }
   );
+  return response.data;
+};
+
+/**
+ * Transfer Funds manually to a user (Seller or Delivery Boy)
+ */
+export const transferFunds = async (data: {
+  userId: string;
+  userType: "SELLER" | "DELIVERY_BOY";
+  amount: number;
+  type: "Credit" | "Debit";
+  description: string;
+}): Promise<ApiResponse<any>> => {
+  const response = await api.post<ApiResponse<any>>("/admin/wallet/transfer", data);
   return response.data;
 };

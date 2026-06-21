@@ -86,7 +86,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
           variantId: item.variation // Preserving variation ID/value
         },
         quantity: item.quantity,
-        variant: item.variation // Also preserve it here for order placement
+        variant: item.variation, // Also preserve it here for order placement
+        isDeliverable: item.isDeliverable !== false // Default to true if undefined
       }));
   };
 
@@ -144,6 +145,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
     // Filter out any items with null products before computing totals
     const validItems = items.filter(item => item?.product);
     const total = validItems.reduce((sum, item) => {
+      // Ignore undeliverable items in total cost calculation
+      if (item.isDeliverable === false) return sum;
+      
       const { displayPrice } = calculateProductPrice(item.product, item.variant);
       return sum + displayPrice * (item.quantity || 0);
     }, 0);

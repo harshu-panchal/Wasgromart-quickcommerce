@@ -250,6 +250,8 @@ router.patch(
 router.get("/financial/dashboard", walletController.getFinancialDashboard);
 router.get("/wallet/earnings", walletController.getAdminEarnings);
 router.get("/wallet/transactions", walletController.getWalletTransactions);
+router.get("/wallet/seller/:sellerId", walletController.getSellerTransactions);
+router.post("/wallet/transfer", walletController.transferFunds);
 router.get("/wallet/withdrawals", withdrawalController.getAllWithdrawals);
 router.post("/wallet/withdrawal/process", walletController.processWithdrawalWrapper);
 

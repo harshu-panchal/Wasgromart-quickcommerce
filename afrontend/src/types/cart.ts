@@ -4,6 +4,7 @@ export interface CartItem {
   product: Product;
   quantity: number;
   variant?: any;
+  isDeliverable?: boolean;
 }
 
 export interface Cart {

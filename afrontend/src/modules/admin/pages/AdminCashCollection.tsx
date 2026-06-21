@@ -24,6 +24,16 @@ export default function AdminCashCollection() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
+
+  // Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    deliveryBoyId: "",
+    orderNumber: "",
+    amount: "",
+    remark: "",
+  });
 
   // Fetch delivery boys and cash collections on component mount
   useEffect(() => {
@@ -96,6 +106,7 @@ export default function AdminCashCollection() {
     fromDate,
     toDate,
     searchTerm,
+    refreshTrigger,
   ]);
 
   const handleSort = (column: string) => {
@@ -116,8 +127,49 @@ export default function AdminCashCollection() {
   const endIndex = startIndex + entriesPerPage;
 
   const handleAddCollection = async () => {
-    // For now, just show an alert. In a real app, this would open a modal to add a cash collection
-    alert("Add cash collection functionality would be implemented here");
+    setIsModalOpen(true);
+    setFormData({
+      deliveryBoyId: "",
+      orderNumber: "",
+      amount: "",
+      remark: "",
+    });
+    setError(null);
+  };
+
+  const handleModalClose = () => {
+    setIsModalOpen(false);
+    setError(null);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.deliveryBoyId || (!formData.orderNumber && !formData.amount)) {
+      setError("Please fill in Delivery Boy, Order Number, and Amount.");
+      return;
+    }
+
+    try {
+      setSubmitting(true);
+      setError(null);
+      const response = await createCashCollection({
+        deliveryBoyId: formData.deliveryBoyId,
+        orderNumber: formData.orderNumber,
+        amount: Number(formData.amount),
+        remark: formData.remark,
+      });
+
+      if (response.success) {
+        setIsModalOpen(false);
+        setRefreshTrigger((prev) => prev + 1);
+      } else {
+        setError(response.message || "Failed to create cash collection");
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.message || "Failed to create cash collection");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleExport = () => {
@@ -172,7 +224,9 @@ export default function AdminCashCollection() {
         <h1 className="text-white text-xl sm:text-2xl font-semibold">
           Delivery Boy Cash Collection List
         </h1>
-        <button className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded text-sm font-medium flex items-center gap-2 transition-colors">
+        <button
+          onClick={handleAddCollection}
+          className="bg-green-500 hover:bg-green-600 text-white px-4 py-2 rounded text-sm font-medium flex items-center gap-2 transition-colors">
           <svg
             width="16"
             height="16"
@@ -644,6 +698,144 @@ export default function AdminCashCollection() {
           Wasgro mart - 10 Minute App
         </a>
       </div>
+
+      {/* Add Cash Collection Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden">
+            <div className="flex justify-between items-center p-3 border-b border-neutral-200">
+              <h2 className="text-lg font-semibold text-neutral-800">
+                Add Cash Collection
+              </h2>
+              <button
+                onClick={handleModalClose}
+                className="text-neutral-500 hover:text-neutral-700 transition-colors">
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18"></line>
+                  <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+              </button>
+            </div>
+            
+            <div className="p-3 bg-blue-50 border-b border-blue-100">
+              <p className="text-[11px] leading-tight text-blue-800 flex gap-2">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="shrink-0 mt-0.5">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="12" y1="16" x2="12" y2="12"></line>
+                  <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                </svg>
+                <span>
+                  <strong>Hint:</strong> Use this form when a Delivery Boy physically hands over the COD cash to you. This reduces their outstanding balance.
+                </span>
+              </p>
+            </div>
+
+            <form onSubmit={handleSubmit} className="p-3 space-y-3">
+              {error && (
+                <div className="p-2 text-xs text-red-600 bg-red-50 rounded border border-red-100">
+                  {error}
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-1">
+                  Delivery Boy *
+                </label>
+                <select
+                  required
+                  value={formData.deliveryBoyId}
+                  onChange={(e) =>
+                    setFormData({ ...formData, deliveryBoyId: e.target.value })
+                  }
+                  className="w-full px-3 py-1.5 border border-neutral-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500">
+                  <option value="">Select Delivery Boy</option>
+                  {deliveryBoys.map((boy) => (
+                    <option key={boy._id} value={boy._id}>
+                      {boy.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-1">
+                  Order Number *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.orderNumber}
+                  onChange={(e) =>
+                    setFormData({ ...formData, orderNumber: e.target.value })
+                  }
+                  placeholder="e.g. ORD-12345"
+                  className="w-full px-3 py-1.5 border border-neutral-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-1">
+                  Amount Collected (₹) *
+                </label>
+                <input
+                  type="number"
+                  required
+                  min="0"
+                  step="0.01"
+                  value={formData.amount}
+                  onChange={(e) =>
+                    setFormData({ ...formData, amount: e.target.value })
+                  }
+                  placeholder="0.00"
+                  className="w-full px-3 py-1.5 border border-neutral-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-neutral-700 mb-1">
+                  Remark (Optional)
+                </label>
+                <textarea
+                  value={formData.remark}
+                  onChange={(e) =>
+                    setFormData({ ...formData, remark: e.target.value })
+                  }
+                  placeholder="Any notes about this collection..."
+                  rows={2}
+                  className="w-full px-3 py-1.5 border border-neutral-300 rounded text-sm focus:outline-none focus:ring-1 focus:ring-teal-500 focus:border-teal-500"
+                />
+              </div>
+
+              <div className="pt-3 flex justify-end gap-3 border-t border-neutral-200">
+                <button
+                  type="button"
+                  onClick={handleModalClose}
+                  className="px-4 py-2 text-sm font-medium text-neutral-700 bg-white border border-neutral-300 rounded hover:bg-neutral-50 transition-colors">
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className={`px-4 py-2 text-sm font-medium text-white rounded transition-colors ${
+                    submitting
+                      ? "bg-teal-400 cursor-not-allowed"
+                      : "bg-teal-600 hover:bg-teal-700"
+                  }`}>
+                  {submitting ? "Saving..." : "Save Collection"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
