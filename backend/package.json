@@ -5,6 +5,7 @@
   "scripts": {
     "start": "node dist/server.js",
     "dev": "tsx --watch src/server.ts",
+    "dev:setup": "npm install --include=dev",
     "build": "node scripts/build-esbuild.mjs",
     "build:tsc": "npx tsc -p tsconfig.build.json",
     "typecheck": "npx tsc --noEmit -p tsconfig.build.json",
