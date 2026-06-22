@@ -2,15 +2,54 @@
 
 CORS errors from `wasgromart.com` → `api.wasgromart.com` almost always mean **the wrong app is deployed on the API subdomain**.
 
-## Quick check
+## ⚠️ Your live site right now (check this first)
 
-| URL | Must return |
-|-----|----------------|
-| `https://api.wasgromart.com/` | JSON: `{"service":"wasgro-backend-api",...}` |
-| `https://api.wasgromart.com/health` | `{"ok":true,"service":"wasgro-backend-api"}` |
-| `https://wasgromart.com/health` | `{"ok":true,"service":"wasgro-frontend"}` |
+Open in a browser:
 
-If `api.wasgromart.com/health` shows **`wasgro-frontend`** or returns HTML, the **frontend is deployed on the API domain** — fix hPanel (below).
+**https://api.wasgromart.com/health**
+
+| You see | Meaning |
+|---------|---------|
+| `{"ok":true,"service":"wasgro-backend-api"}` | ✅ API is correct — CORS should work |
+| `{"ok":true,"service":"wasgro-frontend"}` | ❌ **Frontend is on the API domain** — fix below |
+| HTML page | ❌ Wrong app or static site on API domain |
+
+**As of last check, `api.wasgromart.com/health` returns `wasgro-frontend`.**  
+No code change on the React app will fix CORS until the **backend** runs on that subdomain.
+
+---
+
+## Fix in Hostinger hPanel (Git deploy)
+
+Your build logs showed this path:
+
+`.../repository/afrontend/`
+
+That means **Git auto-deploy for `api.wasgromart.com` is pointed at the `afrontend` folder.** It must be **`backend`**.
+
+### Steps
+
+1. Log in to **hPanel** → **Websites** → **api.wasgromart.com**
+2. Open **Advanced** → **Git** (or **Deployments** / **Node.js**)
+3. Find **Repository directory** / **Root directory** / **Install path**
+4. Change from `afrontend` → **`backend`**
+5. Set **Node.js** for this website:
+   - **Build command:** `npm run build`
+   - **Start command:** `npm start`
+   - **Entry file:** `dist/server.js`
+6. Add environment variables (see `backend/.env.example`): at minimum `NODE_ENV=production`, `MONGODB_URI`, `JWT_SECRET`, `FRONTEND_URL=https://wasgromart.com,https://www.wasgromart.com`
+7. **Deploy / Redeploy**
+8. Confirm **https://api.wasgromart.com/health** → `wasgro-backend-api`
+
+### Frontend (`wasgromart.com`) — separate website
+
+Use a **second** website in hPanel for `wasgromart.com`:
+
+- Git directory: **`afrontend`**
+- Entry file: **`dist/server.js`**
+- Or upload `afrontend/dist/` to `public_html` (static hosting, no Node)
+
+**Do not** use `afrontend` on both domains.
 
 ---
 
