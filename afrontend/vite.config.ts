@@ -68,7 +68,6 @@ export default defineConfig(({ mode }) => {
       },
       chunkSizeWarningLimit: 1000,
       sourcemap: false,
-      reportCompressedSize: false,
       minify: 'esbuild',
     },
   }

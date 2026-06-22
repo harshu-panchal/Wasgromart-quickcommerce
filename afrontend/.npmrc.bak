@@ -1,0 +1,4 @@
+legacy-peer-deps=false
+# Deployment sets NODE_ENV=production (npm defaults to omit=dev). Override so build tools install.
+# Keep peer-only omit so optional platform binaries (e.g. @rollup/*) still install.
+omit=peer
