@@ -1,6 +1,14 @@
 # Frontend deployment — Hostinger
 
-This is a **Vite + React SPA**. The build outputs static files to `dist/` (`index.html` + assets). It is **not** a backend API.
+This is a **Vite + React SPA**. The build outputs static files to `dist/` (`index.html` + assets).
+
+## ⚠️ Deploy on `wasgromart.com` only — NOT `api.wasgromart.com`
+
+The API subdomain must run the **backend** (`backend/dist/server.js`). If the frontend runs on `api.wasgromart.com`, every API call from the browser will fail with **CORS errors** (OPTIONS returns 404, no `Access-Control-Allow-Origin`).
+
+Verify: `https://api.wasgromart.com/health` must **not** return `wasgro-frontend`.
+
+See repo root **`HOSTINGER.md`** for the full two-app setup.
 
 | App | Folder | Entry file | Start |
 |-----|--------|------------|-------|

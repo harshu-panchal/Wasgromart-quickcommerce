@@ -36,6 +36,7 @@ import razorpayWebhookRoutes from "./webhooks/razorpay/razorpayWebhookRoutes";
 import { UPLOAD_DIR, ensureUploadDir } from "./config/storage";
 import { logger } from "./utils/logger";
 import { hostingDefaults, isSharedHosting } from "./config/hosting";
+import { corsOptions, applyCorsHeaders } from "./config/cors";
 
 // ---------------------------------------------------------------------------
 // Global crash guards.
@@ -62,6 +63,10 @@ const httpServer = createServer(app);
 // when running behind a reverse proxy (Nginx / Hostinger / Render).
 app.set("trust proxy", 1);
 
+// CORS must be first so OPTIONS preflight and error responses include headers.
+app.use(cors(corsOptions));
+app.options("*", cors(corsOptions));
+
 // Gzip in-app only when the edge proxy is not already compressing (Hostinger
 // LiteSpeed usually is). Saves CPU on a single shared-hosting core.
 if (hostingDefaults.useCompression) {
@@ -81,81 +86,6 @@ app.use(
     },
   })
 );
-
-// Simple CORS configuration - Standard and reliable
-const allowedOrigins = [
-  "https://www.kosil.com",
-  "https://kosil.com",
-  "https://kosil-frontend.onrender.com",
-  "https://kosil.biz",
-  "https://kosil.biz/",
-  // Production VPS domains for wasgromart.com
-  "https://wasgromart.com",
-  "https://www.wasgromart.com",
-  "http://wasgromart.com",
-  "http://www.wasgromart.com",
-  // Add more origins from environment variable if needed
-  ...(process.env.FRONTEND_URL
-    ? process.env.FRONTEND_URL.split(",").map((url) => url.trim())
-    : []),
-];
-
-const corsOptions = {
-  origin: (
-    origin: string | undefined,
-    callback: (err: Error | null, allow?: boolean) => void
-  ) => {
-    // Allow requests with no origin (mobile apps, Postman, etc.)
-    if (!origin) {
-      return callback(null, true);
-    }
-
-    // In development, allow localhost
-    if (process.env.NODE_ENV !== "production") {
-      if (
-        origin.startsWith("http://localhost:") ||
-        origin.startsWith("http://127.0.0.1:")
-      ) {
-        return callback(null, true);
-      }
-    }
-
-    // Normalize origin (remove trailing slash)
-    const normalizedOrigin = origin.replace(/\/$/, "");
-
-    // Check if origin is in allowed list (exact match or normalized)
-    const isAllowed = allowedOrigins.some((allowed) => {
-      const normalizedAllowed = allowed.replace(/\/$/, "");
-      return (
-        origin === allowed ||
-        normalizedOrigin === normalizedAllowed ||
-        origin === normalizedAllowed ||
-        normalizedOrigin === allowed
-      );
-    });
-
-    if (isAllowed) {
-      return callback(null, true);
-    }
-
-    // Reject if not allowed - return false instead of error for better handling
-    return callback(null, false);
-  },
-  credentials: true,
-  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-  allowedHeaders: [
-    "Content-Type",
-    "Authorization",
-    "X-Requested-With",
-    "Accept",
-    "Origin",
-  ],
-  exposedHeaders: ["Content-Length", "Content-Type"],
-  maxAge: 86400,
-};
-
-// Apply CORS middleware - This handles everything including preflight
-app.use(cors(corsOptions));
 
 // Capture raw body for Razorpay webhook signature verification without changing existing routes.
 app.use(
@@ -184,10 +114,15 @@ app.set("io", io);
 // Routes
 app.get("/", (_req: Request, res: Response) => {
   res.json({
+    service: "wasgro-backend-api",
     message: "Kosil API Server is running!",
     version: "1.0.0",
     socketIO: "Listening for WebSocket connections",
   });
+});
+
+app.get("/health", (_req: Request, res: Response) => {
+  res.json({ ok: true, service: "wasgro-backend-api" });
 });
 
 app.get("/debug-sockets", (req: Request, res: Response) => {

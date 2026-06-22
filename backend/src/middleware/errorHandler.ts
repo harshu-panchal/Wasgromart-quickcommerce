@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { applyCorsHeaders } from '../config/cors';
 
 export interface CustomError extends Error {
   statusCode?: number;
@@ -9,10 +10,11 @@ export interface CustomError extends Error {
 
 export const errorHandler = (
   err: CustomError,
-  _req: Request,
+  req: Request,
   res: Response,
   _next: NextFunction
 ): void => {
+  applyCorsHeaders(req, res);
   // Log error for debugging
   console.error('Error:', err);
 
