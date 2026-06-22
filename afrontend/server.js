@@ -1,12 +1,9 @@
 /**
  * Production static file server for the Vite/React SPA on Hostinger Node.js.
  *
- * Hostinger hPanel settings (frontend app):
- *   Entry file:  server.js          ← NOT dist/server.js
- *   Build:       npm run build
- *   Start:       npm start
- *
- * dist/ is Vite output only (index.html + assets). This file is not compiled into dist/.
+ * Hostinger entry file (either works after `npm run build`):
+ *   dist/server.js  ← copied by postbuild (recommended on hPanel)
+ *   server.js       ← project root (local `npm start`)
  */
 import express from "express";
 import fs from "fs";
@@ -14,7 +11,16 @@ import path from "path";
 import { fileURLToPath } from "url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const distDir = path.join(__dirname, "dist");
+
+/** Root server.js serves ./dist; dist/server.js serves its own directory. */
+function resolveDistDir(dirname) {
+  if (fs.existsSync(path.join(dirname, "index.html"))) {
+    return dirname;
+  }
+  return path.join(dirname, "dist");
+}
+
+const distDir = resolveDistDir(__dirname);
 const indexHtml = path.join(distDir, "index.html");
 
 if (!fs.existsSync(indexHtml)) {

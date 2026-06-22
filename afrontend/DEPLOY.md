@@ -5,16 +5,18 @@ This is a **Vite + React SPA**. The build outputs static files to `dist/` (`inde
 | App | Folder | Entry file | Start |
 |-----|--------|------------|-------|
 | **API (Express + Socket.IO)** | `backend/` | `dist/server.js` | `npm start` |
-| **Website (React SPA)** | `afrontend/` | **`server.js`** | `npm start` |
+| **Website (React SPA)** | `afrontend/` | **`dist/server.js`** (or `server.js`) | `npm start` |
 
-Do **not** set the frontend Entry file to `dist/server.js` — that file does not exist for this app.
+`npm run build` copies `server.js` → `dist/server.js` automatically (`postbuild`).
+
+Do **not** point the backend API entry (`backend/`) at this file — that app uses `backend/dist/server.js` from TypeScript compile.
 
 ## Hostinger Node.js (frontend domain, e.g. wasgromart.com)
 
 1. **Application root:** `afrontend` (or repo path ending in `/afrontend`)
 2. **Build command:** `npm run build`
 3. **Start command:** `npm start`
-4. **Entry file:** `server.js` ← root of `afrontend/`, not `dist/`
+4. **Entry file:** `dist/server.js` (created by `postbuild` after each build)
 
 `server.js` is a small Express app that serves `dist/` and falls back to `index.html` for React Router.
 
