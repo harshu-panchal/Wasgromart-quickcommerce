@@ -4,7 +4,7 @@
   "rewrites": [
     {
       "source": "/api/v1/:path*",
-      "destination": "https://kosil-backend.onrender.com/api/v1/:path*"
+      "destination": "https://api.wasgromart.com/api/v1/:path*"
     },
     {
       "source": "/(.*)",
