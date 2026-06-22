@@ -90,9 +90,7 @@ class Cache {
 // Singleton instance
 export const cache = new Cache();
 
-// Clean expired entries every 5 minutes. unref() so this timer does not keep
-// the process alive on shutdown.
-const cacheCleanupTimer = setInterval(() => {
+// Clean expired entries every 5 minutes
+setInterval(() => {
   cache.cleanExpired();
 }, 5 * 60 * 1000);
-cacheCleanupTimer.unref();

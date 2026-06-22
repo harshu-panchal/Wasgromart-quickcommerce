@@ -6,7 +6,6 @@ import DeliveryTracking from "../models/DeliveryTracking";
 import mongoose from "mongoose";
 import { notifySellersOfOrderUpdate } from "./sellerNotificationService";
 import { sendPushNotification } from "./firebaseAdmin";
-import { logger } from "../utils/logger";
 
 // Track order notification state
 export interface OrderNotificationState {
@@ -61,14 +60,14 @@ function calculateDistance(
 export async function findAvailableDeliveryBoys(): Promise<
   mongoose.Types.ObjectId[]
 > {
-  logger.debug('🔍 findAvailableDeliveryBoys called');
+  console.log('🔍 findAvailableDeliveryBoys called');
   try {
     const deliveryBoys = await Delivery.find({
       isOnline: true,
       status: "Active",
     }).select("_id");
     
-    logger.debug('✅ Found available delivery boys:', deliveryBoys.length);
+    console.log('✅ Found available delivery boys:', deliveryBoys.length);
     return deliveryBoys.map((db) => db._id);
   } catch (error) {
     console.error("❌ Error finding available delivery boys:", error);
@@ -86,7 +85,7 @@ export async function findDeliveryBoysNearLocation(
   longitude: number,
   radiusKm: number = 10,
 ): Promise<{ deliveryBoyId: mongoose.Types.ObjectId; distance: number }[]> {
-  logger.debug(
+  console.log(
     `🔍 findDeliveryBoysNearLocation: lat=${latitude}, lng=${longitude}, radius=${radiusKm}km`,
   );
   try {
@@ -96,7 +95,7 @@ export async function findDeliveryBoysNearLocation(
       distance: number;
     }[] = [];
 
-    logger.debug(
+    console.log(
       "🔍 Checking Delivery with isOnline=true, status=Active, and location field...",
     );
     const deliveryBoysWithLocation = await Delivery.find({
@@ -112,7 +111,7 @@ export async function findDeliveryBoysNearLocation(
         },
       },
     }).select("_id location");
-    logger.debug(
+    console.log(
       "✅ Found delivery boys with location field:",
       deliveryBoysWithLocation.length,
     );
@@ -129,13 +128,13 @@ export async function findDeliveryBoysNearLocation(
         }
       }
 
-      logger.debug(
+      console.log(
         `📍 Found ${nearbyDeliveryBoys.length} delivery boys using live location within ${radiusKm}km of seller`,
       );
       return nearbyDeliveryBoys.sort((a, b) => a.distance - b.distance);
     }
 
-    logger.debug(
+    console.log(
       `⚠️ No delivery boys found within ${radiusKm}km using live location. Checking fallback...`,
     );
 
@@ -218,7 +217,7 @@ export async function findDeliveryBoysNearLocation(
     // Sort by distance (nearest first)
     nearbyDeliveryBoys.sort((a, b) => a.distance - b.distance);
 
-    logger.debug(
+    console.log(
       `📍 Found ${nearbyDeliveryBoys.length} delivery boys (fallback) within ${radiusKm}km`,
     );
     return nearbyDeliveryBoys;
@@ -235,11 +234,11 @@ export async function findDeliveryBoysNearLocation(
 export async function findDeliveryBoysNearSellerLocations(
   order: any,
 ): Promise<mongoose.Types.ObjectId[]> {
-  logger.debug(
+  console.log(
     "🔍 findDeliveryBoysNearSellerLocations called for order:",
     order.orderNumber,
   );
-  logger.debug("📦 Order items:", order.items);
+  console.log("📦 Order items:", order.items);
   try {
     // Get unique seller IDs from order items safely
     const sellerIds = [
@@ -256,10 +255,10 @@ export async function findDeliveryBoysNearSellerLocations(
           .filter(Boolean) || [],
       ),
     ];
-    logger.debug("🏪 Unique seller IDs in order:", sellerIds);
+    console.log("🏪 Unique seller IDs in order:", sellerIds);
 
     if (sellerIds.length === 0) {
-      logger.debug(
+      console.log(
         "⚠️ No sellers found in order, falling back to all available delivery boys",
       );
       return findAvailableDeliveryBoys();
@@ -271,7 +270,7 @@ export async function findDeliveryBoysNearSellerLocations(
     }).select("latitude longitude location serviceRadiusKm storeName");
 
     if (sellers.length === 0) {
-      logger.debug(
+      console.log(
         "No seller data found, falling back to all available delivery boys",
       );
       return findAvailableDeliveryBoys();
@@ -295,7 +294,7 @@ export async function findDeliveryBoysNearSellerLocations(
       }
 
       if (!lat || !lng || isNaN(lat) || isNaN(lng)) {
-        logger.debug(
+        console.log(
           `Seller ${seller.storeName} has no valid location, skipping`,
         );
         continue;
@@ -317,7 +316,7 @@ export async function findDeliveryBoysNearSellerLocations(
     }
 
     if (nearbyDeliveryBoyMap.size === 0) {
-      logger.debug(
+      console.log(
         "No delivery boys found near seller locations, falling back to all available",
       );
       return findAvailableDeliveryBoys();
@@ -328,7 +327,7 @@ export async function findDeliveryBoysNearSellerLocations(
       .sort((a, b) => a[1].distance - b[1].distance)
       .map(([id]) => new mongoose.Types.ObjectId(id));
 
-    logger.debug(
+    console.log(
       `📍 Found ${sortedBoys.length} delivery boys near seller locations`,
     );
     return sortedBoys;
@@ -349,7 +348,7 @@ export async function notifyDeliveryBoysOfNewOrder(
   io: SocketIOServer,
   order: any,
 ): Promise<void> {
-  logger.debug(
+  console.log(
     "📦 Starting notifyDeliveryBoysOfNewOrder for order:",
     order.orderNumber,
   );
@@ -357,13 +356,13 @@ export async function notifyDeliveryBoysOfNewOrder(
     // Find delivery boys near seller locations (within service radius)
     // This function already returns them sorted by distance
     let nearbyDeliveryBoyIds = await findDeliveryBoysNearSellerLocations(order);
-    logger.debug(
+    console.log(
       "📍 Nearby delivery boy IDs found:",
       nearbyDeliveryBoyIds.map((id) => id.toString()),
     );
 
     if (nearbyDeliveryBoyIds.length === 0) {
-      logger.debug(
+      console.log(
         "❌ No available delivery boys to notify (including fallback)",
       );
       return;
@@ -383,7 +382,7 @@ export async function notifyDeliveryBoysOfNewOrder(
       );
 
       if (nearbyDeliveryBoyIds.length === 0) {
-        logger.debug("⚠️ All nearby delivery boys are currently busy.");
+        console.log("⚠️ All nearby delivery boys are currently busy.");
         return;
       }
     }
@@ -403,7 +402,7 @@ export async function notifyDeliveryBoysOfNewOrder(
     }
     const prioritizedIds = [...connectedBoys, ...disconnectedBoys];
 
-    logger.debug(
+    console.log(
       `🔌 Prioritized delivery boy IDs based on socket connectivity: [${prioritizedIds.join(", ")}] (Connected: [${connectedBoys.join(", ")}], Disconnected: [${disconnectedBoys.join(", ")}])`
     );
 
@@ -454,9 +453,9 @@ export async function notifyNextDeliveryBoy(
   io: SocketIOServer,
   orderId: string,
 ): Promise<boolean> {
-  logger.debug("📢 notifyNextDeliveryBoy called for order:", orderId);
+  console.log("📢 notifyNextDeliveryBoy called for order:", orderId);
   const state = notificationStates.get(orderId);
-  logger.debug("📢 Current notification state:", state);
+  console.log("📢 Current notification state:", state);
   if (!state || state.acceptedBy) return false;
 
   // Clear any existing active timeout before proceeding
@@ -466,7 +465,7 @@ export async function notifyNextDeliveryBoy(
 
   // Check if we've exhausted all nearby delivery boys
   if (state.currentIndex >= state.allNearbyDeliveryBoyIds.length) {
-    logger.debug(
+    console.log(
       `⚠️ All ${state.allNearbyDeliveryBoyIds.length} delivery boys for order ${orderId} have been exhausted (disconnected or rejected).`,
     );
 
@@ -514,17 +513,17 @@ export async function notifyNextDeliveryBoy(
   }
 
   const roomName = `delivery-${nextDeliveryBoyId}`;
-  logger.debug(
+  console.log(
     `🏠 Checking room: ${roomName} for delivery boy ${nextDeliveryBoyId}`,
   );
   const room = io.sockets.adapter.rooms.get(roomName);
   const isSocketConnected = room && room.size > 0;
-  logger.debug(`👥 Room connected: ${isSocketConnected}`);
+  console.log(`👥 Room connected: ${isSocketConnected}`);
 
   // If the delivery boy has neither a socket connection nor push notification tokens,
   // we cannot notify them at all, so we can immediately skip to the next candidate
   if (!isSocketConnected && tokens.length === 0) {
-    logger.debug(
+    console.log(
       `⏩ Skipping unreachable delivery boy ${nextDeliveryBoyId} (offline and no FCM tokens), moving to next...`,
     );
     return notifyNextDeliveryBoy(io, orderId);
@@ -537,7 +536,7 @@ export async function notifyNextDeliveryBoy(
   // 1. Send WebSocket notification if connected
   if (isSocketConnected) {
     io.to(roomName).emit("new-order", state.orderData);
-    logger.debug(
+    console.log(
       `📤 [Sequential] Socket alert emitted to delivery boy ${nextDeliveryBoyId} (Index ${state.currentIndex}/${state.allNearbyDeliveryBoyIds.length}) about order ${state.orderData.orderNumber}`,
     );
   }
@@ -561,7 +560,7 @@ export async function notifyNextDeliveryBoy(
         },
         sound: "delivery_alert",
       });
-      logger.debug(
+      console.log(
         `🔔 FCM Push notification sent to delivery boy ${nextDeliveryBoyId} (${tokens.length} token(s))`,
       );
     } catch (pushErr) {
@@ -572,30 +571,22 @@ export async function notifyNextDeliveryBoy(
     }
   }
 
-  // 3. Start response window timer (30 seconds) to auto-cascade if unresponsive.
-  // The callback is async, so any rejection inside it would be an UNHANDLED
-  // rejection (process crash). Wrap the whole body in try/catch.
-  state.timeoutId = setTimeout(() => {
-    void (async () => {
-      try {
-        logger.debug(`⏱️ Response window expired for delivery boy ${nextDeliveryBoyId} on order ${orderId}. Cascading to next...`);
-        const currentState = notificationStates.get(orderId);
-
-        // Check if the order is still unaccepted and we are still on the same candidate index
-        if (currentState && !currentState.acceptedBy && currentState.currentIndex === state.currentIndex) {
-          currentState.rejectedDeliveryBoys.add(nextDeliveryBoyId);
-
-          // Notify client socket of timeout (so UI can dismiss modal if still active)
-          if (isSocketConnected) {
-            io.to(roomName).emit("order-timeout", { orderId });
-          }
-
-          await notifyNextDeliveryBoy(io, orderId);
-        }
-      } catch (err) {
-        console.error(`Error in cascade timer for order ${orderId}:`, err);
+  // 3. Start response window timer (30 seconds) to auto-cascade if unresponsive
+  state.timeoutId = setTimeout(async () => {
+    console.log(`⏱️ Response window expired for delivery boy ${nextDeliveryBoyId} on order ${orderId}. Cascading to next...`);
+    const currentState = notificationStates.get(orderId);
+    
+    // Check if the order is still unaccepted and we are still on the same candidate index
+    if (currentState && !currentState.acceptedBy && currentState.currentIndex === state.currentIndex) {
+      currentState.rejectedDeliveryBoys.add(nextDeliveryBoyId);
+      
+      // Notify client socket of timeout (so UI can dismiss modal if still active)
+      if (isSocketConnected) {
+        io.to(roomName).emit("order-timeout", { orderId });
       }
-    })();
+
+      await notifyNextDeliveryBoy(io, orderId);
+    }
   }, 30000); // 30 seconds response window
 
   return true;
@@ -647,7 +638,7 @@ export async function handleOrderAcceptance(
       state.acceptedBy = normalizedDeliveryBoyId;
       clearNotificationTimeout(state);
     } else {
-      logger.debug(
+      console.log(
         `⚠️ Notification state missing for order ${orderId}. Checking database for fallback...`,
       );
       // 2. Database Fallback (For server restarts/stale notifications)
@@ -704,7 +695,7 @@ export async function handleOrderAcceptance(
       message: "Delivery boy accepted your order. Tracking started.",
     });
 
-    logger.debug(
+    console.log(
       `✅ Order ${orderId} accepted by delivery boy ${normalizedDeliveryBoyId} ${state ? "(Memory)" : "(DB Fallback)"}`,
     );
     return { success: true, message: "Order accepted successfully" };
@@ -761,7 +752,7 @@ export async function handleOrderRejection(
     // Mark as rejected
     state.rejectedDeliveryBoys.add(normalizedDeliveryBoyId);
 
-    logger.debug(
+    console.log(
       `🚫 Delivery boy ${deliveryBoyId} rejected order ${orderId}. Moving to next...`,
     );
 

@@ -10,49 +10,9 @@ import { notifySellersOfOrderUpdate } from "../../../services/sellerNotification
 import { generateDeliveryOtp } from "../../../services/deliveryOtpService";
 import { Server as SocketIOServer } from "socket.io";
 import { broadcastPush } from "../../../services/broadcastNotificationService";
-import { logger } from "../../../utils/logger";
 
-// Detect MongoDB transient transaction errors (e.g. WriteConflict on a hot
-// product during concurrent checkouts). These are safe to retry because the
-// aborted transaction leaves no partial data behind.
-const isTransientTxnError = (error: any): boolean => {
-  if (!error) return false;
-  const labels = error.errorLabels;
-  if (Array.isArray(labels) && labels.includes("TransientTransactionError")) {
-    return true;
-  }
-  // WriteConflict (112) can surface without the label on some driver versions.
-  return error.code === 112 || error.codeName === "WriteConflict";
-};
-
-// Public handler: retries the order-creation transaction a couple of times on
-// transient write conflicts before surfacing an error. Under high concurrency
-// this turns transient 500s into successful orders without crashing anything.
+// Create a new order
 export const createOrder = async (req: Request, res: Response) => {
-  const maxAttempts = 3;
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      await createOrderAttempt(req, res);
-      return;
-    } catch (error: any) {
-      if (isTransientTxnError(error) && attempt < maxAttempts && !res.headersSent) {
-        logger.warn(`Transient transaction error creating order (attempt ${attempt}/${maxAttempts}), retrying...`);
-        continue;
-      }
-      if (!res.headersSent) {
-        res.status(500).json({
-          success: false,
-          message: "Error creating order. " + (error?.message || "Unknown error"),
-          error: error?.message,
-        });
-      }
-      return;
-    }
-  }
-};
-
-// Create a new order (single attempt)
-const createOrderAttempt = async (req: Request, res: Response) => {
     let session: mongoose.ClientSession | null = null;
     try {
         // Only start session if we are on a replica set (required for transactions)
@@ -120,7 +80,7 @@ const createOrderAttempt = async (req: Request, res: Response) => {
         }
 
         // Fetch customer details
-        const customer = await Customer.findById(userId).session(session);
+        const customer = await Customer.findById(userId);
         if (!customer) {
             if (session) await session.abortTransaction();
             return res.status(404).json({
@@ -269,7 +229,7 @@ const createOrderAttempt = async (req: Request, res: Response) => {
             if (!product) {
                 // If we are here, either variationValue wasn't provided, or it didn't match any variation with enough stock.
                 // We'll try to find the product first to see if it has variations.
-                const checkProduct = await Product.findById(item.product.id).session(session);
+                const checkProduct = await Product.findById(item.product.id);
 
                 if (checkProduct && checkProduct.variations && checkProduct.variations.length > 0) {
                     // Product has variations, but we didn't match one.
@@ -395,7 +355,7 @@ const createOrderAttempt = async (req: Request, res: Response) => {
                 _id: { $in: uniqueSellerIds },
                 status: "Approved",
                 location: { $exists: true, $ne: null },
-            }).session(session);
+            });
 
             // Check each seller can deliver to user's location
             for (const seller of sellers) {
@@ -509,12 +469,6 @@ const createOrderAttempt = async (req: Request, res: Response) => {
             } catch (abortError) {
                 console.error("Error aborting transaction:", abortError);
             }
-        }
-
-        // Let transient write conflicts bubble up so the retry wrapper can
-        // re-run the whole transaction with a fresh session.
-        if (isTransientTxnError(error)) {
-            throw error;
         }
 
         console.error("DEBUG: Order Creation Error Detail:", {

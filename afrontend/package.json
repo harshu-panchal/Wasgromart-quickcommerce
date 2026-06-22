@@ -3,33 +3,24 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "main": "server.js",
   "scripts": {
     "dev": "vite",
-    "build": "node --max-old-space-size=4096 ./node_modules/vite/bin/vite.js build",
-    "build:check": "npx tsc --noEmit && node --max-old-space-size=4096 ./node_modules/vite/bin/vite.js build",
-    "start": "node server.js",
-    "start:dist": "node dist/server.js",
+    "build": "tsc && vite build",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "copy-images": "node scripts/copy-images.js",
-    "prebuild": "npm run copy-images",
-    "postbuild": "node scripts/copy-server.mjs"
+    "prebuild": "npm run copy-images"
   },
   "dependencies": {
     "@react-google-maps/api": "^2.20.8",
-    "@vitejs/plugin-react": "^4.2.1",
     "apexcharts": "^5.3.6",
-    "autoprefixer": "^10.4.16",
     "axios": "^1.13.2",
     "clsx": "^2.1.0",
-    "express": "^4.21.2",
     "firebase": "^12.8.0",
     "framer-motion": "^10.16.16",
     "gsap": "^3.12.5",
     "jspdf": "^3.0.4",
     "lottie-react": "^2.4.1",
-    "postcss": "^8.4.32",
     "react": "^18.2.0",
     "react-apexcharts": "^1.9.0",
     "react-dom": "^18.2.0",
@@ -37,8 +28,6 @@
     "recharts": "^3.6.0",
     "socket.io-client": "^4.8.1",
     "tailwind-merge": "^2.2.0",
-    "tailwindcss": "^3.3.6",
-    "vite": "^7.3.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
@@ -47,9 +36,14 @@
     "@types/react-dom": "^18.2.17",
     "@typescript-eslint/eslint-plugin": "^6.14.0",
     "@typescript-eslint/parser": "^6.14.0",
+    "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.16",
     "eslint": "^8.55.0",
     "eslint-plugin-react-hooks": "^4.6.0",
     "eslint-plugin-react-refresh": "^0.4.5",
-    "typescript": "^5.2.2"
+    "postcss": "^8.4.32",
+    "tailwindcss": "^3.3.6",
+    "typescript": "^5.2.2",
+    "vite": "^7.3.0"
   }
 }

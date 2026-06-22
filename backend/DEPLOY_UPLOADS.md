@@ -23,22 +23,8 @@ Set under **Websites → api.wasgromart.com → Node.js → Environment variable
 
 | Variable | Value |
 |----------|-------|
-| `NODE_ENV` | `production` |
-| `SHARED_HOSTING` | `true` |
-| `FRONTEND_URL` | `https://www.wasgromart.com,https://wasgromart.com` |
-| `API_PUBLIC_URL` | `https://api.wasgromart.com` |
 | `UPLOAD_DIR` | `/home/u910031778/domains/api.wasgromart.com/uploads` |
 | `PUBLIC_UPLOAD_BASE_URL` | `https://api.wasgromart.com` |
-| `MONGO_MAX_POOL_SIZE` | `10` |
-| `NODE_OPTIONS` | `--max-old-space-size=384` |
-
-**Do not** set `omit=dev=false` in env vars — invalid npm syntax and will warn on every install.
-
-Build command in hPanel: `npm run build` (uses esbuild, low RAM — not `tsc`).
-
-Start command: `npm start` → `node dist/server.js`
-
-If `omit=dev=false` was added earlier in Hostinger, **delete it** from environment variables.
 
 If `UPLOAD_DIR` is omitted, the app defaults to `../uploads` relative to `nodejs/` (same folder as above).
 
