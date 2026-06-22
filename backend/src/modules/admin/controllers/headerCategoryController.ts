@@ -12,7 +12,7 @@ export const getAdminHeaderCategories = async (
     const categories = await HeaderCategory.find().sort({
       order: 1,
       createdAt: -1,
-    });
+    }).lean();
     return res.json(categories);
   } catch (error) {
     return res.status(500).json({ message: "Server Error", error });

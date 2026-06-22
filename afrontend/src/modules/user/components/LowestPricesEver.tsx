@@ -333,17 +333,12 @@ export default function LowestPricesEver({ activeTab = 'all', products: adminPro
   const [products, setProducts] = useState<Product[]>([]);
 
   useEffect(() => {
-    // Use admin-selected products if provided, otherwise fallback to fetching
-    if (adminProducts && adminProducts.length > 0) {
+    if (Array.isArray(adminProducts)) {
       const mappedProducts = adminProducts.map((p: any) => {
-        // Get product name and remove any description-like suffixes
         let productName = p.productName || p.name || '';
-        // Remove common description patterns like " - Fresh & Quality Assured"
         productName = productName.replace(/\s*-\s*(Fresh|Quality|Assured|Premium|Best|Top|Hygienic|Carefully|Selected).*$/i, '').trim();
 
-        // Get pack without description
         let packValue = p.variations?.[0]?.title || p.pack || 'Standard';
-        // Remove description from pack if it contains it
         if (packValue && packValue.includes(' - ')) {
           packValue = packValue.split(' - ')[0].trim();
         }
@@ -358,9 +353,10 @@ export default function LowestPricesEver({ activeTab = 'all', products: adminPro
         };
       });
       setProducts(mappedProducts);
-    } else {
-      // Fallback: fetch products if admin hasn't configured any
-      const fetchDiscountedProducts = async () => {
+      return;
+    }
+
+    const fetchDiscountedProducts = async () => {
         try {
           const response = await getProducts({ limit: 50 });
           if (response.success && response.data) {
@@ -389,19 +385,13 @@ export default function LowestPricesEver({ activeTab = 'all', products: adminPro
         }
       };
       fetchDiscountedProducts();
-    }
   }, [adminProducts]);
 
-  // Get products for this section
-  // If using admin-selected products, use them directly (already filtered and ordered)
-  // Otherwise, filter by activeTab and discount
   const getFilteredProducts = () => {
-    // If admin has selected products, use them directly (already ordered)
-    if (adminProducts && adminProducts.length > 0) {
-      return products.slice(0, 20); // Show up to 20 admin-selected products
+    if (Array.isArray(adminProducts)) {
+      return products.slice(0, 20);
     }
 
-    // Fallback: filter by activeTab and discount
     let filtered = products;
 
     if (activeTab !== 'all') {
@@ -424,6 +414,10 @@ export default function LowestPricesEver({ activeTab = 'all', products: adminPro
   };
 
   const discountedProducts = getFilteredProducts();
+
+  if (discountedProducts.length === 0) {
+    return null;
+  }
 
   // Get cart functions once at parent level
   const { addToCart, updateQuantity } = useCart();

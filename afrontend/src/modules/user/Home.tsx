@@ -52,6 +52,7 @@ export default function Home() {
     homeSections: [],
     shops: [],
     promoBanners: [],
+    lowestPrices: [],
     trending: [],
     cookingIdeas: [],
   });

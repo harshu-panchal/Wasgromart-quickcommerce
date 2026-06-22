@@ -137,6 +137,13 @@ export class RazorpayWebhookService {
           paymentStatus: "Paid",
           paymentId: razorpayPaymentId,
         });
+
+        try {
+          const { createPendingCommissions } = await import("../../services/commissionService");
+          await createPendingCommissions(String(payment.order));
+        } catch (commError) {
+          console.error("Failed to create pending commissions from webhook:", commError);
+        }
       }
     }
   }

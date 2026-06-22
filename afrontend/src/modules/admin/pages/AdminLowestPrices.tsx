@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
     getLowestPricesProducts,
     createLowestPricesProduct,
@@ -8,39 +8,81 @@ import {
     type LowestPricesProductFormData,
 } from "../../../services/api/admin/adminLowestPricesService";
 import { getProducts, type Product } from "../../../services/api/admin/adminProductService";
+import { getHeaderCategoriesAdmin, getHeaderCategoriesPublic, type HeaderCategory } from "../../../services/api/headerCategoryService";
 
 export default function AdminLowestPrices() {
-    // Form state
+    const [headerCategorySlug, setHeaderCategorySlug] = useState("all");
+    const [headerCategories, setHeaderCategories] = useState<HeaderCategory[]>([]);
+    const [loadingHeaderCategories, setLoadingHeaderCategories] = useState(true);
     const [selectedProduct, setSelectedProduct] = useState<string>("");
     const [order, setOrder] = useState<number | undefined>(undefined);
     const [isActive, setIsActive] = useState(true);
 
-    // Data state
     const [lowestPricesProducts, setLowestPricesProducts] = useState<LowestPricesProduct[]>([]);
     const [availableProducts, setAvailableProducts] = useState<Product[]>([]);
     const [productSearchTerm, setProductSearchTerm] = useState("");
 
-    // UI state
     const [loading, setLoading] = useState(false);
     const [loadingProducts, setLoadingProducts] = useState(true);
     const [editingId, setEditingId] = useState<string | null>(null);
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
 
-    // Pagination
     const [rowsPerPage, setRowsPerPage] = useState(10);
     const [currentPage, setCurrentPage] = useState(1);
 
-    // Fetch initial data
+    const selectedHeaderCategory = useMemo(() => {
+        if (headerCategorySlug === "all") {
+            return { name: "All", slug: "all" };
+        }
+        const match = headerCategories.find((hc) => hc.slug === headerCategorySlug);
+        return match ? { name: match.name, slug: match.slug } : { name: headerCategorySlug, slug: headerCategorySlug };
+    }, [headerCategorySlug, headerCategories]);
+
+    const selectedHeaderCategoryId = useMemo(() => {
+        if (headerCategorySlug === "all") return null;
+        return headerCategories.find((hc) => hc.slug === headerCategorySlug)?._id ?? null;
+    }, [headerCategorySlug, headerCategories]);
+
     useEffect(() => {
-        fetchLowestPricesProducts();
+        fetchHeaderCategories();
         fetchAvailableProducts();
     }, []);
 
-    const fetchLowestPricesProducts = async () => {
+    const fetchHeaderCategories = async () => {
+        try {
+            setLoadingHeaderCategories(true);
+            let categories = await getHeaderCategoriesAdmin();
+            if (categories.length === 0) {
+                categories = await getHeaderCategoriesPublic();
+            }
+            setHeaderCategories(categories);
+        } catch (err) {
+            console.error("Error fetching header categories:", err);
+            try {
+                const publicCategories = await getHeaderCategoriesPublic();
+                setHeaderCategories(publicCategories);
+            } catch (publicErr) {
+                console.error("Error fetching public header categories:", publicErr);
+                setError("Failed to load header categories");
+            }
+        } finally {
+            setLoadingHeaderCategories(false);
+        }
+    };
+
+    useEffect(() => {
+        fetchLowestPricesProducts(headerCategorySlug);
+        setCurrentPage(1);
+        if (!editingId) {
+            resetFormFields();
+        }
+    }, [headerCategorySlug]);
+
+    const fetchLowestPricesProducts = async (slug: string) => {
         try {
             setLoadingProducts(true);
-            const response = await getLowestPricesProducts();
+            const response = await getLowestPricesProducts(slug);
             if (response.success && Array.isArray(response.data)) {
                 setLowestPricesProducts(response.data.filter(Boolean));
             }
@@ -64,21 +106,27 @@ export default function AdminLowestPrices() {
         }
     };
 
-    // Filter products based on search term and exclude already added products
     const filteredProducts = availableProducts.filter((product) => {
-        // Get IDs of products already in lowest prices
         const existingProductIds = lowestPricesProducts
-            .filter(lp => lp && lp.product) // Filter out null items or items with deleted products
+            .filter((lp) => lp && lp.product)
             .map((lp) =>
-                typeof lp.product === "string" ? lp.product : lp.product._id
+                typeof lp.product === "string" ? lp.product : lp.product._id,
             );
 
-        // Exclude already added products
         if (!product || existingProductIds.includes(product._id)) {
             return false;
         }
 
-        // Filter by search term
+        if (headerCategorySlug !== "all" && selectedHeaderCategoryId) {
+            const productHeaderCategoryId =
+                typeof product.headerCategoryId === "string"
+                    ? product.headerCategoryId
+                    : (product.headerCategoryId as { _id?: string } | null)?._id;
+            if (productHeaderCategoryId && productHeaderCategoryId !== selectedHeaderCategoryId) {
+                return false;
+            }
+        }
+
         if (productSearchTerm) {
             const searchLower = productSearchTerm.toLowerCase();
             return (
@@ -94,7 +142,11 @@ export default function AdminLowestPrices() {
         setError("");
         setSuccess("");
 
-        // Validation
+        if (!headerCategorySlug) {
+            setError("Please select a header category");
+            return;
+        }
+
         if (!selectedProduct) {
             setError("Please select a product");
             return;
@@ -102,6 +154,7 @@ export default function AdminLowestPrices() {
 
         const formData: LowestPricesProductFormData = {
             product: selectedProduct,
+            headerCategorySlug,
             order: order !== undefined ? order : undefined,
             isActive,
         };
@@ -114,7 +167,7 @@ export default function AdminLowestPrices() {
                 if (response.success) {
                     setSuccess("Product updated successfully!");
                     resetForm();
-                    fetchLowestPricesProducts();
+                    fetchLowestPricesProducts(headerCategorySlug);
                 } else {
                     setError(response.message || "Failed to update product");
                 }
@@ -123,8 +176,8 @@ export default function AdminLowestPrices() {
                 if (response.success) {
                     setSuccess("Product added successfully!");
                     resetForm();
-                    fetchLowestPricesProducts();
-                    fetchAvailableProducts(); // Refresh to update filtered list
+                    fetchLowestPricesProducts(headerCategorySlug);
+                    fetchAvailableProducts();
                 } else {
                     setError(response.message || "Failed to add product");
                 }
@@ -137,15 +190,16 @@ export default function AdminLowestPrices() {
     };
 
     const handleEdit = (lowestPricesProduct: LowestPricesProduct) => {
-        const productId = typeof lowestPricesProduct.product === "string"
-            ? lowestPricesProduct.product
-            : lowestPricesProduct.product?._id;
-        
+        const productId =
+            typeof lowestPricesProduct.product === "string"
+                ? lowestPricesProduct.product
+                : lowestPricesProduct.product?._id;
+
         if (!productId) {
             setError("Cannot edit: Associated product not found (it may have been deleted)");
             return;
         }
-        
+
         setSelectedProduct(productId);
         setOrder(lowestPricesProduct.order);
         setIsActive(lowestPricesProduct.isActive);
@@ -162,8 +216,8 @@ export default function AdminLowestPrices() {
             const response = await deleteLowestPricesProduct(id);
             if (response.success) {
                 setSuccess("Product removed successfully!");
-                fetchLowestPricesProducts();
-                fetchAvailableProducts(); // Refresh to update filtered list
+                fetchLowestPricesProducts(headerCategorySlug);
+                fetchAvailableProducts();
                 if (editingId === id) {
                     resetForm();
                 }
@@ -175,15 +229,18 @@ export default function AdminLowestPrices() {
         }
     };
 
-    const resetForm = () => {
+    const resetFormFields = () => {
         setSelectedProduct("");
         setOrder(undefined);
         setIsActive(true);
-        setEditingId(null);
         setProductSearchTerm("");
     };
 
-    // Pagination
+    const resetForm = () => {
+        resetFormFields();
+        setEditingId(null);
+    };
+
     const totalPages = Math.ceil(lowestPricesProducts.length / rowsPerPage);
     const startIndex = (currentPage - 1) * rowsPerPage;
     const endIndex = startIndex + rowsPerPage;
@@ -191,7 +248,6 @@ export default function AdminLowestPrices() {
 
     return (
         <div className="flex flex-col h-full bg-gray-50">
-            {/* Page Header */}
             <div className="p-6 pb-0">
                 <div className="flex justify-between items-center mb-6">
                     <h1 className="text-2xl font-semibold text-neutral-800">
@@ -206,7 +262,6 @@ export default function AdminLowestPrices() {
                 </div>
             </div>
 
-            {/* Success/Error Messages */}
             {(success || error) && (
                 <div className="px-6">
                     {success && (
@@ -222,17 +277,48 @@ export default function AdminLowestPrices() {
                 </div>
             )}
 
-            {/* Page Content */}
             <div className="flex-1 px-6 pb-6">
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
-                    {/* Left Sidebar: Add/Edit Form */}
                     <div className="bg-white rounded-lg shadow-sm border border-neutral-200 p-6 flex flex-col">
                         <h2 className="text-lg font-semibold text-neutral-800 mb-4">
                             {editingId ? "Edit Product" : "Add Product"}
                         </h2>
 
                         <div className="space-y-4 flex-1 overflow-y-auto">
-                            {/* Product Search and Select */}
+                            <div>
+                                <label className="block text-sm font-medium text-neutral-700 mb-2">
+                                    Header Category <span className="text-red-500">*</span>
+                                </label>
+                                <select
+                                    value={headerCategorySlug}
+                                    onChange={(e) => setHeaderCategorySlug(e.target.value)}
+                                    disabled={!!editingId || loadingHeaderCategories}
+                                    className="w-full px-3 py-2 border border-neutral-300 rounded bg-white focus:ring-2 focus:ring-teal-500 focus:border-teal-500 outline-none disabled:bg-neutral-100 disabled:cursor-not-allowed"
+                                    required
+                                >
+                                    <option value="all">All</option>
+                                    {headerCategories.map((hc) => (
+                                        <option key={hc._id} value={hc.slug}>
+                                            {hc.name}
+                                            {hc.status !== "Published" ? " (Unpublished)" : ""}
+                                        </option>
+                                    ))}
+                                </select>
+                                {loadingHeaderCategories && (
+                                    <p className="text-xs text-neutral-500 mt-1">Loading header categories...</p>
+                                )}
+                                {!loadingHeaderCategories && headerCategories.length === 0 && (
+                                    <p className="text-xs text-amber-600 mt-1">
+                                        No header categories found. Add them under Admin → Header Category.
+                                    </p>
+                                )}
+                                {editingId && (
+                                    <p className="text-xs text-neutral-500 mt-1">
+                                        Header category cannot be changed while editing.
+                                    </p>
+                                )}
+                            </div>
+
                             <div>
                                 <label className="block text-sm font-medium text-neutral-700 mb-2">
                                     Product <span className="text-red-500">*</span>
@@ -285,7 +371,7 @@ export default function AdminLowestPrices() {
                                                 Selected:{" "}
                                                 {
                                                     availableProducts.find(
-                                                        (p) => p._id === selectedProduct
+                                                        (p) => p._id === selectedProduct,
                                                     )?.productName
                                                 }
                                             </p>
@@ -299,7 +385,6 @@ export default function AdminLowestPrices() {
                                 )}
                             </div>
 
-                            {/* Order */}
                             <div>
                                 <label className="block text-sm font-medium text-neutral-700 mb-2">
                                     Display Order
@@ -319,7 +404,6 @@ export default function AdminLowestPrices() {
                                 </p>
                             </div>
 
-                            {/* Active Status */}
                             <div>
                                 <label className="flex items-center cursor-pointer">
                                     <input
@@ -329,13 +413,12 @@ export default function AdminLowestPrices() {
                                         className="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
                                     />
                                     <span className="ml-2 text-sm font-medium text-neutral-700">
-                                        Active (Show on home page)
+                                        Active (Show on {selectedHeaderCategory.name} page)
                                     </span>
                                 </label>
                             </div>
                         </div>
 
-                        {/* Action Buttons */}
                         <div className="mt-6 space-y-2">
                             <button
                                 onClick={handleSubmit}
@@ -363,13 +446,13 @@ export default function AdminLowestPrices() {
                         </div>
                     </div>
 
-                    {/* Right Section: View Products Table */}
                     <div className="lg:col-span-2 bg-white rounded-lg shadow-sm border border-neutral-200 flex flex-col">
                         <div className="bg-teal-600 text-white px-6 py-4 rounded-t-lg">
-                            <h2 className="text-lg font-semibold">View Products</h2>
+                            <h2 className="text-lg font-semibold">
+                                View Products — {selectedHeaderCategory.name}
+                            </h2>
                         </div>
 
-                        {/* Controls */}
                         <div className="p-4 border-b border-neutral-100">
                             <div className="flex items-center gap-2">
                                 <span className="text-sm text-neutral-600">Show</span>
@@ -386,7 +469,6 @@ export default function AdminLowestPrices() {
                             </div>
                         </div>
 
-                        {/* Table */}
                         <div className="overflow-x-auto flex-1">
                             <table className="w-full text-left border-collapse">
                                 <thead>
@@ -414,7 +496,7 @@ export default function AdminLowestPrices() {
                                                 colSpan={5}
                                                 className="p-8 text-center text-neutral-400"
                                             >
-                                                No products found. Add your first product!
+                                                No products found for {selectedHeaderCategory.name}. Add your first product!
                                             </td>
                                         </tr>
                                     ) : (
@@ -499,7 +581,6 @@ export default function AdminLowestPrices() {
                             </table>
                         </div>
 
-                        {/* Pagination */}
                         {totalPages > 1 && (
                             <div className="p-4 border-t border-neutral-100 flex justify-between items-center">
                                 <div className="text-sm text-neutral-600">
@@ -541,4 +622,3 @@ export default function AdminLowestPrices() {
         </div>
     );
 }
-

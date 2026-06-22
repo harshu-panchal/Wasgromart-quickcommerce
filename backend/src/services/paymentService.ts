@@ -373,6 +373,13 @@ const handlePaymentCaptured = async (payload: any) => {
                 paymentStatus: 'Paid',
                 paymentId: razorpayPaymentId,
             });
+
+            try {
+                const { createPendingCommissions } = await import('./commissionService');
+                await createPendingCommissions(String(payment.order));
+            } catch (commError) {
+                console.error('Failed to create pending commissions from webhook:', commError);
+            }
         }
     } catch (error) {
         console.error('Error handling payment captured:', error);

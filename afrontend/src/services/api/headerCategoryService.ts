@@ -13,16 +13,30 @@ export interface HeaderCategory {
     commissionRate?: number;
 }
 
+const normalizeHeaderCategories = (payload: unknown): HeaderCategory[] => {
+    if (Array.isArray(payload)) {
+        return payload.filter(Boolean) as HeaderCategory[];
+    }
+    if (
+        payload &&
+        typeof payload === "object" &&
+        Array.isArray((payload as { data?: unknown }).data)
+    ) {
+        return ((payload as { data: HeaderCategory[] }).data).filter(Boolean);
+    }
+    return [];
+};
+
 export const getHeaderCategoriesPublic = async (skipLoader = false): Promise<HeaderCategory[]> => {
-    const response = await api.get<HeaderCategory[]>('/header-categories', {
+    const response = await api.get<HeaderCategory[] | { data: HeaderCategory[] }>('/header-categories', {
         skipLoader
     } as any);
-    return response.data;
+    return normalizeHeaderCategories(response.data);
 };
 
 export const getHeaderCategoriesAdmin = async (): Promise<HeaderCategory[]> => {
-    const response = await api.get<HeaderCategory[]>('/header-categories/admin');
-    return response.data;
+    const response = await api.get<HeaderCategory[] | { data: HeaderCategory[] }>('/header-categories/admin');
+    return normalizeHeaderCategories(response.data);
 };
 
 export const createHeaderCategory = async (data: Partial<HeaderCategory>): Promise<HeaderCategory> => {

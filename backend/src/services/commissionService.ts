@@ -30,6 +30,9 @@ import PlatformWallet from "../models/PlatformWallet";
 const isNumber = (v: unknown): v is number =>
     typeof v === "number" && !Number.isNaN(v);
 
+export const isCodPaymentMethod = (paymentMethod?: string | null): boolean =>
+    String(paymentMethod || "").trim().toUpperCase() === "COD";
+
 export const getOrderItemCommissionRate = async (
     productId: string,
     sellerId?: string
@@ -328,6 +331,26 @@ export const createPendingCommissions = async (orderId: string) => {
  * Distribute commissions for an order (Pending -> Paid)
  */
 export const distributeCommissions = async (orderId: string) => {
+    const orderPreview = await Order.findById(orderId);
+    if (!orderPreview) {
+        throw new Error("Order not found");
+    }
+
+    if (orderPreview.status !== "Delivered") {
+        throw new Error(
+            "Commissions can only be distributed for delivered orders",
+        );
+    }
+
+    // Online orders need Pending commission rows created at payment time.
+    // Webhooks or older flows may have skipped that step — create them now.
+    if (!isCodPaymentMethod(orderPreview.paymentMethod)) {
+        const commissionCount = await Commission.countDocuments({ order: orderId });
+        if (commissionCount === 0) {
+            await createPendingCommissions(orderId);
+        }
+    }
+
     const session = await mongoose.startSession();
     session.startTransaction();
 
@@ -337,15 +360,8 @@ export const distributeCommissions = async (orderId: string) => {
             throw new Error("Order not found");
         }
 
-        // Check if order is delivered
-        if (order.status !== "Delivered") {
-            throw new Error(
-                "Commissions can only be distributed for delivered orders",
-            );
-        }
-
         // For COD orders, delegate to the specialized COD processing logic
-        if (order.paymentMethod && order.paymentMethod.toUpperCase() === "COD") {
+        if (isCodPaymentMethod(order.paymentMethod)) {
             console.log(`[Commission] Delegating COD order ${order.orderNumber} to processCODOrderDelivery`);
             // End the current session as processCODOrderDelivery might start its own
             await session.commitTransaction();
@@ -526,10 +542,7 @@ export const distributeCommissions = async (orderId: string) => {
             await session.abortTransaction();
         }
         console.error("Error distributing commissions:", error);
-        return {
-            success: false,
-            message: error.message || "Failed to distribute commissions",
-        };
+        throw error;
     } finally {
         session.endSession();
     }
@@ -909,7 +922,7 @@ export const processCODOrderDelivery = async (
             throw new Error("Order not found");
         }
 
-        if (order.paymentMethod !== "COD") {
+        if (!isCodPaymentMethod(order.paymentMethod)) {
             throw new Error("This function is only for COD orders");
         }
 

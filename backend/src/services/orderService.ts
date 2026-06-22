@@ -57,7 +57,6 @@ export const processOrderStatusTransition = async (
       break;
 
     case "Delivered":
-      // Create commissions for sellers and delivery boys
       await distributeCommissions(orderId);
       break;
   }

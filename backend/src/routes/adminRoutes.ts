@@ -365,6 +365,10 @@ router.get(
   "/lowest-prices-products",
   lowestPricesController.getLowestPricesProducts,
 );
+router.put(
+  "/lowest-prices-products/reorder",
+  lowestPricesController.reorderLowestPricesProducts,
+);
 router.get(
   "/lowest-prices-products/:id",
   lowestPricesController.getLowestPricesProductById,
@@ -380,10 +384,6 @@ router.put(
 router.delete(
   "/lowest-prices-products/:id",
   lowestPricesController.deleteLowestPricesProduct,
-);
-router.put(
-  "/lowest-prices-products/reorder",
-  lowestPricesController.reorderLowestPricesProducts,
 );
 
 // ==================== PromoStrip Routes ====================

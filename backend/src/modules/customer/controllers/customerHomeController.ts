@@ -337,6 +337,10 @@ export const getHomeContent = async (req: Request, res: Response) => {
       nearbySellerIds = [];
     }
 
+    const currentHeaderCategorySlug = (
+      (headerCategorySlug as string) || "all"
+    ).toLowerCase();
+
     // 1. Featured / Bestsellers - Get bestseller cards from admin configuration
     const bestsellerCards = await BestsellerCard.find({
       isActive: true,
@@ -407,10 +411,10 @@ export const getHomeContent = async (req: Request, res: Response) => {
       }),
     );
 
-    // 2. Lowest Prices Products - Get admin-selected products
-    // We fetch these irrespective of location radius to show preview on home page
+    // 2. Lowest Prices Products - Get admin-selected products for current header category tab
     const lowestPricesProductsQuery: any = {
       isActive: true,
+      headerCategorySlug: currentHeaderCategorySlug,
     };
 
     const lowestPricesProducts = await LowestPricesProduct.find(
@@ -743,8 +747,7 @@ export const getHomeContent = async (req: Request, res: Response) => {
     };
 
     // 10. Fetch PromoStrip for the current header category (with caching)
-    const currentHeaderCategorySlug = (headerCategorySlug as string) || "all";
-    const promoStripCacheKey = `promoStrip-${currentHeaderCategorySlug.toLowerCase()}`;
+    const promoStripCacheKey = `promoStrip-${currentHeaderCategorySlug}`;
 
     // Try to get from cache first
     let promoStrip = cache.get(promoStripCacheKey) as any;

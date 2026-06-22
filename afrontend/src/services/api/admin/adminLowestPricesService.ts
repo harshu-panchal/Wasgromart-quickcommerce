@@ -11,7 +11,9 @@ export interface LowestPricesProduct {
         discount?: number;
         status: string;
         publish: boolean;
+        headerCategoryId?: string;
     };
+    headerCategorySlug: string;
     order: number;
     isActive: boolean;
     createdAt: string;
@@ -20,6 +22,7 @@ export interface LowestPricesProduct {
 
 export interface LowestPricesProductFormData {
     product: string;
+    headerCategorySlug: string;
     order?: number;
     isActive: boolean;
 }
@@ -30,63 +33,64 @@ export interface LowestPricesProductResponse {
     data?: LowestPricesProduct | LowestPricesProduct[];
 }
 
-// Get all lowest prices products
-export const getLowestPricesProducts = async (): Promise<LowestPricesProductResponse> => {
-    const response = await api.get<LowestPricesProductResponse>("/admin/lowest-prices-products");
-    return response.data;
-};
-
-// Get single lowest prices product by ID
-export const getLowestPricesProductById = async (
-    id: string
+export const getLowestPricesProducts = async (
+    headerCategorySlug?: string,
 ): Promise<LowestPricesProductResponse> => {
     const response = await api.get<LowestPricesProductResponse>(
-        `/admin/lowest-prices-products/${id}`
+        "/admin/lowest-prices-products",
+        {
+            params: headerCategorySlug ? { headerCategorySlug } : undefined,
+        },
     );
     return response.data;
 };
 
-// Create new lowest prices product
+export const getLowestPricesProductById = async (
+    id: string,
+): Promise<LowestPricesProductResponse> => {
+    const response = await api.get<LowestPricesProductResponse>(
+        `/admin/lowest-prices-products/${id}`,
+    );
+    return response.data;
+};
+
 export const createLowestPricesProduct = async (
-    data: LowestPricesProductFormData
+    data: LowestPricesProductFormData,
 ): Promise<LowestPricesProductResponse> => {
     const response = await api.post<LowestPricesProductResponse>(
         "/admin/lowest-prices-products",
-        data
+        data,
     );
     return response.data;
 };
 
-// Update lowest prices product
 export const updateLowestPricesProduct = async (
     id: string,
-    data: Partial<LowestPricesProductFormData>
+    data: Partial<LowestPricesProductFormData>,
 ): Promise<LowestPricesProductResponse> => {
     const response = await api.put<LowestPricesProductResponse>(
         `/admin/lowest-prices-products/${id}`,
-        data
+        data,
     );
     return response.data;
 };
 
-// Delete lowest prices product
 export const deleteLowestPricesProduct = async (
-    id: string
+    id: string,
 ): Promise<LowestPricesProductResponse> => {
     const response = await api.delete<LowestPricesProductResponse>(
-        `/admin/lowest-prices-products/${id}`
+        `/admin/lowest-prices-products/${id}`,
     );
     return response.data;
 };
 
-// Reorder lowest prices products
 export const reorderLowestPricesProducts = async (
-    products: { id: string; order: number }[]
+    products: { id: string; order: number }[],
+    headerCategorySlug?: string,
 ): Promise<LowestPricesProductResponse> => {
     const response = await api.put<LowestPricesProductResponse>(
         "/admin/lowest-prices-products/reorder",
-        { products }
+        { products, headerCategorySlug },
     );
     return response.data;
 };
-

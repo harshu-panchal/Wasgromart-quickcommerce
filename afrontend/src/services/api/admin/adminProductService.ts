@@ -111,6 +111,7 @@ export interface Product {
   description?: string;
   category: string | Category;
   subcategory?: string | SubCategory;
+  headerCategoryId?: string | { _id: string };
   brand?: string | Brand;
   seller: string | { sellerName: string; storeName: string };
   mainImage?: string;
