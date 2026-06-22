@@ -57,6 +57,8 @@ export default defineConfig(({ mode }) => {
         transformMixedEsModules: true,
       },
       rollupOptions: {
+        // Lower parallelism to reduce peak RAM during build on shared hosting.
+        maxParallelFileOps: 2,
         output: {
           manualChunks: {
             'react-vendor': ['react', 'react-dom', 'react-router-dom'],
