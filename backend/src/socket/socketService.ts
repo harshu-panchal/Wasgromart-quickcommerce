@@ -8,14 +8,38 @@ import OrderItem from '../models/OrderItem';
 import DeliveryTracking from '../models/DeliveryTracking';
 import mongoose from 'mongoose';
 import { createSupportMessage } from '../modules/chat/services/supportChatService';
+import { logger } from '../utils/logger';
+import { hostingDefaults, isSharedHosting } from '../config/hosting';
 
 // In-memory cache for order destinations (lat, lng) to avoid DB reads on every update
-// Key: orderId, Value: { latitude, longitude }
-const orderDestinationsCache = new Map<string, { latitude: number; longitude: number }>();
+// Key: orderId, Value: { latitude, longitude, lastAccess }
+const orderDestinationsCache = new Map<string, { latitude: number; longitude: number; lastAccess: number }>();
 
 // Throttler for DB updates
 // Key: orderId, Value: last timestamp
 const locationUpdateThrottler = new Map<string, number>();
+
+// TTL after which idle entries are evicted (no location update for this long).
+const CACHE_TTL_MS = 2 * 60 * 60 * 1000; // 2 hours
+
+// Single periodic sweep prunes both maps. This replaces the previous pattern of
+// scheduling one setTimeout PER order (which retained a timer + closure for every
+// order ever tracked) and the throttler map that was only cleared on status change.
+const cacheSweep = setInterval(() => {
+    const now = Date.now();
+    for (const [orderId, dest] of orderDestinationsCache.entries()) {
+        if (now - dest.lastAccess > CACHE_TTL_MS) {
+            orderDestinationsCache.delete(orderId);
+        }
+    }
+    for (const [orderId, ts] of locationUpdateThrottler.entries()) {
+        if (now - ts > CACHE_TTL_MS) {
+            locationUpdateThrottler.delete(orderId);
+        }
+    }
+}, 10 * 60 * 1000); // every 10 minutes
+// Do not keep the event loop alive solely for this timer (clean shutdown).
+cacheSweep.unref();
 
 // Haversine formula to calculate distance
 const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
@@ -41,6 +65,9 @@ const calculateETA = (distanceInMeters: number): number => {
 };
 
 export const initializeSocket = (httpServer: HttpServer) => {
+    // Shared-hosting reverse proxies often drop idle WebSocket connections around
+    // 60s. Keepalive pings a bit more aggressive; disable per-message deflate to
+    // save CPU on a single shared core.
     const io = new SocketIOServer(httpServer, {
         cors: {
             origin: (origin, callback) => {
@@ -93,7 +120,7 @@ export const initializeSocket = (httpServer: HttpServer) => {
                         console.warn(`⚠️ Socket.io connection rejected from origin: ${origin}. Allowed origins: ${allAllowedOrigins.join(', ')}`);
                         console.warn(`⚠️ Normalized origin: ${normalizedOrigin}`);
                     } else {
-                        console.log(`✅ Socket.io connection allowed from origin: ${origin}`);
+                        logger.debug(`✅ Socket.io connection allowed from origin: ${origin}`);
                     }
 
                     return callback(null, isAllowed);
@@ -115,10 +142,13 @@ export const initializeSocket = (httpServer: HttpServer) => {
         },
         // Production-specific Socket.io configuration
         allowEIO3: true, // Allow Engine.IO v3 clients
-        pingTimeout: 60000, // 60 seconds
-        pingInterval: 25000, // 25 seconds
-        transports: ['websocket', 'polling'], // Allow both transports
-        upgradeTimeout: 30000, // 30 seconds for upgrade
+        pingTimeout: isSharedHosting ? 45000 : 60000,
+        pingInterval: isSharedHosting ? 20000 : 25000,
+        transports: ['websocket', 'polling'], // polling fallback when proxy blocks WS upgrade
+        upgradeTimeout: 30000,
+        perMessageDeflate: hostingDefaults.socketPerMessageDeflate,
+        // Cap how many sockets one process holds (shared hosting RAM limit).
+        maxHttpBufferSize: 1e6, // 1 MB
     });
 
     // Authentication middleware
@@ -127,13 +157,13 @@ export const initializeSocket = (httpServer: HttpServer) => {
 
         if (!token) {
             // Allow connection but mark as unauthenticated
-            console.log('⚠️ Socket connecting without token');
+            logger.debug('⚠️ Socket connecting without token');
             return next();
         }
 
         try {
             const decoded = verifyToken(token);
-            console.log('✅ Socket auth decoded:', decoded);
+            logger.debug('✅ Socket auth decoded:', decoded);
             (socket as any).user = decoded;
             next();
         } catch (error: any) {
@@ -143,7 +173,7 @@ export const initializeSocket = (httpServer: HttpServer) => {
     });
 
     io.on('connection', (socket) => {
-        console.log('✅ Socket connected:', socket.id, 'User:', (socket as any).user?.userId || 'Unauthenticated');
+        logger.debug('✅ Socket connected:', socket.id, 'User:', (socket as any).user?.userId || 'Unauthenticated');
 
         // Auto-join support rooms based on user type
         const socketUser = (socket as any).user;
@@ -273,7 +303,7 @@ export const initializeSocket = (httpServer: HttpServer) => {
                     return;
                 }
 
-                console.log(`📦 Customer ${user.userId} tracking order: ${orderId}`);
+                logger.debug(`📦 Customer ${user.userId} tracking order: ${orderId}`);
                 socket.join(`order-${orderId}`);
 
                 // Send acknowledgment
@@ -289,20 +319,20 @@ export const initializeSocket = (httpServer: HttpServer) => {
 
         // Customer unsubscribes from order tracking
         socket.on('stop-tracking', (orderId: string) => {
-            console.log(`🛑 Stopped tracking order: ${orderId}`);
+            logger.debug(`🛑 Stopped tracking order: ${orderId}`);
             socket.leave(`order-${orderId}`);
         });
 
         // Delivery partner joins their active deliveries room
         socket.on('join-delivery-room', (deliveryPartnerId: string) => {
-            console.log(`🛵 Delivery partner joined: ${deliveryPartnerId}`);
+            logger.debug(`🛵 Delivery partner joined: ${deliveryPartnerId}`);
             socket.join(`delivery-${deliveryPartnerId}`);
         });
 
         // Seller joins their notification room
         socket.on('join-seller-room', async (sellerId: string) => {
             const normalizedSellerId = String(sellerId).trim();
-            console.log(`🏪 Seller ${normalizedSellerId} joined notifications room`);
+            logger.debug(`🏪 Seller ${normalizedSellerId} joined notifications room`);
             socket.join(`seller-${normalizedSellerId}`);
 
             socket.emit('joined-seller-room', {
@@ -311,19 +341,37 @@ export const initializeSocket = (httpServer: HttpServer) => {
                 sellerId: normalizedSellerId
             });
 
-            // Check for recent (last 15 mins) pending orders to resend missed notifications
+            // Check for recent (last 15 mins) pending orders to resend missed notifications.
+            // IMPORTANT: query the Order collection first (bounded by status + time +
+            // limit) and only then load the matching OrderItems. The previous version
+            // loaded EVERY order item this seller ever had and populated each order,
+            // which under reconnect storms caused large memory/CPU spikes.
             try {
                 const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000);
-                const recentItems = await OrderItem.find({
-                    seller: new mongoose.Types.ObjectId(normalizedSellerId)
-                }).populate('order');
-                
+
+                const recentOrders = await Order.find({
+                    status: { $in: ['Received', 'Pending'] },
+                    createdAt: { $gt: fifteenMinutesAgo },
+                })
+                    .sort({ createdAt: -1 })
+                    .limit(50)
+                    .lean();
+
                 const orderMap = new Map();
-                for (const item of recentItems) {
-                    const order = item.order as any;
-                    // Only resend for orders that are still Received/Pending and recent
-                    if (order && (order.status === 'Received' || order.status === 'Pending') && new Date(order.createdAt) > fifteenMinutesAgo) {
-                        const oid = order._id.toString();
+
+                if (recentOrders.length > 0) {
+                    const orderIds = recentOrders.map((o: any) => o._id);
+                    const recentItems = await OrderItem.find({
+                        seller: new mongoose.Types.ObjectId(normalizedSellerId),
+                        order: { $in: orderIds },
+                    }).lean();
+
+                    const ordersById = new Map(recentOrders.map((o: any) => [o._id.toString(), o]));
+
+                    for (const item of recentItems) {
+                        const oid = (item.order as any).toString();
+                        const order = ordersById.get(oid);
+                        if (!order) continue;
                         if (!orderMap.has(oid)) {
                             orderMap.set(oid, { order, items: [] });
                         }
@@ -356,7 +404,7 @@ export const initializeSocket = (httpServer: HttpServer) => {
                         timestamp: order.createdAt
                     };
                     
-                    console.log(`📤 Resending missed NEW_ORDER notification to seller ${normalizedSellerId} for order ${order.orderNumber}`);
+                    logger.debug(`📤 Resending missed NEW_ORDER notification to seller ${normalizedSellerId} for order ${order.orderNumber}`);
                     socket.emit('seller-notification', notificationData);
                 }
             } catch (err) {
@@ -368,12 +416,12 @@ export const initializeSocket = (httpServer: HttpServer) => {
         socket.on('join-delivery-notifications', (deliveryBoyId: string) => {
             // Normalize deliveryBoyId to string to ensure consistent room naming
             const normalizedDeliveryBoyId = String(deliveryBoyId).trim();
-            console.log(`🔔 Delivery boy ${normalizedDeliveryBoyId} joined notifications room`);
+            logger.debug(`🔔 Delivery boy ${normalizedDeliveryBoyId} joined notifications room`);
 
             // Only join personal room (not general room) to prevent duplicate notifications
             socket.join(`delivery-${normalizedDeliveryBoyId}`);
 
-            console.log(`✅ Delivery boy ${normalizedDeliveryBoyId} joined room: delivery-${normalizedDeliveryBoyId}`);
+            logger.debug(`✅ Delivery boy ${normalizedDeliveryBoyId} joined room: delivery-${normalizedDeliveryBoyId}`);
 
             // Send confirmation that they joined successfully
             socket.emit('joined-notifications-room', {
@@ -385,7 +433,7 @@ export const initializeSocket = (httpServer: HttpServer) => {
             // Check if there are any active notifications currently waiting for this delivery boy
             const activeNotifications = getActiveNotificationsForDeliveryBoy(normalizedDeliveryBoyId);
             if (activeNotifications.length > 0) {
-                console.log(`📤 Resending ${activeNotifications.length} active notification(s) to reconnecting delivery boy ${normalizedDeliveryBoyId}`);
+                logger.debug(`📤 Resending ${activeNotifications.length} active notification(s) to reconnecting delivery boy ${normalizedDeliveryBoyId}`);
                 for (const notif of activeNotifications) {
                     socket.emit('new-order', notif);
                 }
@@ -395,7 +443,7 @@ export const initializeSocket = (httpServer: HttpServer) => {
         // Handle order acceptance
         socket.on('accept-order', async (data: { orderId: string; deliveryBoyId: string }) => {
             try {
-                console.log(`✅ Delivery boy ${data.deliveryBoyId} accepting order ${data.orderId}`);
+                logger.debug(`✅ Delivery boy ${data.deliveryBoyId} accepting order ${data.orderId}`);
                 const result = await handleOrderAcceptance(io, data.orderId, String(data.deliveryBoyId).trim());
                 socket.emit('accept-order-response', result);
             } catch (error) {
@@ -407,7 +455,7 @@ export const initializeSocket = (httpServer: HttpServer) => {
         // Handle order rejection
         socket.on('reject-order', async (data: { orderId: string; deliveryBoyId: string }) => {
             try {
-                console.log(`❌ Delivery boy ${data.deliveryBoyId} rejecting order ${data.orderId}`);
+                logger.debug(`❌ Delivery boy ${data.deliveryBoyId} rejecting order ${data.orderId}`);
                 const result = await handleOrderRejection(io, data.orderId, String(data.deliveryBoyId).trim());
                 socket.emit('reject-order-response', result);
             } catch (error) {
@@ -437,12 +485,13 @@ export const initializeSocket = (httpServer: HttpServer) => {
                 if (!destination && order.deliveryAddress) {
                     destination = {
                         latitude: order.deliveryAddress.latitude || 0,
-                        longitude: order.deliveryAddress.longitude || 0
+                        longitude: order.deliveryAddress.longitude || 0,
+                        lastAccess: Date.now(),
                     };
                     orderDestinationsCache.set(orderId, destination);
-
-                    // Clear cache after 2 hours (cleanup)
-                    setTimeout(() => orderDestinationsCache.delete(orderId), 2 * 60 * 60 * 1000);
+                } else if (destination) {
+                    // Refresh access time so active orders are not evicted by the sweep.
+                    destination.lastAccess = Date.now();
                 }
 
                 // 3. Calculate Distance & ETA
@@ -514,7 +563,7 @@ export const initializeSocket = (httpServer: HttpServer) => {
 
         // Handle disconnection
         socket.on('disconnect', (reason) => {
-            console.log('❌ Socket disconnected:', socket.id, 'Reason:', reason);
+            logger.debug('❌ Socket disconnected:', socket.id, 'Reason:', reason);
         });
 
         // Error handling
@@ -528,7 +577,7 @@ export const initializeSocket = (httpServer: HttpServer) => {
         });
     });
 
-    console.log('🔌 Socket.io initialized');
+    logger.debug('🔌 Socket.io initialized');
     return io;
 };
 
