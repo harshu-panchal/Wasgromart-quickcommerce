@@ -289,7 +289,7 @@ ProductCard.displayName = 'ProductCard';
 export default function LowestPricesEver({ activeTab = 'all', products: adminProducts }: LowestPricesEverProps) {
   const theme = getTheme(activeTab);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const { cart } = useCart();
+  const { cart, addToCart, updateQuantity } = useCart();
   const [fontLoaded, setFontLoaded] = useState(false);
 
   // Preload and wait for font to load to prevent FOUT
@@ -415,14 +415,7 @@ export default function LowestPricesEver({ activeTab = 'all', products: adminPro
 
   const discountedProducts = getFilteredProducts();
 
-  if (discountedProducts.length === 0) {
-    return null;
-  }
-
-  // Get cart functions once at parent level
-  const { addToCart, updateQuantity } = useCart();
-
-  // Memoize callbacks to prevent ProductCard re-renders
+  // Memoize callbacks to prevent ProductCard re-renders (must run before any early return)
   const handleAddToCart = useCallback((product: Product, element?: HTMLElement | null) => {
     addToCart(product, element);
   }, [addToCart]);
@@ -430,6 +423,10 @@ export default function LowestPricesEver({ activeTab = 'all', products: adminPro
   const handleUpdateQuantity = useCallback((productId: string, quantity: number) => {
     updateQuantity(productId, quantity);
   }, [updateQuantity]);
+
+  if (discountedProducts.length === 0) {
+    return null;
+  }
 
   return (
     <div
