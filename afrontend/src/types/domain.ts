@@ -16,8 +16,10 @@ export interface Product {
   smallDescription?: string;
   pack: string;
   price: number;
-  mrp?: number;
   discPrice?: number;
+  compareAtPrice?: number;
+  mrp?: number;
+  discount?: number;
   variations?: Array<{
     title?: string; // made optional as per user data which has name/value
     name?: string;

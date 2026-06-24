@@ -13,7 +13,7 @@ import Promotion from "../../../models/Promotion";
 import mongoose from "mongoose";
 import { cache } from "../../../utils/cache";
 import { findSellersWithinRange } from "../../../utils/locationHelper";
-import { withShopPresentation } from "../../../utils/productPresentation";
+import { withShopPresentation, isSellerInRange } from "../../../utils/productPresentation";
 
 interface SectionFetchOptions {
   /** Override the effective row cap (defaults to section.limit). */
@@ -67,10 +67,7 @@ function buildProductSectionQuery(section: any): any {
 }
 
 function shapeProduct(p: any, nearbySellerIds?: mongoose.Types.ObjectId[]): any {
-  const isAvailable =
-    nearbySellerIds && nearbySellerIds.length > 0 && p.seller
-      ? nearbySellerIds.some((id) => id.toString() === (p.seller?._id || p.seller).toString())
-      : false;
+  const isAvailable = isSellerInRange(p.seller, nearbySellerIds || []);
 
   const presentation = withShopPresentation(p);
 
@@ -361,12 +358,7 @@ async function fetchPromoStripForSlug(
       ...promoStrip,
       featuredProducts: promoStrip.featuredProducts
         .map((p: any) => {
-          const isAvailable =
-            nearbySellerIds.length > 0 && p.seller
-              ? nearbySellerIds.some(
-                  (id) => id.toString() === p.seller.toString()
-                )
-              : false;
+          const isAvailable = isSellerInRange(p.seller, nearbySellerIds);
           return { ...p, isAvailable };
         })
         .filter((p: any) => p.isAvailable),
@@ -539,7 +531,7 @@ export const getHomeContent = async (req: Request, res: Response) => {
       .populate({
         path: "product",
         select:
-          "productName mainImage price mrp discount status publish category subcategory seller",
+          "productName mainImage price discPrice compareAtPrice discount status publish category subcategory seller",
         populate: {
           path: "seller",
           select: "storeName sellerName",
@@ -558,15 +550,16 @@ export const getHomeContent = async (req: Request, res: Response) => {
       .filter((item: any) => item.product !== null)
       .map((item: any) => {
         const product = item.product;
-        // Check if the product's seller is within range
-        const isAvailable =
-          nearbySellerIds && nearbySellerIds.length > 0 && product.seller
-            ? nearbySellerIds.some(
-              (id) => id.toString() === product.seller.toString(),
-            )
-            : false;
+        const isAvailable = isSellerInRange(product.seller, nearbySellerIds);
 
         const productPresentation = withShopPresentation(product);
+
+        const sellingPrice =
+          product.discPrice && product.discPrice > 0
+            ? product.discPrice
+            : product.price;
+        const compareAtPrice = product.compareAtPrice || 0;
+        const hasDiscount = compareAtPrice > sellingPrice;
 
         return {
           id: product._id.toString(),
@@ -575,12 +568,16 @@ export const getHomeContent = async (req: Request, res: Response) => {
           name: product.productName,
           mainImage: product.mainImage,
           imageUrl: product.mainImage,
-          price: product.price,
-          mrp: product.mrp,
+          price: sellingPrice,
+          discPrice: product.discPrice || 0,
+          compareAtPrice,
+          mrp: hasDiscount ? compareAtPrice : undefined,
           discount:
             product.discount ||
-            (product.mrp && product.price
-              ? Math.round(((product.mrp - product.price) / product.mrp) * 100)
+            (hasDiscount
+              ? Math.round(
+                  ((compareAtPrice - sellingPrice) / compareAtPrice) * 100,
+                )
               : 0),
           categoryId: product.category?.toString() || "",
           subcategory: product.subcategory?.toString() || "",
