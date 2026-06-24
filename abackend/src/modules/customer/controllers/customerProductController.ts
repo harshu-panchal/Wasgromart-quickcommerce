@@ -4,6 +4,7 @@ import Category from "../../../models/Category";
 import SubCategory from "../../../models/SubCategory";
 import mongoose from "mongoose";
 import { findSellersWithinRange } from "../../../utils/locationHelper";
+import { withShopPresentation } from "../../../utils/productPresentation";
 
 // Get products with filtering options (public)
 export const getProducts = async (req: Request, res: Response) => {
@@ -228,7 +229,10 @@ export const getProducts = async (req: Request, res: Response) => {
       .skip(skip)
       .limit(effectiveLimit);
 
-    products = fetchedProducts.map((p: any) => ({ ...p.toObject(), isAvailable: true }));
+    products = fetchedProducts.map((p: any) => ({
+      ...withShopPresentation(p.toObject()),
+      isAvailable: true,
+    }));
 
     // --- IMPROVED DIAGNOSTICS FOR EMPTY RESULTS ---
     let extraMessage = "";
@@ -392,14 +396,19 @@ export const getProductById = async (req: Request, res: Response) => {
     const similarProducts = await Product.find(similarProductsQuery)
       .limit(6)
       .select(
-        "productName price mrp variations mainImage pack discount _id rating reviewsCount"
-      );
+        "productName price mrp variations mainImage pack discount _id rating reviewsCount seller"
+      )
+      .populate("seller", "storeName sellerName");
+
+    const productObject = withShopPresentation(product.toObject());
 
     return res.status(200).json({
       success: true,
       data: {
-        ...product.toObject(),
-        similarProducts,
+        ...productObject,
+        similarProducts: similarProducts.map((item) =>
+          withShopPresentation(item.toObject())
+        ),
         isAvailableAtLocation, // Add availability flag to response
       },
     });

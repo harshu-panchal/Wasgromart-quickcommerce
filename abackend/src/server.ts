@@ -17,6 +17,7 @@ console.log('RAZORPAY_KEY_ID exists:', !!process.env.RAZORPAY_KEY_ID);
 dns.setServers(["8.8.8.8", "8.8.4.4", "1.1.1.1"]);
 
 import express, { Application, Request, Response } from "express";
+import compression from "compression";
 import { createServer } from "http";
 import cors from "cors";
 import connectDB from "./config/db";
@@ -27,6 +28,7 @@ import { ensureDefaultAdmin } from "./utils/ensureDefaultAdmin";
 import { seedHeaderCategories } from "./utils/seedHeaderCategories";
 import { initializeSocket } from "./socket/socketService";
 import razorpayWebhookRoutes from "./webhooks/razorpay/razorpayWebhookRoutes";
+import { apiRateLimiter } from "./middleware/rateLimiter";
 import { UPLOAD_DIR, ensureUploadDir } from "./config/storage";
 
 const app: Application = express();
@@ -121,6 +123,18 @@ const corsOptions = {
 // Apply CORS middleware - This handles everything including preflight
 app.use(cors(corsOptions));
 
+// Compress JSON responses (skip webhooks — raw body already consumed)
+app.use(
+  compression({
+    filter: (req, res) => {
+      if (req.path.startsWith("/api/webhooks/")) {
+        return false;
+      }
+      return compression.filter(req, res);
+    },
+  })
+);
+
 // Capture raw body for Razorpay webhook signature verification without changing existing routes.
 app.use(
   express.json({
@@ -203,14 +217,16 @@ app.get("/debug-sockets", (req: Request, res: Response) => {
   }
 });
 
-// Debug middleware - log all incoming requests
-app.use((req: Request, _res: Response, next) => {
-  console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
-  next();
-});
+// Debug middleware — verbose logging only outside production
+if (process.env.NODE_ENV !== "production") {
+  app.use((req: Request, _res: Response, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.path}`);
+    next();
+  });
+}
 
 // API Routes
-app.use("/api/v1", routes);
+app.use("/api/v1", apiRateLimiter, routes);
 
 // Error handling middleware (must be last)
 app.use(notFound);

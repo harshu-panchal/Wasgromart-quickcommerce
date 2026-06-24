@@ -16,6 +16,7 @@ import { getProductById } from "../../services/api/customerProductService";
 import WishlistButton from "../../components/WishlistButton";
 import StarRating from "../../components/ui/StarRating";
 import { calculateProductPrice } from "../../utils/priceUtils";
+import { getProductShopName } from "../../utils/productDisplay";
 import logo from "@assets/wasgromart-black-text-removebg-preview.png";
 
 export default function ProductDetail() {
@@ -144,6 +145,7 @@ export default function ProductDetail() {
     selectedVariant?.value ||
     product?.pack ||
     "Standard";
+  const shopName = getProductShopName(product);
   const isVariantAvailable =
     selectedVariant?.status !== "Sold out" &&
     (variantStock > 0 || variantStock === 0); // 0 means unlimited
@@ -645,6 +647,12 @@ export default function ProductDetail() {
             {product.name}
           </h2>
 
+          {shopName && (
+            <p className="text-sm text-neutral-500 mt-1 mb-1 line-clamp-1">
+              Sold by {shopName}
+            </p>
+          )}
+
           {/* Variant Selection - Only show if multiple variants */}
           {product.variations && product.variations.length > 1 && (
             <div className="mb-2">
@@ -1025,8 +1033,7 @@ export default function ProductDetail() {
                           Seller:
                         </span>
                         <span className="text-xs text-neutral-600 leading-relaxed flex-1">
-                          Wasgro-mart Partner (
-                          {product.sellerId.slice(-6).toUpperCase()})
+                          {shopName || `Wasgro-mart Partner (${product.sellerId.slice(-6).toUpperCase()})`}
                         </span>
                       </div>
                     )}
@@ -1178,6 +1185,11 @@ export default function ProductDetail() {
                         <h4 className="text-sm font-semibold text-neutral-900 mb-1 line-clamp-2 min-h-[2.5rem]">
                           {similarProduct.name || similarProduct.productName}
                         </h4>
+                        {getProductShopName(similarProduct) && (
+                          <p className="text-[10px] text-neutral-500 mb-1 line-clamp-1">
+                            {getProductShopName(similarProduct)}
+                          </p>
+                        )}
 
                         {/* Rating and Delivery time */}
                         <div className="flex flex-col gap-1 mb-2">

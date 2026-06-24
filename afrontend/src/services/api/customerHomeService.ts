@@ -89,6 +89,45 @@ export const getHomeContent = async (
   return fetchFn();
 };
 
+export interface HomePromoStripResponse {
+  success: boolean;
+  data: {
+    promoStrip: any | null;
+  };
+}
+
+/** Lightweight promo strip fetch — avoids loading the full home payload per tab. */
+export const getHomePromoStrip = async (
+  headerCategorySlug?: string,
+  latitude?: number,
+  longitude?: number,
+  useCache: boolean = true,
+  cacheTTL: number = 5 * 60 * 1000,
+): Promise<HomePromoStripResponse> => {
+  const cacheKey = `home-promo-strip-${headerCategorySlug || "all"}-${latitude || 0}-${longitude || 0}`;
+
+  const fetchFn = async () => {
+    const params: Record<string, string | number> = headerCategorySlug
+      ? { headerCategorySlug }
+      : {};
+    if (latitude !== undefined && longitude !== undefined) {
+      params.latitude = latitude;
+      params.longitude = longitude;
+    }
+    const response = await api.get<HomePromoStripResponse>(
+      "/customer/home/promo-strip",
+      { params, skipLoader: true } as any,
+    );
+    return response.data;
+  };
+
+  if (useCache) {
+    return apiCache.getOrFetch(cacheKey, fetchFn, cacheTTL);
+  }
+
+  return fetchFn();
+};
+
 export interface HomeSectionsResponse {
   success: boolean;
   data: {

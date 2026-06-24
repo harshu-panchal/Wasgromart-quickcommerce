@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { getTheme } from "../../../utils/themes";
 import { useLocation } from "../../../hooks/useLocation";
-import { getHomeContent } from "../../../services/api/customerHomeService";
+import { getHomePromoStrip } from "../../../services/api/customerHomeService";
 import { getSubcategories } from "../../../services/api/categoryService";
 import { calculateProductPrice } from "../../../utils/priceUtils";
+import { getProductShopName } from "../../../utils/productDisplay";
 
 interface PromoSectionProps {
   activeTab?: string;
@@ -28,6 +29,7 @@ interface FeaturedProduct {
   mrp: number;
   price: number;
   discount: number;
+  shopName?: string;
 }
 
 const formatDateShort = (d: Date) =>
@@ -97,7 +99,7 @@ export default function PromoSection({ activeTab = "all" }: PromoSectionProps) {
     const run = async () => {
       setLoading(true);
       try {
-        const response = await getHomeContent(
+        const response = await getHomePromoStrip(
           activeTab,
           location?.latitude,
           location?.longitude,
@@ -172,6 +174,7 @@ export default function PromoSection({ activeTab = "all" }: PromoSectionProps) {
                 mrp: Number.isFinite(mrp) ? mrp : 0,
                 price: Number.isFinite(displayPrice) ? displayPrice : 0,
                 discount: Number.isFinite(discount) ? discount : 0,
+                shopName: getProductShopName(product) || undefined,
               };
             })
             .filter(Boolean) as FeaturedProduct[];
@@ -491,6 +494,11 @@ export default function PromoSection({ activeTab = "all" }: PromoSectionProps) {
                     <p className="text-xs md:text-sm font-semibold text-neutral-900 line-clamp-2 min-h-[2.2em]">
                       {p.name}
                     </p>
+                    {p.shopName && (
+                      <p className="text-[10px] text-neutral-500 line-clamp-1 mt-0.5">
+                        {p.shopName}
+                      </p>
+                    )}
                     <div className="mt-1.5 flex items-baseline gap-1.5">
                       <span className="text-base md:text-lg font-black text-red-600">
                         ₹{Math.round(p.price)}

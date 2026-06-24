@@ -12,6 +12,7 @@ interface CacheEntry<T> {
 class Cache {
   private cache: Map<string, CacheEntry<any>> = new Map();
   private readonly DEFAULT_TTL = 5 * 60 * 1000; // 5 minutes default
+  private readonly MAX_ENTRIES = 2000;
 
   /**
    * Get cached data
@@ -28,10 +29,29 @@ class Cache {
     return entry.data as T;
   }
 
+  has(key: string): boolean {
+    const entry = this.cache.get(key);
+    if (!entry) return false;
+
+    if (Date.now() >= entry.expiresAt) {
+      this.cache.delete(key);
+      return false;
+    }
+
+    return true;
+  }
+
   /**
    * Set cache data
    */
   set<T>(key: string, data: T, ttl: number = this.DEFAULT_TTL): void {
+    if (this.cache.size >= this.MAX_ENTRIES && !this.cache.has(key)) {
+      const oldestKey = this.cache.keys().next().value;
+      if (oldestKey) {
+        this.cache.delete(oldestKey);
+      }
+    }
+
     this.cache.set(key, {
       data,
       timestamp: Date.now(),

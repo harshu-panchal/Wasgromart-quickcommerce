@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react';
 import { getProducts } from '../../services/api/customerProductService';
 import WishlistButton from '../../components/WishlistButton';
 import { calculateProductPrice } from '../../utils/priceUtils';
+import { getProductShopName } from '../../utils/productDisplay';
 
 export default function FashionStore() {
   const navigate = useNavigate();
@@ -146,6 +147,11 @@ export default function FashionStore() {
                         {product.name}
                       </h3>
                     </Link>
+                    {getProductShopName(product) && (
+                      <p className="text-[8px] text-neutral-500 line-clamp-1 mb-0.5">
+                        {getProductShopName(product)}
+                      </p>
+                    )}
 
                     <div className="flex items-center gap-0.5 mb-0.5">
                       <div className="flex items-center">

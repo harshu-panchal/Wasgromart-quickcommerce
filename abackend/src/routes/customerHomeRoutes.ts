@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   getHomeContent,
+  getHomePromoStrip,
   getHomeSections,
   getHomeSectionProducts,
   getStoreProducts,
@@ -9,6 +10,7 @@ import {
 const router = Router();
 
 // Public routes
+router.get("/promo-strip", getHomePromoStrip);
 router.get("/", getHomeContent);
 // Paginated home sections (chunked loading on scroll)
 router.get("/sections", getHomeSections);

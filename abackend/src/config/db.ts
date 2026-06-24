@@ -69,6 +69,9 @@ const connectDB = async (): Promise<void> => {
       serverSelectionTimeoutMS: 10000,
       socketTimeoutMS: 45000,
       family: 4,
+      maxPoolSize: parseInt(process.env.MONGODB_MAX_POOL_SIZE || "50", 10),
+      minPoolSize: parseInt(process.env.MONGODB_MIN_POOL_SIZE || "5", 10),
+      maxIdleTimeMS: 30000,
     });
 
     console.log('\n\x1b[32m✓\x1b[0m \x1b[1mMongoDB Connected Successfully\x1b[0m');

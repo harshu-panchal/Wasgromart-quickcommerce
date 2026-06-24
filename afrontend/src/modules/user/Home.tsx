@@ -32,6 +32,9 @@ const PRODUCTS_PER_SECTION = 6;
 // items from the end of the currently-loaded list. With `SECTIONS_PAGE_SIZE: 5`
 // and `LOAD_MORE_TRIGGER_OFFSET: 3` the trigger lives on the 3rd section.
 const LOAD_MORE_TRIGGER_OFFSET = 3;
+// Idle prefetch: at most 2 other tabs (not the full category list).
+const IDLE_PREFETCH_CATEGORY_LIMIT = 2;
+const IDLE_PREFETCH_DELAY_MS = 4000;
 
 export default function Home() {
   const navigate = useNavigate();
@@ -113,48 +116,64 @@ export default function Home() {
 
     fetchData();
 
-    // Preload PromoSection data for other header categories in the background
-    // so tab switches feel instant. We use the same chunked params so the
-    // cache key matches what the home page actually consumes.
-    const preloadHeaderCategories = async () => {
-      try {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-        const headerCategories = await getHeaderCategoriesPublic(true);
-        const slugsToPreload = [
-          "all",
-          ...headerCategories.map((cat) => cat.slug),
-        ];
-        const batchSize = 2;
-        for (let i = 0; i < slugsToPreload.length; i += batchSize) {
-          const batch = slugsToPreload.slice(i, i + batchSize);
-          await Promise.all(
-            batch.map((slug) =>
-              getHomeContent(
-                slug,
-                location?.latitude,
-                location?.longitude,
-                true,
-                5 * 60 * 1000,
-                true,
-                {
-                  sectionsLimit: SECTIONS_PAGE_SIZE,
-                  productsPerSection: PRODUCTS_PER_SECTION,
-                },
-              ).catch((err) => {
-                console.debug(`Failed to preload data for ${slug}:`, err);
-              }),
-            ),
-          );
-          if (i + batchSize < slugsToPreload.length) {
-            await new Promise((resolve) => setTimeout(resolve, 200));
+    // Prefetch a couple of other header tabs when the browser is idle.
+    // Avoids the old behaviour of firing ~8 full home API calls per visit.
+    let prefetchCancelled = false;
+    const scheduleIdlePrefetch = () => {
+      const runPrefetch = async () => {
+        if (prefetchCancelled) return;
+        try {
+          const headerCategories = await getHeaderCategoriesPublic(true);
+          const slugsToPreload = headerCategories
+            .map((cat) => cat.slug)
+            .filter((slug) => slug && slug !== activeTab)
+            .slice(0, IDLE_PREFETCH_CATEGORY_LIMIT);
+
+          for (const slug of slugsToPreload) {
+            if (prefetchCancelled) return;
+            await getHomeContent(
+              slug,
+              location?.latitude,
+              location?.longitude,
+              true,
+              5 * 60 * 1000,
+              true,
+              {
+                sectionsLimit: SECTIONS_PAGE_SIZE,
+                productsPerSection: PRODUCTS_PER_SECTION,
+              },
+            ).catch((err) => {
+              console.debug(`Failed to prefetch home data for ${slug}:`, err);
+            });
           }
+        } catch (err) {
+          console.debug("Failed to prefetch header categories:", err);
         }
-      } catch (err) {
-        console.debug("Failed to preload header categories:", err);
+      };
+
+      const startPrefetch = () => {
+        window.setTimeout(runPrefetch, IDLE_PREFETCH_DELAY_MS);
+      };
+
+      if ("requestIdleCallback" in window) {
+        (
+          window as Window & {
+            requestIdleCallback: (
+              cb: () => void,
+              opts?: { timeout: number },
+            ) => number;
+          }
+        ).requestIdleCallback(startPrefetch, { timeout: 8000 });
+      } else {
+        startPrefetch();
       }
     };
 
-    preloadHeaderCategories();
+    scheduleIdlePrefetch();
+
+    return () => {
+      prefetchCancelled = true;
+    };
   }, [location?.latitude, location?.longitude, activeTab]);
 
   // Load the next page of sections. Triggered both by the IntersectionObserver

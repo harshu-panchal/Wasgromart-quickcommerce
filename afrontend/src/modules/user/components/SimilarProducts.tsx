@@ -1,6 +1,7 @@
 import { Product } from '../../../types/domain';
 import { useNavigate } from 'react-router-dom';
 import { calculateProductPrice } from '../../../utils/priceUtils';
+import { getProductShopName } from '../../../utils/productDisplay';
 
 interface SimilarProductsProps {
   products: Product[];
@@ -56,6 +57,9 @@ export default function SimilarProducts({ products, currentProductId }: SimilarP
                   <h4 className="text-xs font-semibold text-neutral-900 line-clamp-2 mb-1 min-h-[2rem]">
                     {product.name}
                   </h4>
+                  {getProductShopName(product) && (
+                    <p className="text-[9px] text-neutral-500 line-clamp-1 mb-1">{getProductShopName(product)}</p>
+                  )}
                   <div className="flex items-center gap-1">
                     <span className="text-sm font-bold text-neutral-900">₹{displayPrice.toLocaleString('en-IN')}</span>
                     {hasDiscount && (

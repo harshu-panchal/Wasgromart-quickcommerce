@@ -13,6 +13,7 @@ import Promotion from "../../../models/Promotion";
 import mongoose from "mongoose";
 import { cache } from "../../../utils/cache";
 import { findSellersWithinRange } from "../../../utils/locationHelper";
+import { withShopPresentation } from "../../../utils/productPresentation";
 
 interface SectionFetchOptions {
   /** Override the effective row cap (defaults to section.limit). */
@@ -68,8 +69,10 @@ function buildProductSectionQuery(section: any): any {
 function shapeProduct(p: any, nearbySellerIds?: mongoose.Types.ObjectId[]): any {
   const isAvailable =
     nearbySellerIds && nearbySellerIds.length > 0 && p.seller
-      ? nearbySellerIds.some((id) => id.toString() === p.seller.toString())
+      ? nearbySellerIds.some((id) => id.toString() === (p.seller?._id || p.seller).toString())
       : false;
+
+  const presentation = withShopPresentation(p);
 
   return {
     id: p._id.toString(),
@@ -79,6 +82,7 @@ function shapeProduct(p: any, nearbySellerIds?: mongoose.Types.ObjectId[]): any 
     image: p.mainImage,
     mainImage: p.mainImage,
     price: p.price,
+    mrp: p.mrp,
     discount:
       p.discount ||
       (p.mrp && p.price
@@ -92,6 +96,8 @@ function shapeProduct(p: any, nearbySellerIds?: mongoose.Types.ObjectId[]): any 
     type: "product",
     isAvailable,
     seller: p.seller,
+    shopName: presentation.shopName,
+    storeName: presentation.storeName,
   };
 }
 
@@ -220,6 +226,7 @@ async function fetchSectionData(
           .skip(skip)
           .limit(effectiveLimit)
           .select(selectFields)
+          .populate("seller", "storeName sellerName")
           .lean();
       } else {
         total = 0;
@@ -305,6 +312,106 @@ async function buildHomeSectionQuery(
   return homeSectionQuery;
 }
 
+const HOME_CONTENT_CACHE_TTL = 2 * 60 * 1000;
+
+function roundCoord(value: number | null, precision = 2): number {
+  if (value === null || isNaN(value)) return 0;
+  const factor = 10 ** precision;
+  return Math.round(value * factor) / factor;
+}
+
+function buildHomeContentCacheKey(
+  slug: string,
+  userLat: number | null,
+  userLng: number | null,
+  sectionsLimit: number,
+  productsPerSection: number
+): string {
+  return `home-content-${slug}-${roundCoord(userLat)}-${roundCoord(userLng)}-${sectionsLimit}-${productsPerSection}`;
+}
+
+async function fetchPromoStripForSlug(
+  slug: string,
+  nearbySellerIds: mongoose.Types.ObjectId[]
+): Promise<any | null> {
+  const promoStripCacheKey = `promoStrip-${slug}`;
+  if (cache.has(promoStripCacheKey)) {
+    return cache.get(promoStripCacheKey);
+  }
+
+  const now = new Date();
+  const promoStripDoc = await PromoStrip.findOne({
+    headerCategorySlug: slug,
+    isActive: true,
+    startDate: { $lte: now },
+    endDate: { $gte: now },
+  })
+    .populate("categoryCards.categoryId", "name slug image")
+    .populate(
+      "featuredProducts",
+      "productName mainImage mainImageUrl galleryImageUrls galleryImages price mrp compareAtPrice discount rating reviewsCount seller"
+    )
+    .sort({ order: 1 })
+    .lean();
+
+  let promoStrip: any = promoStripDoc;
+
+  if (promoStrip?.featuredProducts) {
+    promoStrip = {
+      ...promoStrip,
+      featuredProducts: promoStrip.featuredProducts
+        .map((p: any) => {
+          const isAvailable =
+            nearbySellerIds.length > 0 && p.seller
+              ? nearbySellerIds.some(
+                  (id) => id.toString() === p.seller.toString()
+                )
+              : false;
+          return { ...p, isAvailable };
+        })
+        .filter((p: any) => p.isAvailable),
+    };
+  }
+
+  if (promoStrip) {
+    cache.set(promoStripCacheKey, promoStrip, 3 * 60 * 1000);
+  } else {
+    cache.set(promoStripCacheKey, null, 60 * 1000);
+  }
+
+  return promoStrip;
+}
+
+// Lightweight promo strip for tab switches (avoids full home payload)
+export const getHomePromoStrip = async (req: Request, res: Response) => {
+  try {
+    const { headerCategorySlug, latitude, longitude } = req.query;
+    const userLat = latitude ? parseFloat(latitude as string) : null;
+    const userLng = longitude ? parseFloat(longitude as string) : null;
+    const slug = ((headerCategorySlug as string) || "all").toLowerCase();
+
+    let nearbySellerIds: mongoose.Types.ObjectId[] = [];
+    if (userLat !== null && userLng !== null && !isNaN(userLat) && !isNaN(userLng)) {
+      nearbySellerIds = await findSellersWithinRange(userLat, userLng);
+    }
+
+    const promoStrip = await fetchPromoStripForSlug(slug, nearbySellerIds);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        promoStrip: promoStrip || null,
+      },
+    });
+  } catch (error: any) {
+    res.status(500).json({
+      success: false,
+      message: "Error fetching promo strip",
+      error: error.message,
+    });
+  }
+};
+
 // Get Home Page Content
 export const getHomeContent = async (req: Request, res: Response) => {
   const {
@@ -324,22 +431,31 @@ export const getHomeContent = async (req: Request, res: Response) => {
     parseInt(String(productsPerSection ?? "0"), 10) || 0,
   );
 
+  const currentHeaderCategorySlug = (
+    (headerCategorySlug as string) || "all"
+  ).toLowerCase();
+
+  const userLat = latitude ? parseFloat(latitude as string) : null;
+  const userLng = longitude ? parseFloat(longitude as string) : null;
+
+  const homeCacheKey = buildHomeContentCacheKey(
+    currentHeaderCategorySlug,
+    userLat,
+    userLng,
+    parsedSectionsLimit,
+    parsedProductsPerSection
+  );
+  const cachedHome = cache.get<any>(homeCacheKey);
+  if (cachedHome) {
+    return res.status(200).json(cachedHome);
+  }
+
   try {
     // Find sellers within user's location range
-    const userLat = latitude ? parseFloat(latitude as string) : null;
-    const userLng = longitude ? parseFloat(longitude as string) : null;
-
     let nearbySellerIds: mongoose.Types.ObjectId[] = [];
-    if (userLat !== null && userLng !== null) {
+    if (userLat !== null && userLng !== null && !isNaN(userLat) && !isNaN(userLng)) {
       nearbySellerIds = await findSellersWithinRange(userLat, userLng);
-    } else {
-      // If no location provided, return empty sellers list to enforce filtering
-      nearbySellerIds = [];
     }
-
-    const currentHeaderCategorySlug = (
-      (headerCategorySlug as string) || "all"
-    ).toLowerCase();
 
     // 1. Featured / Bestsellers - Get bestseller cards from admin configuration
     const bestsellerCards = await BestsellerCard.find({
@@ -424,6 +540,10 @@ export const getHomeContent = async (req: Request, res: Response) => {
         path: "product",
         select:
           "productName mainImage price mrp discount status publish category subcategory seller",
+        populate: {
+          path: "seller",
+          select: "storeName sellerName",
+        },
         match: {
           status: "Active",
           publish: true,
@@ -446,6 +566,8 @@ export const getHomeContent = async (req: Request, res: Response) => {
             )
             : false;
 
+        const productPresentation = withShopPresentation(product);
+
         return {
           id: product._id.toString(),
           _id: product._id.toString(),
@@ -454,7 +576,7 @@ export const getHomeContent = async (req: Request, res: Response) => {
           mainImage: product.mainImage,
           imageUrl: product.mainImage,
           price: product.price,
-          mrp: product.mrp || product.price,
+          mrp: product.mrp,
           discount:
             product.discount ||
             (product.mrp && product.price
@@ -466,6 +588,8 @@ export const getHomeContent = async (req: Request, res: Response) => {
           publish: product.publish,
           isAvailable,
           seller: product.seller,
+          shopName: productPresentation.shopName,
+          storeName: productPresentation.storeName,
         };
       })
       .filter((p: any) => p.isAvailable); // ONLY show products in customer location radius!
@@ -747,54 +871,10 @@ export const getHomeContent = async (req: Request, res: Response) => {
     };
 
     // 10. Fetch PromoStrip for the current header category (with caching)
-    const promoStripCacheKey = `promoStrip-${currentHeaderCategorySlug}`;
-
-    // Try to get from cache first
-    let promoStrip = cache.get(promoStripCacheKey) as any;
-
-    if (!promoStrip) {
-      const now = new Date();
-      const promoStripDoc = await PromoStrip.findOne({
-        headerCategorySlug: currentHeaderCategorySlug.toLowerCase(),
-        isActive: true,
-        startDate: { $lte: now },
-        endDate: { $gte: now },
-      })
-        .populate("categoryCards.categoryId", "name slug image")
-        .populate(
-          "featuredProducts",
-          "productName mainImage mainImageUrl galleryImageUrls galleryImages price mrp compareAtPrice discount rating reviewsCount seller",
-        )
-        .sort({ order: 1 })
-        .lean();
-
-      promoStrip = promoStripDoc;
-
-      // If we have promoStrip, filter featured products to only those available at customer location
-      if (promoStrip && (promoStrip as any).featuredProducts) {
-        (promoStrip as any).featuredProducts = (
-          promoStrip as any
-        ).featuredProducts
-          .map((p: any) => {
-            const isAvailable =
-              nearbySellerIds && nearbySellerIds.length > 0 && p.seller
-                ? nearbySellerIds.some(
-                  (id) => id.toString() === p.seller.toString(),
-                )
-                : false;
-            return { ...p, isAvailable };
-          })
-          .filter((p: any) => p.isAvailable); // ONLY show products in customer location radius!
-      }
-
-      // Cache for 3 minutes (PromoStrip data doesn't change frequently)
-      if (promoStrip) {
-        cache.set(promoStripCacheKey, promoStrip, 3 * 60 * 1000);
-      } else {
-        // Cache null result for 1 minute to prevent repeated DB queries
-        cache.set(promoStripCacheKey, null, 60 * 1000);
-      }
-    }
+    const promoStrip = await fetchPromoStripForSlug(
+      currentHeaderCategorySlug,
+      nearbySellerIds
+    );
 
     // Fetch admin banners
     const banners = await Banner.find({ isActive: true })
@@ -824,13 +904,12 @@ export const getHomeContent = async (req: Request, res: Response) => {
       return orderA - orderB;
     });
 
-    res.status(200).json({
+    const responsePayload = {
       success: true,
       data: {
         bestsellers,
-        lowestPrices: validLowestPricesProducts, // Admin-selected products for LowestPricesEver section
+        lowestPrices: validLowestPricesProducts,
         categories,
-        // Dynamic sections created by admin
         homeSections: filteredDynamicSections,
         homeSectionsPagination,
         shops: validShops,
@@ -859,10 +938,13 @@ export const getHomeContent = async (req: Request, res: Response) => {
             ],
         trending,
         cookingIdeas,
-        promoCards: finalPromoCards, // Return dynamic or fallback cards
-        promoStrip: promoStrip || null, // PromoStrip data for the current header category
+        promoCards: finalPromoCards,
+        promoStrip: promoStrip || null,
       },
-    });
+    };
+
+    cache.set(homeCacheKey, responsePayload, HOME_CONTENT_CACHE_TTL);
+    res.status(200).json(responsePayload);
   } catch (error: any) {
     res.status(500).json({
       success: false,

@@ -6,6 +6,7 @@ import { useWishlistContext } from '../../context/WishlistContext';
 import Button from '../../components/ui/button';
 import { motion } from 'framer-motion';
 import { calculateProductPrice } from '../../utils/priceUtils';
+import { getProductShopName } from '../../utils/productDisplay';
 
 export default function Wishlist() {
   const navigate = useNavigate();
@@ -74,6 +75,9 @@ export default function Wishlist() {
 
                 <div className="p-3 flex-1 flex flex-col">
                   <h3 className="text-sm font-bold text-neutral-900 line-clamp-2 mb-1">{product.name}</h3>
+                  {getProductShopName(product) && (
+                    <p className="text-[10px] text-neutral-500 line-clamp-1 mb-1">{getProductShopName(product)}</p>
+                  )}
                   <div className="text-[10px] text-neutral-500 mb-2">{product.pack}</div>
                   <div className="mt-auto flex flex-col gap-2">
                     {(() => {

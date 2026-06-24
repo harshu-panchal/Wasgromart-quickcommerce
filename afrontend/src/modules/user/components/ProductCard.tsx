@@ -8,6 +8,7 @@ import Button from '../../../components/ui/button';
 import Badge from '../../../components/ui/badge';
 import StarRating from '../../../components/ui/StarRating';
 import { calculateProductPrice } from '../../../utils/priceUtils';
+import { getProductShopName } from '../../../utils/productDisplay';
 import ProductImageCarousel from './ProductImageCarousel';
 
 interface ProductCardProps {
@@ -55,6 +56,7 @@ export default function ProductCard({
 
   // Get Price and MRP using utility
   const { displayPrice, mrp, discount } = calculateProductPrice(product);
+  const shopName = getProductShopName(product);
 
   const handleCardClick = () => {
     navigate(`/product/${((product as any).id || product._id) as string}`);
@@ -298,6 +300,12 @@ export default function ProductCard({
                 {product.name || product.productName || ''}
               </h3>
 
+              {shopName && (
+                <p className="text-[9px] text-neutral-500 mb-0.5 line-clamp-1 leading-tight">
+                  {shopName}
+                </p>
+              )}
+
               {/* 2.5. Rating */}
               <div className="mb-0.5">
                 <StarRating
@@ -350,6 +358,12 @@ export default function ProductCard({
               <h3 className={`${compact ? 'text-xs md:text-sm' : 'text-sm md:text-base'} font-semibold text-neutral-900 ${compact ? 'mb-1' : 'mb-2'} line-clamp-2 ${compact ? 'min-h-[2rem]' : 'min-h-[2.5rem]'}`}>
                 {product.name || product.productName || ''}
               </h3>
+
+              {shopName && (
+                <p className={`${compact ? 'text-[10px] mb-1' : 'text-xs mb-2'} text-neutral-500 line-clamp-1`}>
+                  {shopName}
+                </p>
+              )}
 
               {/* Always show rating */}
               <div className={`${compact ? 'mb-1' : 'mb-2'}`}>

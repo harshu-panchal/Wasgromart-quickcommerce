@@ -8,6 +8,7 @@ import { useCart } from '../../../context/CartContext';
 import { Product } from '../../../types/domain';
 import { useWishlist } from '../../../hooks/useWishlist';
 import { calculateProductPrice } from '../../../utils/priceUtils';
+import { getProductShopName } from '../../../utils/productDisplay';
 import ProductImageCarousel from './ProductImageCarousel';
 
 interface LowestPricesEverProps {
@@ -39,6 +40,8 @@ const ProductCard = memo(({
 
   // Get Price and MRP using utility
   const { displayPrice, mrp, discount, hasDiscount } = calculateProductPrice(product);
+  const shopName = getProductShopName(product);
+  const showMrp = mrp > displayPrice;
 
   // Use cartQuantity from props
   const inCartQty = cartQuantity;
@@ -211,6 +214,11 @@ const ProductCard = memo(({
             <h3 className="text-[10px] font-bold text-neutral-900 line-clamp-2 leading-tight min-h-[2rem] max-h-[2rem] overflow-hidden" title={productName}>
               {displayName}
             </h3>
+            {shopName && (
+              <p className="text-[8px] text-neutral-500 line-clamp-1 mt-0.5" title={shopName}>
+                {shopName}
+              </p>
+            )}
           </div>
 
           {/* Rating and Reviews */}
@@ -246,11 +254,11 @@ const ProductCard = memo(({
 
           {/* Price */}
           <div className="mb-1">
-            <div className="flex items-baseline gap-1">
+            <div className="flex items-baseline gap-1 flex-wrap">
               <span className="text-[13px] font-bold text-neutral-900">
                 ₹{displayPrice.toLocaleString('en-IN')}
               </span>
-              {hasDiscount && (
+              {showMrp && (
                 <span className="text-[10px] text-neutral-400 line-through">
                   ₹{mrp.toLocaleString('en-IN')}
                 </span>
@@ -348,7 +356,7 @@ export default function LowestPricesEver({ activeTab = 'all', products: adminPro
           id: p._id || p.id || p.id,
           name: productName,
           imageUrl: p.mainImage || p.imageUrl || p.mainImage,
-          mrp: p.mrp || p.price,
+          mrp: p.mrp,
           pack: packValue
         };
       });
@@ -374,7 +382,7 @@ export default function LowestPricesEver({ activeTab = 'all', products: adminPro
                 id: p._id || p.id,
                 name: productName,
                 imageUrl: p.mainImage || p.imageUrl,
-                mrp: p.mrp || p.price,
+                mrp: p.mrp,
                 pack: packValue
               };
             });

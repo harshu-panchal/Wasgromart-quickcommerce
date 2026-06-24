@@ -4,6 +4,9 @@ import { getOrderDetails, updateOrderStatus, getSellerLocationsForOrder, sendDel
 import deliveryIcon from '@assets/deliveryboy/deliveryIcon.png';
 import GoogleMapsTracking from '../../../components/GoogleMapsTracking';
 
+/** Poll interval while a delivery is active (reduces API load vs 4s). */
+const ACTIVE_DELIVERY_POLL_MS = 8000;
+
 // Helper to get delivery icon URL
 const getDeliveryIconUrl = () => {
     return deliveryIcon;
@@ -243,7 +246,7 @@ export default function DeliveryOrderDetail() {
 
         if (sellerLocations.length > 0 && deliveryBoyLocation) {
             checkSellersProximity();
-            const interval = setInterval(checkSellersProximity, 4000); // Check every 4 seconds
+            const interval = setInterval(checkSellersProximity, ACTIVE_DELIVERY_POLL_MS);
             return () => clearInterval(interval);
         }
     }, [id, deliveryBoyLocation, sellerLocations, order?.status]);
@@ -270,7 +273,7 @@ export default function DeliveryOrderDetail() {
 
         if (deliveryBoyLocation && order?.status === 'Out for Delivery') {
             checkCustomerProx();
-            const interval = setInterval(checkCustomerProx, 4000); // Check every 4 seconds
+            const interval = setInterval(checkCustomerProx, ACTIVE_DELIVERY_POLL_MS);
             return () => clearInterval(interval);
         }
     }, [id, deliveryBoyLocation, order?.status]);
@@ -460,8 +463,7 @@ export default function DeliveryOrderDetail() {
             // Initial update
             updateLocation();
 
-            // Interval (4 seconds)
-            locationIntervalRef.current = setInterval(updateLocation, 4000);
+            locationIntervalRef.current = setInterval(updateLocation, ACTIVE_DELIVERY_POLL_MS);
 
             return () => {
                 if (locationIntervalRef.current) {

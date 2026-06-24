@@ -7,6 +7,7 @@ import { useCart } from '../../context/CartContext';
 import { getProducts } from '../../services/api/customerProductService';
 import WishlistButton from '../../components/WishlistButton';
 import { calculateProductPrice } from '../../utils/priceUtils';
+import { getProductShopName } from '../../utils/productDisplay';
 
 const formatDate = (dateString: string) => {
   const date = new Date(dateString);
@@ -338,6 +339,11 @@ export default function OrderAgain() {
                         })()}
                       </h3>
                     </div>
+                    {getProductShopName(product) && (
+                      <p className="text-[8px] text-neutral-500 line-clamp-1 mb-0.5">
+                        {getProductShopName(product)}
+                      </p>
+                    )}
 
                     {/* Rating and Reviews */}
                     <div className="flex items-center gap-0.5 mb-0.5">

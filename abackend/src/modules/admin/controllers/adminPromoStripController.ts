@@ -101,6 +101,7 @@ export const createPromoStrip = asyncHandler(async (req: Request, res: Response)
 
   // Invalidate cache for this header category slug
   cache.delete(`promoStrip-${headerCategorySlug.toLowerCase()}`);
+  cache.invalidatePattern(/^home-content-/);
 
   return res.status(201).json({
     success: true,
@@ -265,6 +266,7 @@ export const updatePromoStrip = asyncHandler(async (req: Request, res: Response)
 
   // Invalidate cache for this header category slug
   cache.delete(`promoStrip-${promoStrip.headerCategorySlug.toLowerCase()}`);
+  cache.invalidatePattern(/^home-content-/);
 
   return res.status(200).json({
     success: true,
@@ -289,6 +291,7 @@ export const deletePromoStrip = asyncHandler(async (req: Request, res: Response)
 
   // Invalidate cache for this header category slug
   cache.delete(`promoStrip-${promoStrip.headerCategorySlug.toLowerCase()}`);
+  cache.invalidatePattern(/^home-content-/);
 
   return res.status(200).json({
     success: true,
