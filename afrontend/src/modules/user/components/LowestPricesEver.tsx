@@ -7,7 +7,6 @@ import { getTheme } from '../../../utils/themes';
 import { useCart } from '../../../context/CartContext';
 import { Product } from '../../../types/domain';
 import { useWishlist } from '../../../hooks/useWishlist';
-import { calculateProductPrice } from '../../../utils/priceUtils';
 import { getProductShopName } from '../../../utils/productDisplay';
 import ProductImageCarousel from './ProductImageCarousel';
 
@@ -22,6 +21,28 @@ const truncateText = (text: string, maxLength: number = 60): string => {
   if (text.length <= maxLength) return text;
   return text.substring(0, maxLength).trim() + '...';
 };
+
+function getLowestPricesCardPricing(product: Product) {
+  const sellingPrice =
+    product.discPrice && product.discPrice > 0
+      ? product.discPrice
+      : product.price || 0;
+  const mrpValue =
+    product.compareAtPrice ||
+    product.mrp ||
+    (product as any).compareAtPrice ||
+    0;
+  const hasDiscount = mrpValue > sellingPrice;
+
+  return {
+    sellingPrice,
+    mrp: mrpValue,
+    hasDiscount,
+    discountPercent: hasDiscount
+      ? Math.round(((mrpValue - sellingPrice) / mrpValue) * 100)
+      : product.discount || 0,
+  };
+}
 
 // Product Card Component - Defined outside to prevent recreation on every render
 const ProductCard = memo(({
@@ -38,10 +59,10 @@ const ProductCard = memo(({
   const navigate = useNavigate();
   const { isWishlisted, toggleWishlist } = useWishlist(product.id);
 
-  // Get Price and MRP using utility
-  const { displayPrice, mrp, discount, hasDiscount } = calculateProductPrice(product);
+  // Resolve selling price and MRP for lowest-prices cards
+  const { sellingPrice, mrp, hasDiscount, discountPercent } =
+    getLowestPricesCardPricing(product);
   const shopName = getProductShopName(product);
-  const showMrp = mrp > displayPrice;
 
   // Use cartQuantity from props
   const inCartQty = cartQuantity;
@@ -80,9 +101,9 @@ const ProductCard = memo(({
             />
 
             {/* Red Discount Badge - Top Left */}
-            {discount > 0 && (
+            {discountPercent > 0 && (
               <div className="absolute top-1 left-1 z-10 bg-red-600 text-white text-[9px] font-bold px-1 py-0.5 rounded">
-                {discount}% OFF
+                {discountPercent}% OFF
               </div>
             )}
 
@@ -246,21 +267,21 @@ const ProductCard = memo(({
           </div>
 
           {/* Discount - Blue Text */}
-          {discount > 0 && (
+          {discountPercent > 0 && (
             <div className="text-[9px] text-blue-600 font-semibold mb-0.5">
-              {discount}% OFF
+              {discountPercent}% OFF
             </div>
           )}
 
           {/* Price */}
           <div className="mb-1">
-            <div className="flex items-baseline gap-1 flex-wrap">
-              <span className="text-[13px] font-bold text-neutral-900">
-                ₹{displayPrice.toLocaleString('en-IN')}
+            <div className="flex flex-col gap-0.5">
+              <span className="text-[13px] font-bold text-neutral-900 leading-tight">
+                ₹{sellingPrice.toLocaleString('en-IN')}
               </span>
-              {showMrp && (
-                <span className="text-[10px] text-neutral-400 line-through">
-                  ₹{mrp.toLocaleString('en-IN')}
+              {hasDiscount && (
+                <span className="text-[10px] text-neutral-400 line-through leading-tight">
+                  MRP ₹{mrp.toLocaleString('en-IN')}
                 </span>
               )}
             </div>
