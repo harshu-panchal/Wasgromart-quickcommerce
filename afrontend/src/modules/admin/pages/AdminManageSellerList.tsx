@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { getAllSellers, getSellerById, updateSellerStatus, deleteSeller, Seller as SellerType, updateSeller, ServiceAreaPolygon } from '../../../services/api/sellerService';
+import { getAllSellers, getSellerById, updateSellerStatus, deleteSeller, Seller as SellerType, updateSeller, updateSellerCommissionRate, ServiceAreaPolygon } from '../../../services/api/sellerService';
 import SellerServiceMap from '../components/SellerServiceMap';
 import GoogleMapsAutocomplete from '../../../components/GoogleMapsAutocomplete';
 import LocationPickerMap from '../../../components/LocationPickerMap';
@@ -85,9 +85,9 @@ const mapSellerToFrontend = (seller: SellerType): Seller => {
         phone: seller.mobile,
         mobile: seller.mobile,
         email: seller.email,
-        logo: seller.logo || '/api/placeholder/40/40',
+        logo: seller.logo || seller.profile || '/api/placeholder/40/40',
         balance: seller.balance || 0,
-        commission: seller.commission || 0,
+        commission: seller.commissionRate ?? seller.commission ?? 0,
         categories: seller.categories || [],
         status: seller.status,
         needApproval: seller.status === 'Pending',
@@ -145,6 +145,9 @@ export default function AdminManageSellerList() {
     const [newRadius, setNewRadius] = useState<number>(10);
     const [isUpdatingLocation, setIsUpdatingLocation] = useState(false);
     const [isLocationEditMode, setIsLocationEditMode] = useState(false);
+    const [isUpdatingCommission, setIsUpdatingCommission] = useState(false);
+    const [isCommissionEditMode, setIsCommissionEditMode] = useState(false);
+    const [tempCommission, setTempCommission] = useState<number>(0);
     const [tempLocation, setTempLocation] = useState({
         address: '',
         lat: '',
@@ -288,6 +291,8 @@ export default function AdminManageSellerList() {
                 ? (seller.serviceRadiusKm as number)
                 : 10
         );
+        setTempCommission(seller.commission);
+        setIsCommissionEditMode(false);
         setTempLocation({
             address: seller.address || '',
             lat: seller.latitude || '',
@@ -310,6 +315,7 @@ export default function AdminManageSellerList() {
         // Optimistically open with cached data so the modal is responsive.
         applySellerToEditState(seller);
         setIsLocationEditMode(false);
+        setIsCommissionEditMode(false);
         setIsEditModalOpen(true);
 
         // Refresh from the server so location coords + service-area data
@@ -419,6 +425,40 @@ export default function AdminManageSellerList() {
             setTimeout(() => setError(''), 3000);
         } finally {
             setIsUpdatingLocation(false);
+        }
+    };
+
+    const handleUpdateCommission = async () => {
+        if (!editingSeller) return;
+        
+        if (tempCommission < 0 || tempCommission > 100 || isNaN(tempCommission)) {
+            setError('Commission must be a valid number between 0 and 100');
+            setTimeout(() => setError(''), 3000);
+            return;
+        }
+
+        try {
+            setIsUpdatingCommission(true);
+            const response = await updateSellerCommissionRate(editingSeller._id, tempCommission);
+            
+            if (response.success) {
+                const updatedSeller = { 
+                    ...editingSeller, 
+                    commission: tempCommission
+                };
+                setEditingSeller(updatedSeller);
+                // Also update the seller in the main list
+                setSellers(sellers.map(s => s._id === editingSeller._id ? updatedSeller : s));
+                setSuccessMessage('Commission updated successfully');
+                setIsCommissionEditMode(false);
+                setTimeout(() => setSuccessMessage(''), 3000);
+            }
+        } catch (err: any) {
+            console.error('Error updating commission:', err);
+            setError(err?.response?.data?.message || 'Failed to update commission');
+            setTimeout(() => setError(''), 3000);
+        } finally {
+            setIsUpdatingCommission(false);
         }
     };
 
@@ -1001,8 +1041,37 @@ export default function AdminManageSellerList() {
                                             <p className="text-sm font-medium text-neutral-900">{editingSeller.category || 'N/A'}</p>
                                         </div>
                                         <div>
-                                            <label className="text-xs text-neutral-500">Commission</label>
-                                            <p className="text-sm font-medium text-neutral-900">{editingSeller.commission.toFixed(2)}%</p>
+                                            <div className="flex items-center justify-between mb-1">
+                                                <label className="text-xs text-neutral-500 block">Commission</label>
+                                                <button 
+                                                    onClick={() => setIsCommissionEditMode(!isCommissionEditMode)}
+                                                    className="text-xs text-teal-600 hover:text-teal-700 font-medium"
+                                                >
+                                                    {isCommissionEditMode ? 'Cancel' : 'Edit'}
+                                                </button>
+                                            </div>
+                                            {!isCommissionEditMode ? (
+                                                <p className="text-sm font-medium text-neutral-900">{editingSeller.commission.toFixed(2)}%</p>
+                                            ) : (
+                                                <div className="flex gap-2">
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        max="100"
+                                                        step="0.1"
+                                                        value={tempCommission}
+                                                        onChange={(e) => setTempCommission(parseFloat(e.target.value))}
+                                                        className="w-full px-2 py-1 border border-neutral-300 rounded text-sm focus:ring-teal-500 focus:border-teal-500"
+                                                    />
+                                                    <button
+                                                        onClick={handleUpdateCommission}
+                                                        disabled={isUpdatingCommission}
+                                                        className="px-2 py-1 bg-teal-600 text-white rounded text-xs font-medium hover:bg-teal-700 disabled:opacity-50"
+                                                    >
+                                                        {isUpdatingCommission ? '...' : 'Save'}
+                                                    </button>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </div>

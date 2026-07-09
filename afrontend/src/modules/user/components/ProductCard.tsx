@@ -296,7 +296,7 @@ export default function ProductCard({
               )}
 
               {/* 2. Name */}
-              <h3 className="text-[10px] font-bold text-neutral-900 mb-0.5 line-clamp-2 leading-tight min-h-[1.75rem] max-h-[1.75rem] overflow-hidden">
+              <h3 className="text-[11px] font-bold text-neutral-900 mb-0.5 line-clamp-2 leading-tight min-h-[2rem]">
                 {product.name || product.productName || ''}
               </h3>
 

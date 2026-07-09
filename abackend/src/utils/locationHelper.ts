@@ -102,6 +102,7 @@ export async function findSellersWithinRange(
     const point = { type: "Point" as const, coordinates: [userLng, userLat] };
     const radiusModeFilter = {
       status: "Approved",
+      isShopOpen: { $ne: false },
       $or: [
         { serviceAreaMode: "radius" },
         { serviceAreaMode: { $exists: false } },
@@ -112,6 +113,7 @@ export async function findSellersWithinRange(
       await Promise.all([
         Seller.find({
           status: "Approved",
+          isShopOpen: { $ne: false },
           serviceAreaMode: "polygon",
           serviceArea: { $geoIntersects: { $geometry: point } },
         }).select("_id"),
