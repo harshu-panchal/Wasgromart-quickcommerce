@@ -290,7 +290,7 @@ export default function SellerOrderDetail() {
       const rowData = [
         item.srNo.toString(),
         item.product,
-        item.qty.toString(),
+        formatQtyWithUnit(item.qty, item.unit),
       ];
 
       rowData.forEach((data, index) => {
@@ -371,22 +371,17 @@ export default function SellerOrderDetail() {
     }
   };
 
-  const formatUnit = (unit: string, qty: number) => {
+  const formatItemUnit = (unit: string) => {
     if (!unit || unit === "N/A") return "N/A";
+    return unit.trim();
+  };
 
-    // improved regex to handle decimals and various spacing
-    const match = unit.match(/^(\d+(?:\.\d+)?)\s*([a-zA-Z]+)$/);
-    if (match) {
-      const val = parseFloat(match[1]);
-      const u = match[2];
-      // check if val is a valid number
-      if (!isNaN(val)) {
-        const total = val * qty;
-        // Format to remove trailing zeros if integer (e.g. 1.0 -> 1)
-        return `${parseFloat(total.toFixed(2))}${u}`;
-      }
+  const formatQtyWithUnit = (qty: number, unit: string) => {
+    const normalizedUnit = formatItemUnit(unit);
+    if (normalizedUnit === "N/A") {
+      return String(qty);
     }
-    return `${unit} x ${qty}`;
+    return `${qty} × ${normalizedUnit}`;
   };
 
   return (
@@ -642,10 +637,10 @@ export default function SellerOrderDetail() {
                       {item.product}
                     </td>
                     <td className="px-4 py-3 text-sm text-neutral-900">
-                      {formatUnit(item.unit, item.qty)}
+                      {formatItemUnit(item.unit)}
                     </td>
                     <td className="px-4 py-3 text-sm text-neutral-900">
-                      {item.qty}
+                      {formatQtyWithUnit(item.qty, item.unit)}
                     </td>
                   </tr>
                 ))}

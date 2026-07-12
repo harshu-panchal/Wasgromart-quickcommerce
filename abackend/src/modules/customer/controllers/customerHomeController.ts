@@ -13,7 +13,7 @@ import Promotion from "../../../models/Promotion";
 import mongoose from "mongoose";
 import { cache } from "../../../utils/cache";
 import { findSellersWithinRange } from "../../../utils/locationHelper";
-import { withShopPresentation, isSellerInRange } from "../../../utils/productPresentation";
+import { withShopPresentation, isSellerAvailableForOrder } from "../../../utils/productPresentation";
 
 interface SectionFetchOptions {
   /** Override the effective row cap (defaults to section.limit). */
@@ -67,7 +67,7 @@ function buildProductSectionQuery(section: any): any {
 }
 
 function shapeProduct(p: any, nearbySellerIds?: mongoose.Types.ObjectId[]): any {
-  const isAvailable = isSellerInRange(p.seller, nearbySellerIds || []);
+  const isAvailable = isSellerAvailableForOrder(p.seller, nearbySellerIds || []);
 
   const presentation = withShopPresentation(p);
 
@@ -223,7 +223,7 @@ async function fetchSectionData(
           .skip(skip)
           .limit(effectiveLimit)
           .select(selectFields)
-          .populate("seller", "storeName sellerName")
+          .populate("seller", "storeName sellerName isShopOpen")
           .lean();
       } else {
         total = 0;
@@ -344,10 +344,15 @@ async function fetchPromoStripForSlug(
     endDate: { $gte: now },
   })
     .populate("categoryCards.categoryId", "name slug image")
-    .populate(
-      "featuredProducts",
-      "productName mainImage mainImageUrl galleryImageUrls galleryImages price mrp compareAtPrice discount rating reviewsCount seller"
-    )
+    .populate({
+      path: "featuredProducts",
+      select:
+        "productName mainImage mainImageUrl galleryImageUrls galleryImages price mrp compareAtPrice discount rating reviewsCount seller",
+      populate: {
+        path: "seller",
+        select: "storeName isShopOpen",
+      },
+    })
     .sort({ order: 1 })
     .lean();
 
@@ -358,10 +363,9 @@ async function fetchPromoStripForSlug(
       ...promoStrip,
       featuredProducts: promoStrip.featuredProducts
         .map((p: any) => {
-          const isAvailable = isSellerInRange(p.seller, nearbySellerIds);
+          const isAvailable = isSellerAvailableForOrder(p.seller, nearbySellerIds);
           return { ...p, isAvailable };
-        })
-        .filter((p: any) => p.isAvailable),
+        }),
     };
   }
 
@@ -534,7 +538,7 @@ export const getHomeContent = async (req: Request, res: Response) => {
           "productName mainImage price discPrice compareAtPrice discount status publish category subcategory seller",
         populate: {
           path: "seller",
-          select: "storeName sellerName",
+          select: "storeName sellerName isShopOpen",
         },
         match: {
           status: "Active",
@@ -543,6 +547,7 @@ export const getHomeContent = async (req: Request, res: Response) => {
         },
       })
       .sort({ order: 1 })
+      .limit(50)
       .lean();
 
     // Filter out any products that were null (due to match condition) and only keep those available at customer location
@@ -550,7 +555,7 @@ export const getHomeContent = async (req: Request, res: Response) => {
       .filter((item: any) => item.product !== null)
       .map((item: any) => {
         const product = item.product;
-        const isAvailable = isSellerInRange(product.seller, nearbySellerIds);
+        const isAvailable = isSellerAvailableForOrder(product.seller, nearbySellerIds);
 
         const productPresentation = withShopPresentation(product);
 
@@ -588,8 +593,7 @@ export const getHomeContent = async (req: Request, res: Response) => {
           shopName: productPresentation.shopName,
           storeName: productPresentation.storeName,
         };
-      })
-      .filter((p: any) => p.isAvailable); // ONLY show products in customer location radius!
+      });
 
     // 3. Categories for Tiles (Grocery, Snacks, etc)
     const categories = await Category.find({
@@ -1308,8 +1312,10 @@ export const getStoreProducts = async (req: Request, res: Response) => {
       `[getStoreProducts] User location: lat=${userLat}, lng=${userLng}`,
     );
 
+    let nearbySellerIds: mongoose.Types.ObjectId[] = [];
+
     if (userLat && userLng && !isNaN(userLat) && !isNaN(userLng)) {
-      const nearbySellerIds = await findSellersWithinRange(userLat, userLng);
+      nearbySellerIds = await findSellersWithinRange(userLat, userLng);
       console.log(
         `[getStoreProducts] Found ${nearbySellerIds.length} sellers within range`,
       );
@@ -1366,7 +1372,7 @@ export const getStoreProducts = async (req: Request, res: Response) => {
       .populate("category", "name icon image")
       .populate("subcategory", "name")
       .populate("brand", "name")
-      .populate("seller", "storeName")
+      .populate("seller", "storeName isShopOpen")
       .sort({ createdAt: -1 })
       .limit(50)
       .lean({ virtuals: true });
@@ -1379,7 +1385,10 @@ export const getStoreProducts = async (req: Request, res: Response) => {
 
     return res.status(200).json({
       success: true,
-      data: products.map((p) => ({ ...p, isAvailable: true })),
+      data: products.map((p) => ({
+        ...p,
+        isAvailable: isSellerAvailableForOrder(p.seller, nearbySellerIds),
+      })),
       shop: shopData,
       pagination: {
         page: 1,

@@ -4,7 +4,11 @@ import Category from "../../../models/Category";
 import SubCategory from "../../../models/SubCategory";
 import mongoose from "mongoose";
 import { findSellersWithinRange } from "../../../utils/locationHelper";
-import { withShopPresentation } from "../../../utils/productPresentation";
+import {
+  withShopPresentation,
+  isSellerInRange,
+  isSellerAvailableForOrder,
+} from "../../../utils/productPresentation";
 
 // Get products with filtering options (public)
 export const getProducts = async (req: Request, res: Response) => {
@@ -224,14 +228,14 @@ export const getProducts = async (req: Request, res: Response) => {
       .populate("category", "name icon image")
       .populate("subcategory", "name")
       .populate("brand", "name")
-      .populate("seller", "storeName status")
+      .populate("seller", "storeName status isShopOpen")
       .sort(sortOptions)
       .skip(skip)
       .limit(effectiveLimit);
 
     products = fetchedProducts.map((p: any) => ({
       ...withShopPresentation(p.toObject()),
-      isAvailable: true,
+      isAvailable: isSellerAvailableForOrder(p.seller, nearbySellerIds),
     }));
 
     // --- IMPROVED DIAGNOSTICS FOR EMPTY RESULTS ---
@@ -305,7 +309,7 @@ export const getProductById = async (req: Request, res: Response) => {
       .populate("brand", "name")
       .populate(
         "seller",
-        "storeName city fssaiLicNo address location serviceRadiusKm"
+        "storeName city fssaiLicNo address location serviceRadiusKm isShopOpen"
       );
 
     if (!product) {
@@ -345,16 +349,21 @@ export const getProductById = async (req: Request, res: Response) => {
 
     // Check location availability
     const nearbySellerIds = await findSellersWithinRange(userLat, userLng);
-    const isAvailableAtLocation = sellerId
-      ? nearbySellerIds.some((id) => id.toString() === sellerId!.toString())
+    const isInDeliveryRange = sellerId
+      ? isSellerInRange(seller, nearbySellerIds)
       : false;
 
-    if (!isAvailableAtLocation) {
+    if (!isInDeliveryRange) {
       return res.status(404).json({
         success: false,
         message: "Product is not available in your area.",
       });
     }
+
+    const isAvailableAtLocation = isSellerAvailableForOrder(
+      seller,
+      nearbySellerIds
+    );
 
     // Find similar products (by category)
     // Filter by location

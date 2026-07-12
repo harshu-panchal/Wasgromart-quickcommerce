@@ -7,7 +7,7 @@ import { getTheme } from '../../../utils/themes';
 import { useCart } from '../../../context/CartContext';
 import { Product } from '../../../types/domain';
 import { useWishlist } from '../../../hooks/useWishlist';
-import { getProductShopName } from '../../../utils/productDisplay';
+import { getProductShopName, getProductUnavailableLabel, getProductCardDisplayName } from '../../../utils/productDisplay';
 import ProductImageCarousel from './ProductImageCarousel';
 
 interface LowestPricesEverProps {
@@ -15,12 +15,7 @@ interface LowestPricesEverProps {
   products?: Product[]; // Admin-selected products from home data
 }
 
-// Helper function to truncate text to a maximum length
-const truncateText = (text: string, maxLength: number = 60): string => {
-  if (!text) return '';
-  if (text.length <= maxLength) return text;
-  return text.substring(0, maxLength).trim() + '...';
-};
+const LOWEST_PRICES_DISPLAY_LIMIT = 50;
 
 function getLowestPricesCardPricing(product: Product) {
   const sellingPrice =
@@ -63,15 +58,10 @@ const ProductCard = memo(({
   const { sellingPrice, mrp, hasDiscount, discountPercent } =
     getLowestPricesCardPricing(product);
   const shopName = getProductShopName(product);
-
-  // Use cartQuantity from props
+  const unavailableLabel = getProductUnavailableLabel(product);
+  const fullProductName = product.name || product.productName || '';
+  const displayName = getProductCardDisplayName(product);
   const inCartQty = cartQuantity;
-
-  // Get product name, clean it (remove description suffixes), and truncate if needed
-  let productName = product.name || product.productName || '';
-  // Remove common description patterns like " - Fresh & Quality Assured", " - Premium Quality", etc.
-  productName = productName.replace(/\s*-\s*(Fresh|Quality|Assured|Premium|Best|Top|Hygienic|Carefully|Selected).*$/i, '').trim();
-  const displayName = truncateText(productName, 60);
 
   return (
     <div
@@ -158,7 +148,7 @@ const ProductCard = memo(({
                       : 'text-green-600 border-2 border-green-600 hover:bg-white'
                     }`}
                   >
-                    {product.isAvailable === false ? 'Out of Range' : 'ADD'}
+                    {product.isAvailable === false ? unavailableLabel : 'ADD'}
                   </motion.button>
                 ) : (
                   <motion.div
@@ -217,7 +207,7 @@ const ProductCard = memo(({
         </div>
 
         {/* Product Details */}
-        <div className="p-1.5 flex-1 flex flex-col min-h-0" style={{ background: '#fef9e7' }}>
+        <div className="p-1.5 flex-1 flex flex-col min-w-0 min-h-0" style={{ background: '#fef9e7' }}>
           {/* Light Grey Tags */}
           <div className="flex gap-0.5 mb-0.5">
             <div className="bg-neutral-200 text-neutral-700 text-[8px] font-medium px-1 py-0.5 rounded">
@@ -231,8 +221,11 @@ const ProductCard = memo(({
           </div>
 
           {/* Product Name */}
-          <div className="mb-0.5">
-            <h3 className="text-[10px] font-bold text-neutral-900 line-clamp-2 leading-tight min-h-[2rem] max-h-[2rem] overflow-hidden" title={productName}>
+          <div className="min-w-0 mb-1">
+            <h3
+              className="text-[10px] font-semibold text-neutral-900 line-clamp-2 leading-[1.35] break-words"
+              title={fullProductName}
+            >
               {displayName}
             </h3>
             {shopName && (
@@ -418,7 +411,7 @@ export default function LowestPricesEver({ activeTab = 'all', products: adminPro
 
   const getFilteredProducts = () => {
     if (Array.isArray(adminProducts)) {
-      return products.slice(0, 20);
+      return products.slice(0, LOWEST_PRICES_DISPLAY_LIMIT);
     }
 
     let filtered = products;
@@ -439,7 +432,7 @@ export default function LowestPricesEver({ activeTab = 'all', products: adminPro
         const discount = Math.round(((product.mrp - product.price) / product.mrp) * 100);
         return discount > 0;
       })
-      .slice(0, 10); // Show top 10 discounted products
+      .slice(0, LOWEST_PRICES_DISPLAY_LIMIT);
   };
 
   const discountedProducts = getFilteredProducts();

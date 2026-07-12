@@ -8,7 +8,7 @@ import Button from '../../../components/ui/button';
 import Badge from '../../../components/ui/badge';
 import StarRating from '../../../components/ui/StarRating';
 import { calculateProductPrice } from '../../../utils/priceUtils';
-import { getProductShopName } from '../../../utils/productDisplay';
+import { getProductShopName, getProductUnavailableLabel, getProductCardDisplayName } from '../../../utils/productDisplay';
 import ProductImageCarousel from './ProductImageCarousel';
 
 interface ProductCardProps {
@@ -57,6 +57,9 @@ export default function ProductCard({
   // Get Price and MRP using utility
   const { displayPrice, mrp, discount } = calculateProductPrice(product);
   const shopName = getProductShopName(product);
+  const unavailableLabel = getProductUnavailableLabel(product);
+  const displayName = getProductCardDisplayName(product);
+  const fullProductName = product.name || product.productName || '';
 
   const handleCardClick = () => {
     navigate(`/product/${((product as any).id || product._id) as string}`);
@@ -140,7 +143,7 @@ export default function ProductCard({
       whileHover={{ y: -2 }}
       whileTap={{ scale: 0.97 }}
       transition={{ duration: 0.2 }}
-      className={`${categoryStyle ? 'bg-green-50' : 'bg-white'} rounded-lg shadow-sm overflow-hidden flex flex-col relative`}
+      className={`${categoryStyle ? 'bg-green-50' : 'bg-white'} rounded-lg shadow-sm overflow-hidden flex flex-col relative min-w-0`}
     >
       <div
         onClick={handleCardClick}
@@ -243,7 +246,7 @@ export default function ProductCard({
                       : 'border-green-600 text-green-600 bg-transparent hover:bg-green-50'
                     }`}
                   >
-                    {product.isAvailable === false ? 'Out of Range' : 'ADD'}
+                    {product.isAvailable === false ? unavailableLabel : 'ADD'}
                   </Button>
                 </div>
               </div>
@@ -284,7 +287,7 @@ export default function ProductCard({
           </div>
         )}
 
-        <div className={`${compact ? 'p-3 md:p-4' : categoryStyle ? 'px-2.5 md:px-3 pt-1.5 md:pt-2 pb-2 md:pb-3' : 'p-4 md:p-5'} flex-1 flex flex-col`}>
+        <div className={`${compact ? 'p-3 md:p-4' : categoryStyle ? 'px-2.5 md:px-3 pt-1.5 md:pt-2 pb-2 md:pb-3' : 'p-4 md:p-5'} flex-1 flex flex-col min-w-0`}>
           {categoryStyle ? (
             // Category Style Layout: Quantity, Name, Time, % off, Price
             <>
@@ -296,9 +299,14 @@ export default function ProductCard({
               )}
 
               {/* 2. Name */}
-              <h3 className="text-[10px] font-bold text-neutral-900 mb-0.5 line-clamp-2 leading-tight min-h-[1.75rem] max-h-[1.75rem] overflow-hidden">
-                {product.name || product.productName || ''}
-              </h3>
+              <div className="min-w-0 mb-1">
+                <h3
+                  className="text-[11px] font-semibold text-neutral-900 line-clamp-2 leading-[1.35] break-words"
+                  title={fullProductName}
+                >
+                  {displayName}
+                </h3>
+              </div>
 
               {shopName && (
                 <p className="text-[9px] text-neutral-500 mb-0.5 line-clamp-1 leading-tight">
@@ -355,9 +363,14 @@ export default function ProductCard({
                 </p>
               )}
 
-              <h3 className={`${compact ? 'text-xs md:text-sm' : 'text-sm md:text-base'} font-semibold text-neutral-900 ${compact ? 'mb-1' : 'mb-2'} line-clamp-2 ${compact ? 'min-h-[2rem]' : 'min-h-[2.5rem]'}`}>
-                {product.name || product.productName || ''}
-              </h3>
+              <div className="min-w-0 mb-1">
+                <h3
+                  className={`${compact ? 'text-xs md:text-sm' : 'text-sm md:text-base'} font-semibold text-neutral-900 line-clamp-2 leading-snug break-words`}
+                  title={fullProductName}
+                >
+                  {displayName}
+                </h3>
+              </div>
 
               {shopName && (
                 <p className={`${compact ? 'text-[10px] mb-1' : 'text-xs mb-2'} text-neutral-500 line-clamp-1`}>
@@ -424,7 +437,7 @@ export default function ProductCard({
                     : 'border-green-600 text-green-600 hover:bg-green-50'
                   }`}
                 >
-                  {product.isAvailable === false ? 'Out of Range' : 'Add'}
+                  {product.isAvailable === false ? unavailableLabel : 'Add'}
                 </Button>
                 <div className="h-4 mt-1">
                 </div>

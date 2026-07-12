@@ -4,6 +4,7 @@ import Cart from '../../../models/Cart';
 import CartItem from '../../../models/CartItem';
 import Product from '../../../models/Product';
 import { findSellersWithinRange } from '../../../utils/locationHelper';
+import { isSellerAvailableForOrder } from '../../../utils/productPresentation';
 import mongoose from 'mongoose';
 
 import Seller from '../../../models/Seller';
@@ -43,7 +44,11 @@ const calculateItemPrice = (product: any, variationSelector: any) => {
 const calculateCartTotal = async (cartId: any, nearbySellerIds: mongoose.Types.ObjectId[] = []) => {
     const items = await CartItem.find({ cart: cartId }).populate({
         path: 'product',
-        select: 'price discPrice variations seller status publish productName'
+        select: 'price discPrice variations seller status publish productName',
+        populate: {
+            path: 'seller',
+            select: 'isShopOpen',
+        },
     });
 
     let total = 0;
@@ -51,7 +56,7 @@ const calculateCartTotal = async (cartId: any, nearbySellerIds: mongoose.Types.O
         const product = item.product as any;
         if (product && product.status === 'Active' && product.publish) {
             // Check if seller is in range
-            const isAvailable = nearbySellerIds.some(id => id.toString() === product.seller.toString());
+            const isAvailable = isSellerAvailableForOrder(product.seller, nearbySellerIds);
             if (isAvailable) {
                 const price = calculateItemPrice(product, item.variation);
                 total += price * item.quantity;
@@ -163,7 +168,11 @@ export const getCart = async (req: Request, res: Response) => {
             path: 'items',
             populate: {
                 path: 'product',
-                select: 'productName price mainImage stock pack mrp category seller status publish discPrice variations'
+                select: 'productName price mainImage stock pack mrp category seller status publish discPrice variations',
+                populate: {
+                    path: 'seller',
+                    select: 'isShopOpen',
+                },
             }
         });
 
@@ -179,7 +188,7 @@ export const getCart = async (req: Request, res: Response) => {
         for (const item of (cart.items as any)) {
             const product = item.product;
             if (product && product.status === 'Active' && product.publish) {
-                const isAvailable = nearbySellerIds.some(id => id.toString() === product.seller.toString());
+                const isAvailable = isSellerAvailableForOrder(product.seller, nearbySellerIds);
                 
                 filteredItems.push({
                     ...(item.toObject ? item.toObject() : item),
@@ -258,12 +267,14 @@ export const addToCart = async (req: Request, res: Response) => {
         }
 
         const nearbySellerIds = await findSellersWithinRange(userLat, userLng);
-        const isAvailable = nearbySellerIds.some(id => id.toString() === (seller._id || seller).toString());
+        const isAvailable = isSellerAvailableForOrder(seller, nearbySellerIds);
 
         if (!isAvailable) {
             return res.status(403).json({
                 success: false,
-                message: 'This product is not available in your current location'
+                message: seller?.isShopOpen === false
+                    ? 'Seller is not available at this moment'
+                    : 'This product is not available in your current location'
             });
         }
 
@@ -304,13 +315,17 @@ export const addToCart = async (req: Request, res: Response) => {
             path: 'items',
             populate: {
                 path: 'product',
-                select: 'productName price mainImage stock pack mrp category seller status publish discPrice variations'
+                select: 'productName price mainImage stock pack mrp category seller status publish discPrice variations',
+                populate: {
+                    path: 'seller',
+                    select: 'isShopOpen',
+                },
             }
         });
 
         const filteredItems = (updatedCart?.items as any[] || []).map(item => {
             const prod = item.product;
-            const isAvailable = prod && nearbySellerIds.some(id => id.toString() === prod.seller.toString());
+            const isAvailable = prod && isSellerAvailableForOrder(prod.seller, nearbySellerIds);
             return {
                 ...(item.toObject ? item.toObject() : item),
                 isDeliverable: isAvailable
@@ -370,19 +385,27 @@ export const updateCartItem = async (req: Request, res: Response) => {
             return res.status(404).json({ success: false, message: 'Cart not found' });
         }
 
-        const cartItem = await CartItem.findOne({ _id: itemId, cart: cart._id }).populate('product');
+        const cartItem = await CartItem.findOne({ _id: itemId, cart: cart._id }).populate({
+            path: 'product',
+            populate: {
+                path: 'seller',
+                select: 'isShopOpen',
+            },
+        });
         if (!cartItem) {
             return res.status(404).json({ success: false, message: 'Item not found in cart' });
         }
 
         // Verify item is still available at location
         const product = cartItem.product as any;
-        const isAvailable = product && nearbySellerIds.some(id => id.toString() === product.seller.toString());
+        const isAvailable = product && isSellerAvailableForOrder(product.seller, nearbySellerIds);
 
         if (!isAvailable) {
             return res.status(403).json({
                 success: false,
-                message: 'This item is no longer available in your location'
+                message: product?.seller?.isShopOpen === false
+                    ? 'Seller is not available at this moment'
+                    : 'This item is no longer available in your location'
             });
         }
 
@@ -396,13 +419,17 @@ export const updateCartItem = async (req: Request, res: Response) => {
             path: 'items',
             populate: {
                 path: 'product',
-                select: 'productName price mainImage stock pack mrp category seller status publish discPrice variations'
+                select: 'productName price mainImage stock pack mrp category seller status publish discPrice variations',
+                populate: {
+                    path: 'seller',
+                    select: 'isShopOpen',
+                },
             }
         });
 
         const filteredItems = (updatedCart?.items as any[] || []).map(item => {
             const prod = item.product;
-            const isAvailable = prod && nearbySellerIds.some(id => id.toString() === prod.seller.toString());
+            const isAvailable = prod && isSellerAvailableForOrder(prod.seller, nearbySellerIds);
             return {
                 ...(item.toObject ? item.toObject() : item),
                 isDeliverable: isAvailable
@@ -473,7 +500,7 @@ export const removeFromCart = async (req: Request, res: Response) => {
             const prod = item.product;
             let isAvailable = true;
             if (nearbySellerIds.length > 0) {
-                isAvailable = !!(prod && nearbySellerIds.some(id => id.toString() === prod.seller.toString()));
+                isAvailable = !!(prod && isSellerAvailableForOrder(prod.seller, nearbySellerIds));
             }
             return {
                 ...(item.toObject ? item.toObject() : item),

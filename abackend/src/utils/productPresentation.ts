@@ -48,6 +48,25 @@ export function isSellerInRange(
   return nearbySellerIds.some((id) => id.toString() === sellerId);
 }
 
+/** Seller is in range and shop is open (eligible for ordering). */
+export function isSellerAvailableForOrder(
+  seller: unknown,
+  nearbySellerIds: Array<{ toString(): string }>
+): boolean {
+  if (!isSellerInRange(seller, nearbySellerIds)) {
+    return false;
+  }
+
+  if (seller && typeof seller === "object") {
+    const record = seller as { isShopOpen?: boolean };
+    if (record.isShopOpen === false) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export function withShopPresentation<T extends Record<string, any>>(product: T): T & {
   shopName: string | null;
   storeName: string | null;

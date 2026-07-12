@@ -55,6 +55,7 @@ export interface Product {
     storeName?: string;
     sellerName?: string;
     name?: string;
+    isShopOpen?: boolean;
   };
   isAvailable?: boolean;
   galleryImages?: string[];

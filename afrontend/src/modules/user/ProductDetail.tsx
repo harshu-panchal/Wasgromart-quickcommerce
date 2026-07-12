@@ -16,7 +16,7 @@ import { getProductById } from "../../services/api/customerProductService";
 import WishlistButton from "../../components/WishlistButton";
 import StarRating from "../../components/ui/StarRating";
 import { calculateProductPrice } from "../../utils/priceUtils";
-import { getProductShopName } from "../../utils/productDisplay";
+import { getProductShopName, isProductShopClosed } from "../../utils/productDisplay";
 import logo from "@assets/wasgromart-black-text-removebg-preview.png";
 
 export default function ProductDetail() {
@@ -413,11 +413,14 @@ export default function ProductDetail() {
               </svg>
               <div className="flex-1">
                 <p className="text-sm font-semibold text-amber-900">
-                  Not available at your location
+                  {isProductShopClosed(product)
+                    ? "Shop is currently closed"
+                    : "Not available at your location"}
                 </p>
                 <p className="text-xs text-amber-800 mt-1">
-                  This product cannot be delivered to your current location. You
-                  can browse but cannot add to cart.
+                  {isProductShopClosed(product)
+                    ? "You can browse this product, but the seller is not accepting orders right now."
+                    : "This product cannot be delivered to your current location. You can browse but cannot add to cart."}
                 </p>
               </div>
             </div>
@@ -1405,13 +1408,17 @@ export default function ProductDetail() {
                       }`}
                     title={
                       !isAvailableAtLocation
-                        ? "Not available at your location"
+                        ? isProductShopClosed(product)
+                          ? "Shop is currently closed"
+                          : "Not available at your location"
                         : !isVariantAvailable && variantStock !== 0
                           ? "This variant is out of stock"
                           : ""
                     }>
                     {!isAvailableAtLocation
-                      ? "Unavailable"
+                      ? isProductShopClosed(product)
+                        ? "Shop Closed"
+                        : "Unavailable"
                       : !isVariantAvailable && variantStock !== 0
                         ? "Out of Stock"
                         : "Add to cart"}
