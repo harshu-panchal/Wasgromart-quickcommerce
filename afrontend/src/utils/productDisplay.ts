@@ -33,6 +33,17 @@ export function getProductUnavailableLabel(
   return "ADD";
 }
 
+/** True when the product may be added to cart for the current location. */
+export function canAddProductToCart(
+  product: Product | Record<string, any> | null | undefined
+): boolean {
+  if (!product) return false;
+  if (isProductShopClosed(product)) return false;
+  if (product.isAvailable === false) return false;
+  if (product.isAvailableAtLocation === false) return false;
+  return true;
+}
+
 /** Clean product names for compact card layouts. */
 export function getProductCardDisplayName(
   product: Product | Record<string, any> | null | undefined

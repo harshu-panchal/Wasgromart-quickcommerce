@@ -12,6 +12,10 @@ import {
   clearCart as apiClearCart
 } from '../services/api/customerCartService';
 import { calculateProductPrice } from '../utils/priceUtils';
+import {
+  canAddProductToCart,
+  getProductUnavailableLabel,
+} from '../utils/productDisplay';
 
 const CART_STORAGE_KEY = 'saved_cart';
 
@@ -165,6 +169,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const addToCart = async (product: Product, sourceElement?: HTMLElement | null) => {
     // Get consistent product ID - MongoDB returns _id, frontend expects id
     const productId = product._id || product.id;
+
+    if (!canAddProductToCart(product)) {
+      const label = getProductUnavailableLabel(product);
+      showToast(
+        label === "Shop Closed"
+          ? "This shop is currently closed"
+          : "This product is not available for delivery at your location",
+        "error"
+      );
+      return;
+    }
 
     // Prevent concurrent operations on the same product
     if (pendingOperationsRef.current.has(productId)) {

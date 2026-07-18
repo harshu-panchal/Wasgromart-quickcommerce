@@ -16,7 +16,12 @@ import { getProductById } from "../../services/api/customerProductService";
 import WishlistButton from "../../components/WishlistButton";
 import StarRating from "../../components/ui/StarRating";
 import { calculateProductPrice } from "../../utils/priceUtils";
-import { getProductShopName, isProductShopClosed } from "../../utils/productDisplay";
+import {
+  getProductShopName,
+  isProductShopClosed,
+  canAddProductToCart,
+  getProductUnavailableLabel,
+} from "../../utils/productDisplay";
 import logo from "@assets/wasgromart-black-text-removebg-preview.png";
 
 export default function ProductDetail() {
@@ -1273,12 +1278,20 @@ export default function ProductDetail() {
                               <Button
                                 variant="outline"
                                 size="default"
+                                disabled={!canAddProductToCart(similarProduct)}
                                 onClick={(e) => {
                                   e.stopPropagation();
+                                  if (!canAddProductToCart(similarProduct)) return;
                                   addToCart(similarProduct);
                                 }}
-                                className="w-full border-2 border-green-600 text-green-600 bg-transparent hover:bg-green-50 rounded-full font-semibold text-sm h-9">
-                                ADD
+                                className={`w-full border-2 rounded-full font-semibold text-sm h-9 ${
+                                  canAddProductToCart(similarProduct)
+                                    ? "border-green-600 text-green-600 bg-transparent hover:bg-green-50"
+                                    : "border-neutral-300 text-neutral-400 bg-neutral-50 cursor-not-allowed"
+                                }`}>
+                                {canAddProductToCart(similarProduct)
+                                  ? "ADD"
+                                  : getProductUnavailableLabel(similarProduct)}
                               </Button>
                             </motion.div>
                           ) : (

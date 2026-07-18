@@ -8,7 +8,12 @@ import Button from '../../../components/ui/button';
 import Badge from '../../../components/ui/badge';
 import StarRating from '../../../components/ui/StarRating';
 import { calculateProductPrice } from '../../../utils/priceUtils';
-import { getProductShopName, getProductUnavailableLabel, getProductCardDisplayName } from '../../../utils/productDisplay';
+import {
+  getProductShopName,
+  getProductUnavailableLabel,
+  getProductCardDisplayName,
+  canAddProductToCart,
+} from '../../../utils/productDisplay';
 import ProductImageCarousel from './ProductImageCarousel';
 
 interface ProductCardProps {
@@ -58,6 +63,7 @@ export default function ProductCard({
   const { displayPrice, mrp, discount } = calculateProductPrice(product);
   const shopName = getProductShopName(product);
   const unavailableLabel = getProductUnavailableLabel(product);
+  const canAdd = canAddProductToCart(product);
   const displayName = getProductCardDisplayName(product);
   const fullProductName = product.name || product.productName || '';
 
@@ -69,8 +75,7 @@ export default function ProductCard({
     e.stopPropagation();
     e.preventDefault();
 
-    // Check if product is available in user's location
-    if (product.isAvailable === false) {
+    if (!canAdd) {
       return;
     }
 
@@ -112,8 +117,7 @@ export default function ProductCard({
     e.stopPropagation();
     e.preventDefault();
 
-    // Check if product is available in user's location
-    if (product.isAvailable === false) {
+    if (!canAdd) {
       return;
     }
 
@@ -235,18 +239,18 @@ export default function ProductCard({
                     ref={addButtonRef}
                     variant="outline"
                     size="sm"
-                    disabled={product.isAvailable === false}
+                    disabled={!canAdd}
                     onClick={(e) => {
                       e.stopPropagation();
                       handleAdd(e);
                     }}
                     className={`w-full border rounded-full font-semibold text-xs h-7 px-3 flex items-center justify-center uppercase tracking-wide ${
-                      product.isAvailable === false
+                      !canAdd
                       ? 'border-neutral-300 text-neutral-400 bg-neutral-50 cursor-not-allowed'
                       : 'border-green-600 text-green-600 bg-transparent hover:bg-green-50'
                     }`}
                   >
-                    {product.isAvailable === false ? unavailableLabel : 'ADD'}
+                    {!canAdd ? unavailableLabel : 'ADD'}
                   </Button>
                 </div>
               </div>
@@ -270,13 +274,13 @@ export default function ProductCard({
                 <Button
                   variant="default"
                   size="icon"
-                  disabled={product.isAvailable === false}
+                  disabled={!canAdd}
                   onClick={(e) => {
                     e.stopPropagation();
                     handleIncrease(e);
                   }}
                   className={`w-5 h-5 p-0 bg-transparent text-green-600 shadow-none ${
-                    product.isAvailable === false ? 'text-neutral-300 cursor-not-allowed' : 'hover:bg-green-50'
+                    !canAdd ? 'text-neutral-300 cursor-not-allowed' : 'hover:bg-green-50'
                   }`}
                   aria-label="Increase quantity"
                 >
@@ -429,15 +433,15 @@ export default function ProductCard({
                   ref={addButtonRef}
                   variant="outline"
                   size="sm"
-                  disabled={product.isAvailable === false}
+                  disabled={!canAdd}
                   onClick={handleAdd}
                   className={`w-full border h-8 text-xs font-semibold uppercase tracking-wide ${
-                    product.isAvailable === false
+                    !canAdd
                     ? 'border-neutral-300 text-neutral-400 bg-neutral-50 cursor-not-allowed'
                     : 'border-green-600 text-green-600 hover:bg-green-50'
                   }`}
                 >
-                  {product.isAvailable === false ? unavailableLabel : 'Add'}
+                  {!canAdd ? unavailableLabel : 'Add'}
                 </Button>
                 <div className="h-4 mt-1">
                 </div>
@@ -459,10 +463,10 @@ export default function ProductCard({
                 <Button
                   variant="default"
                   size="icon"
-                  disabled={product.isAvailable === false}
+                  disabled={!canAdd}
                   onClick={handleIncrease}
                   className={`w-6 h-6 p-0 bg-transparent text-green-600 shadow-none ${
-                    product.isAvailable === false ? 'text-neutral-300 cursor-not-allowed' : 'hover:bg-green-50'
+                    !canAdd ? 'text-neutral-300 cursor-not-allowed' : 'hover:bg-green-50'
                   }`}
                   aria-label="Increase quantity"
                 >

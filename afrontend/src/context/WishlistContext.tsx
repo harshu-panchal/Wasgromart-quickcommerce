@@ -161,18 +161,14 @@ export function WishlistProvider({ children }: { children: ReactNode }) {
         navigate("/login");
         return;
       }
-      if (!location?.latitude || !location?.longitude) {
-        showToast("Location is required to add items to wishlist", "error");
-        return;
-      }
       const id = String(productId);
       const alreadyIn = wishlistIds.has(id);
       addLocal(id);
       try {
         const res = await apiAddToWishlist(
           id,
-          location.latitude,
-          location.longitude,
+          location?.latitude,
+          location?.longitude,
         );
         if (res?.success && res.data?.products) {
           setFromProducts(res.data.products);
