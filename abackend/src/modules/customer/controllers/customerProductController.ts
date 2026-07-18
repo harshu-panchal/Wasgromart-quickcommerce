@@ -10,6 +10,70 @@ import {
   isSellerAvailableForOrder,
 } from "../../../utils/productPresentation";
 
+function withSellerRange(
+  query: Record<string, any>,
+  sellerCondition: Record<string, any>
+): Record<string, any> {
+  return {
+    ...query,
+    $and: [...(query.$and || []), { seller: sellerCondition }],
+  };
+}
+
+/**
+ * Return a page ordered as: in-range sellers first, then out-of-range sellers.
+ * The requested product sort is preserved inside both groups.
+ */
+async function getNearbyFirstProductIds(
+  query: Record<string, any>,
+  nearbySellerIds: mongoose.Types.ObjectId[],
+  sortOptions: Record<string, 1 | -1>,
+  skip: number,
+  limit: number
+): Promise<{ ids: mongoose.Types.ObjectId[]; total: number }> {
+  const total = await Product.countDocuments(query);
+  if (limit <= 0 || total === 0) return { ids: [], total };
+
+  if (nearbySellerIds.length === 0) {
+    const rows = await Product.find(query)
+      .select("_id")
+      .sort(sortOptions)
+      .skip(skip)
+      .limit(limit)
+      .lean();
+    return { ids: rows.map((row: any) => row._id), total };
+  }
+
+  const nearbyQuery = withSellerRange(query, { $in: nearbySellerIds });
+  const nearbyTotal = await Product.countDocuments(nearbyQuery);
+  const ids: mongoose.Types.ObjectId[] = [];
+
+  if (skip < nearbyTotal) {
+    const nearbyRows = await Product.find(nearbyQuery)
+      .select("_id")
+      .sort(sortOptions)
+      .skip(skip)
+      .limit(limit)
+      .lean();
+    ids.push(...nearbyRows.map((row: any) => row._id));
+  }
+
+  const remaining = limit - ids.length;
+  if (remaining > 0) {
+    const outOfRangeSkip = Math.max(0, skip - nearbyTotal);
+    const outOfRangeQuery = withSellerRange(query, { $nin: nearbySellerIds });
+    const outOfRangeRows = await Product.find(outOfRangeQuery)
+      .select("_id")
+      .sort(sortOptions)
+      .skip(outOfRangeSkip)
+      .limit(remaining)
+      .lean();
+    ids.push(...outOfRangeRows.map((row: any) => row._id));
+  }
+
+  return { ids, total };
+}
+
 // Get products with filtering options (public)
 export const getProducts = async (req: Request, res: Response) => {
   try {
@@ -43,7 +107,7 @@ export const getProducts = async (req: Request, res: Response) => {
       ]
     };
 
-    // Location-based filtering: Only show products from sellers within user's range
+    // Location determines ordering and availability, not visibility.
     const userLat = latitude ? parseFloat(latitude as string) : null;
     const userLng = longitude ? parseFloat(longitude as string) : null;
 
@@ -52,33 +116,6 @@ export const getProducts = async (req: Request, res: Response) => {
       // Find sellers within user's location range
       nearbySellerIds = await findSellersWithinRange(userLat, userLng);
 
-      if (nearbySellerIds.length === 0) {
-        // No sellers within range, return empty response immediately
-        return res.status(200).json({
-          success: true,
-          data: [],
-          pagination: {
-            page: Number(page),
-            limit: Number(limit),
-            total: 0,
-            pages: 0,
-          },
-          message: "No sellers available in your area. Please update your location.",
-        });
-      }
-    } else {
-      // If no location provided, return empty result (strictly enforce location)
-      return res.status(200).json({
-        success: true,
-        data: [],
-        pagination: {
-          page: Number(page),
-          limit: Number(limit),
-          total: 0,
-          pages: 0,
-        },
-        message: "Please provide your location to see products available in your area.",
-      });
     }
 
     // Helper to resolve category/subcategory ID from slug or ID
@@ -220,20 +257,31 @@ export const getProducts = async (req: Request, res: Response) => {
     let total = 0;
     const effectiveLimit = Number(limit);
 
-    // Filter products strictly to sellers within customer's range
-    const filteredQuery = { ...query, $and: [...query.$and, { seller: { $in: nearbySellerIds } }] };
+    const pageResult = await getNearbyFirstProductIds(
+      query,
+      nearbySellerIds,
+      sortOptions,
+      skip,
+      effectiveLimit
+    );
+    total = pageResult.total;
 
-    total = await Product.countDocuments(filteredQuery);
-    const fetchedProducts = await Product.find(filteredQuery)
+    const fetchedProducts = await Product.find({
+      _id: { $in: pageResult.ids },
+    })
       .populate("category", "name icon image")
       .populate("subcategory", "name")
       .populate("brand", "name")
-      .populate("seller", "storeName status isShopOpen")
-      .sort(sortOptions)
-      .skip(skip)
-      .limit(effectiveLimit);
+      .populate("seller", "storeName status isShopOpen");
 
-    products = fetchedProducts.map((p: any) => ({
+    const productById = new Map(
+      fetchedProducts.map((product: any) => [product._id.toString(), product])
+    );
+    const orderedProducts = pageResult.ids
+      .map((id) => productById.get(id.toString()))
+      .filter(Boolean);
+
+    products = orderedProducts.map((p: any) => ({
       ...withShopPresentation(p.toObject()),
       isAvailable: isSellerAvailableForOrder(p.seller, nearbySellerIds),
     }));
@@ -323,13 +371,6 @@ export const getProductById = async (req: Request, res: Response) => {
     const userLat = latitude ? parseFloat(latitude as string) : null;
     const userLng = longitude ? parseFloat(longitude as string) : null;
 
-    if (!userLat || !userLng || isNaN(userLat) || isNaN(userLng)) {
-      return res.status(400).json({
-        success: false,
-        message: "Location (latitude and longitude) is required to view product details.",
-      });
-    }
-
     const seller = product.seller as any;
 
     // Safely get seller ID - handle both populated and unpopulated cases
@@ -348,17 +389,16 @@ export const getProductById = async (req: Request, res: Response) => {
     }
 
     // Check location availability
-    const nearbySellerIds = await findSellersWithinRange(userLat, userLng);
+    const nearbySellerIds =
+      userLat !== null &&
+      userLng !== null &&
+      !isNaN(userLat) &&
+      !isNaN(userLng)
+        ? await findSellersWithinRange(userLat, userLng)
+        : [];
     const isInDeliveryRange = sellerId
       ? isSellerInRange(seller, nearbySellerIds)
       : false;
-
-    if (!isInDeliveryRange) {
-      return res.status(404).json({
-        success: false,
-        message: "Product is not available in your area.",
-      });
-    }
 
     const isAvailableAtLocation = isSellerAvailableForOrder(
       seller,
@@ -376,7 +416,6 @@ export const getProductById = async (req: Request, res: Response) => {
         { isShopByStoreOnly: { $ne: true } },
         { isShopByStoreOnly: { $exists: false } },
       ],
-      seller: { $in: nearbySellerIds } // Filter similar products strictly to sellers in range
     };
 
     // Safely get category ID - handle both populated and unpopulated cases
@@ -402,12 +441,29 @@ export const getProductById = async (req: Request, res: Response) => {
       similarProductsQuery.category = categoryId;
     }
 
-    const similarProducts = await Product.find(similarProductsQuery)
-      .limit(6)
+    const similarPage = await getNearbyFirstProductIds(
+      similarProductsQuery,
+      nearbySellerIds,
+      { createdAt: -1 },
+      0,
+      6
+    );
+    const similarProductsUnordered = await Product.find({
+      _id: { $in: similarPage.ids },
+    })
       .select(
         "productName price mrp variations mainImage pack discount _id rating reviewsCount seller"
       )
       .populate("seller", "storeName sellerName");
+    const similarById = new Map(
+      similarProductsUnordered.map((item: any) => [
+        item._id.toString(),
+        item,
+      ])
+    );
+    const similarProducts = similarPage.ids
+      .map((id) => similarById.get(id.toString()))
+      .filter(Boolean);
 
     const productObject = withShopPresentation(product.toObject());
 
@@ -415,9 +471,14 @@ export const getProductById = async (req: Request, res: Response) => {
       success: true,
       data: {
         ...productObject,
-        similarProducts: similarProducts.map((item) =>
-          withShopPresentation(item.toObject())
-        ),
+        similarProducts: similarProducts.map((item: any) => ({
+          ...withShopPresentation(item.toObject()),
+          isAvailable: isSellerAvailableForOrder(
+            item.seller,
+            nearbySellerIds
+          ),
+        })),
+        isInDeliveryRange,
         isAvailableAtLocation, // Add availability flag to response
       },
     });

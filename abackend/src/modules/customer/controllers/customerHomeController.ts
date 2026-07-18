@@ -13,7 +13,11 @@ import Promotion from "../../../models/Promotion";
 import mongoose from "mongoose";
 import { cache } from "../../../utils/cache";
 import { findSellersWithinRange } from "../../../utils/locationHelper";
-import { withShopPresentation, isSellerAvailableForOrder } from "../../../utils/productPresentation";
+import {
+  withShopPresentation,
+  isSellerAvailableForOrder,
+  sortProductsBySellerRange,
+} from "../../../utils/productPresentation";
 
 interface SectionFetchOptions {
   /** Override the effective row cap (defaults to section.limit). */
@@ -147,14 +151,12 @@ async function fetchSectionData(
         .lean();
 
       const data: any[] = [];
-      if (nearbySellerIds && nearbySellerIds.length > 0) {
-        if (subcategoryDocs.length > 0) {
+      if (subcategoryDocs.length > 0) {
           for (const sub of subcategoryDocs) {
             const productCount = await Product.countDocuments({
               subcategory: sub._id,
               status: "Active",
               publish: true,
-              seller: { $in: nearbySellerIds },
             });
             if (productCount > 0) {
               data.push({
@@ -183,7 +185,6 @@ async function fetchSectionData(
               subcategory: sub._id,
               status: "Active",
               publish: true,
-              seller: { $in: nearbySellerIds },
             });
             if (productCount > 0) {
               data.push({
@@ -197,7 +198,6 @@ async function fetchSectionData(
               });
             }
           }
-        }
       }
       return { data, total: data.length };
     }
@@ -209,26 +209,40 @@ async function fetchSectionData(
       const adminCap = section.limit || 200;
       const selectFields = "productName mainImage price mrp discount rating reviewsCount pack seller";
 
-      let products: any[] = [];
-      let total = 0;
-
-      if (nearbySellerIds && nearbySellerIds.length > 0) {
-        const availQuery = { ...query, seller: { $in: nearbySellerIds } };
-
-        total = await Product.countDocuments(availQuery);
-        total = Math.min(total, adminCap);
-
-        products = await Product.find(availQuery)
+      const rawTotal = await Product.countDocuments(query);
+      const total = Math.min(rawTotal, adminCap);
+      const fetchProducts = (productQuery: any) =>
+        Product.find(productQuery)
           .sort({ createdAt: -1 })
-          .skip(skip)
-          .limit(effectiveLimit)
+          .limit(adminCap)
           .select(selectFields)
           .populate("seller", "storeName sellerName isShopOpen")
           .lean();
+
+      let orderedProducts: any[];
+      if (nearbySellerIds && nearbySellerIds.length > 0) {
+        const nearbyProducts = await fetchProducts({
+          ...query,
+          seller: { $in: nearbySellerIds },
+        });
+        const outOfRangeLimit = Math.max(0, adminCap - nearbyProducts.length);
+        const outOfRangeProducts =
+          outOfRangeLimit > 0
+            ? await Product.find({
+                ...query,
+                seller: { $nin: nearbySellerIds },
+              })
+                .sort({ createdAt: -1 })
+                .limit(outOfRangeLimit)
+                .select(selectFields)
+                .populate("seller", "storeName sellerName isShopOpen")
+                .lean()
+            : [];
+        orderedProducts = [...nearbyProducts, ...outOfRangeProducts];
       } else {
-        total = 0;
-        products = [];
+        orderedProducts = await fetchProducts(query);
       }
+      const products = orderedProducts.slice(skip, skip + effectiveLimit);
 
       return {
         data: products.map((p: any) => shapeProduct(p, nearbySellerIds)),
@@ -251,13 +265,11 @@ async function fetchSectionData(
           .lean();
 
         const data: any[] = [];
-        if (nearbySellerIds && nearbySellerIds.length > 0) {
           for (const c of fetchedCategories) {
             const productCount = await Product.countDocuments({
               category: c._id,
               status: "Active",
               publish: true,
-              seller: { $in: nearbySellerIds },
             });
             if (productCount > 0) {
               data.push({
@@ -270,7 +282,6 @@ async function fetchSectionData(
               });
             }
           }
-        }
         return { data, total: data.length };
       }
       return { data: [], total: 0 };
@@ -331,7 +342,11 @@ async function fetchPromoStripForSlug(
   slug: string,
   nearbySellerIds: mongoose.Types.ObjectId[]
 ): Promise<any | null> {
-  const promoStripCacheKey = `promoStrip-${slug}`;
+  const rangeSignature = nearbySellerIds
+    .map((id) => id.toString())
+    .sort()
+    .join(",");
+  const promoStripCacheKey = `promoStrip-${slug}-${rangeSignature}`;
   if (cache.has(promoStripCacheKey)) {
     return cache.get(promoStripCacheKey);
   }
@@ -361,7 +376,10 @@ async function fetchPromoStripForSlug(
   if (promoStrip?.featuredProducts) {
     promoStrip = {
       ...promoStrip,
-      featuredProducts: promoStrip.featuredProducts
+      featuredProducts: sortProductsBySellerRange(
+        promoStrip.featuredProducts,
+        nearbySellerIds
+      )
         .map((p: any) => {
           const isAvailable = isSellerAvailableForOrder(p.seller, nearbySellerIds);
           return { ...p, isAvailable };
@@ -476,11 +494,33 @@ export const getHomeContent = async (req: Request, res: Response) => {
 
         // Fetch active products from the category for preview images
         // We fetch these irrespective of location radius to show category preview
-        const categoryProducts = await Product.find(productQuery)
-          .select("productName mainImage galleryImages")
-          .sort({ createdAt: -1 })
-          .limit(16)
-          .lean();
+        const fetchCategoryPreviewProducts = (query: any, limit: number) =>
+          Product.find(query)
+            .select("productName mainImage galleryImages seller")
+            .sort({ createdAt: -1 })
+            .limit(limit)
+            .lean();
+        let categoryProducts: any[];
+        if (nearbySellerIds.length > 0) {
+          const nearbyProducts = await fetchCategoryPreviewProducts(
+            { ...productQuery, seller: { $in: nearbySellerIds } },
+            16
+          );
+          const remaining = 16 - nearbyProducts.length;
+          const outOfRangeProducts =
+            remaining > 0
+              ? await fetchCategoryPreviewProducts(
+                  { ...productQuery, seller: { $nin: nearbySellerIds } },
+                  remaining
+                )
+              : [];
+          categoryProducts = [...nearbyProducts, ...outOfRangeProducts];
+        } else {
+          categoryProducts = await fetchCategoryPreviewProducts(
+            productQuery,
+            16
+          );
+        }
 
         // Extract product images (prefer mainImage, fallback to galleryImages[0])
         const productImages: string[] = [];
@@ -547,14 +587,18 @@ export const getHomeContent = async (req: Request, res: Response) => {
         },
       })
       .sort({ order: 1 })
-      .limit(50)
       .lean();
 
     // Filter out any products that were null (due to match condition) and only keep those available at customer location
-    const validLowestPricesProducts = lowestPricesProducts
+    const validLowestPricesProducts = sortProductsBySellerRange(
+      lowestPricesProducts
       .filter((item: any) => item.product !== null)
+      .map((item: any) => item.product),
+      nearbySellerIds
+    )
+      .slice(0, 50)
       .map((item: any) => {
-        const product = item.product;
+        const product = item;
         const isAvailable = isSellerAvailableForOrder(product.seller, nearbySellerIds);
 
         const productPresentation = withShopPresentation(product);
@@ -614,14 +658,36 @@ export const getHomeContent = async (req: Request, res: Response) => {
         let productImages: string[] = [];
 
         if (shop.products && shop.products.length > 0) {
-          const shopProducts = await Product.find({
-            _id: { $in: shop.products.slice(0, 16) },
+          const shopProductQuery = {
+            _id: { $in: shop.products },
             status: "Active",
             publish: true,
-            seller: { $in: nearbySellerIds }
-          })
-            .select("mainImage")
-            .lean();
+          };
+          const fetchShopPreviewProducts = (query: any, limit: number) =>
+            Product.find(query)
+              .sort({ createdAt: -1 })
+              .limit(limit)
+              .select("mainImage seller")
+              .populate("seller", "_id")
+              .lean();
+          let shopProducts: any[];
+          if (nearbySellerIds.length > 0) {
+            const nearbyProducts = await fetchShopPreviewProducts(
+              { ...shopProductQuery, seller: { $in: nearbySellerIds } },
+              16
+            );
+            const remaining = 16 - nearbyProducts.length;
+            const outOfRangeProducts =
+              remaining > 0
+                ? await fetchShopPreviewProducts(
+                    { ...shopProductQuery, seller: { $nin: nearbySellerIds } },
+                    remaining
+                  )
+                : [];
+            shopProducts = [...nearbyProducts, ...outOfRangeProducts];
+          } else {
+            shopProducts = await fetchShopPreviewProducts(shopProductQuery, 16);
+          }
 
           productImages = shopProducts
             .map((p: any) => p.mainImage)
@@ -651,7 +717,7 @@ export const getHomeContent = async (req: Request, res: Response) => {
       }),
     );
 
-    // Only return shops that have products available in the customer's area
+    // Keep all configured shops; their previews are ordered nearby-first.
     const validShops = shops.filter((s: any) => s.productImages && s.productImages.length > 0);
 
     // 5. Trending Items (Fetch some popular categories or products)
@@ -671,16 +737,35 @@ export const getHomeContent = async (req: Request, res: Response) => {
     // 6. Personal Care Subcategories - Now handled by dynamic sections
 
     // 7. Cooking Ideas (Fetch some products from 'Food' or 'Grocery' categories)
-    // Only fetch products within the customer's location radius
     const foodProductsQuery: any = {
       status: "Active",
       publish: true,
-      seller: { $in: nearbySellerIds }
     };
 
-    const foodProducts = await Product.find(foodProductsQuery)
-      .limit(3)
-      .select("productName mainImage");
+    const fetchFoodProducts = (query: any, limit: number) =>
+      Product.find(query)
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .select("productName mainImage seller")
+        .lean();
+    let foodProducts: any[];
+    if (nearbySellerIds.length > 0) {
+      const nearbyFoodProducts = await fetchFoodProducts(
+        { ...foodProductsQuery, seller: { $in: nearbySellerIds } },
+        3
+      );
+      const remaining = 3 - nearbyFoodProducts.length;
+      const outOfRangeFoodProducts =
+        remaining > 0
+          ? await fetchFoodProducts(
+              { ...foodProductsQuery, seller: { $nin: nearbySellerIds } },
+              remaining
+            )
+          : [];
+      foodProducts = [...nearbyFoodProducts, ...outOfRangeFoodProducts];
+    } else {
+      foodProducts = await fetchFoodProducts(foodProductsQuery, 3);
+    }
 
     const cookingIdeas = foodProducts.map((p) => ({
       id: p._id,
@@ -1304,7 +1389,7 @@ export const getStoreProducts = async (req: Request, res: Response) => {
       }
     }
 
-    // Location-based filtering: Only show products from sellers within user's range
+    // Location determines nearby-first ordering and availability, not visibility.
     const userLat = latitude ? parseFloat(latitude as string) : null;
     const userLng = longitude ? parseFloat(longitude as string) : null;
 
@@ -1320,47 +1405,6 @@ export const getStoreProducts = async (req: Request, res: Response) => {
         `[getStoreProducts] Found ${nearbySellerIds.length} sellers within range`,
       );
 
-      if (nearbySellerIds.length === 0) {
-        // No sellers within range, return shop data but empty products
-        console.log(
-          `[getStoreProducts] No sellers in range, returning empty products`,
-        );
-        return res.status(200).json({
-          success: true,
-          data: [],
-          shop: shopData,
-          pagination: {
-            page: 1,
-            limit: 50,
-            total: 0,
-            pages: 0,
-          },
-          message:
-            "No sellers available in your area. Please update your location.",
-        });
-      }
-
-      // Filter products by sellers within range
-      query.seller = { $in: nearbySellerIds };
-      console.log(`[getStoreProducts] Added seller filter to query`);
-    } else {
-      // If no location provided, return empty (require location for marketplace)
-      console.log(
-        `[getStoreProducts] No location provided, returning empty products`,
-      );
-      return res.status(200).json({
-        success: true,
-        data: [],
-        shop: shopData,
-        pagination: {
-          page: 1,
-          limit: 50,
-          total: 0,
-          pages: 0,
-        },
-        message:
-          "Location is required to view products. Please enable location access.",
-      });
     }
 
     console.log(
@@ -1368,16 +1412,35 @@ export const getStoreProducts = async (req: Request, res: Response) => {
       JSON.stringify(query, null, 2),
     );
 
-    const products = await Product.find(query)
-      .populate("category", "name icon image")
-      .populate("subcategory", "name")
-      .populate("brand", "name")
-      .populate("seller", "storeName isShopOpen")
-      .sort({ createdAt: -1 })
-      .limit(50)
-      .lean({ virtuals: true });
-
     const total = await Product.countDocuments(query);
+    const populateStoreProductQuery = (productQuery: any, limit: number) =>
+      Product.find(productQuery)
+        .populate("category", "name icon image")
+        .populate("subcategory", "name")
+        .populate("brand", "name")
+        .populate("seller", "storeName isShopOpen")
+        .sort({ createdAt: -1 })
+        .limit(limit)
+        .lean({ virtuals: true });
+
+    let products: any[] = [];
+    if (nearbySellerIds.length > 0) {
+      const nearbyProducts = await populateStoreProductQuery(
+        { ...query, seller: { $in: nearbySellerIds } },
+        50
+      );
+      const remaining = 50 - nearbyProducts.length;
+      const outOfRangeProducts =
+        remaining > 0
+          ? await populateStoreProductQuery(
+              { ...query, seller: { $nin: nearbySellerIds } },
+              remaining
+            )
+          : [];
+      products = [...nearbyProducts, ...outOfRangeProducts];
+    } else {
+      products = await populateStoreProductQuery(query, 50);
+    }
 
     console.log(
       `[getStoreProducts] Found ${total} products matching query, returning ${products.length}`,

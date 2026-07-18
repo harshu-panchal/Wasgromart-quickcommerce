@@ -53,12 +53,45 @@ export interface CategoryListResponse {
     data: Category[];
 }
 
+function includeStoredLocation(
+    params: GetProductsParams = {}
+): GetProductsParams {
+    if (
+        params.latitude !== undefined &&
+        params.longitude !== undefined
+    ) {
+        return params;
+    }
+
+    try {
+        const stored = localStorage.getItem('userLocation');
+        if (!stored) return params;
+        const location = JSON.parse(stored);
+        if (
+            Number.isFinite(location?.latitude) &&
+            Number.isFinite(location?.longitude)
+        ) {
+            return {
+                ...params,
+                latitude: location.latitude,
+                longitude: location.longitude,
+            };
+        }
+    } catch {
+        // A missing or malformed cached location should not block browsing.
+    }
+
+    return params;
+}
+
 /**
  * Get products with filters (Public)
- * Location (latitude/longitude) is required to filter products by seller's service radius
+ * The current cached location is included automatically for nearby-first ordering.
  */
 export const getProducts = async (params?: GetProductsParams): Promise<ProductListResponse> => {
-    const response = await api.get<ProductListResponse>('/customer/products', { params });
+    const response = await api.get<ProductListResponse>('/customer/products', {
+        params: includeStoredLocation(params),
+    });
     return response.data;
 };
 

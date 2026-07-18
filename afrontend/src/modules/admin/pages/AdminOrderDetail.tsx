@@ -115,6 +115,31 @@ export default function AdminOrderDetail() {
   const deliveryBoy = typeof order.deliveryBoy === 'object' ? order.deliveryBoy : null;
   const items = Array.isArray(order.items) ? order.items : [];
 
+  // Resolve the readable unit (e.g. "500g", "1 kg") for an order item.
+  // item.variation may hold either the readable value or a variation ID.
+  const getItemUnit = (item: any): string => {
+    const product = typeof item.product === 'object' ? item.product : null;
+    const variations = Array.isArray(product?.variations) ? product.variations : [];
+    const raw = (item.variation || '').toString().trim();
+
+    if (raw) {
+      const byId = variations.find((v: any) => v._id?.toString() === raw);
+      if (byId?.value) return byId.value;
+      const byValue = variations.find((v: any) => v.value === raw);
+      if (byValue?.value) return byValue.value;
+      // Raw value that isn't an ObjectId is likely already readable (e.g. "500g")
+      if (!/^[a-f0-9]{24}$/i.test(raw)) return raw;
+    }
+
+    const byPrice = variations.find(
+      (v: any) => v.price === item.unitPrice || v.discPrice === item.unitPrice
+    );
+    if (byPrice?.value) return byPrice.value;
+    if (variations.length === 1 && variations[0]?.value) return variations[0].value;
+
+    return '';
+  };
+
   const statusOptions = [
     'Received',
     'Pending',
@@ -239,7 +264,12 @@ export default function AdminOrderDetail() {
                           </div>
                         </td>
                         <td className="text-right py-3 px-2">₹{item.unitPrice?.toFixed(2) || '0.00'}</td>
-                        <td className="text-right py-3 px-2">{item.quantity || 0}</td>
+                        <td className="text-right py-3 px-2 whitespace-nowrap">
+                          {(() => {
+                            const unit = getItemUnit(item);
+                            return unit ? `${item.quantity || 0} × ${unit}` : item.quantity || 0;
+                          })()}
+                        </td>
                         <td className="text-right py-3 px-2 font-medium">
                           ₹{item.total?.toFixed(2) || '0.00'}
                         </td>

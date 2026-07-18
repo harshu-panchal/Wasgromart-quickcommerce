@@ -67,6 +67,32 @@ export function isSellerAvailableForOrder(
   return true;
 }
 
+/**
+ * Stable nearby-first ordering for customer-facing product collections.
+ * Products from sellers outside the delivery range remain visible after
+ * nearby products; their existing order is preserved within each group.
+ */
+export function sortProductsBySellerRange<T extends { seller?: unknown }>(
+  products: T[],
+  nearbySellerIds: Array<{ toString(): string }>
+): T[] {
+  if (nearbySellerIds.length === 0) {
+    return products;
+  }
+
+  return products
+    .map((product, index) => ({
+      product,
+      index,
+      inRange: isSellerInRange(product.seller, nearbySellerIds),
+    }))
+    .sort((a, b) => {
+      if (a.inRange !== b.inRange) return a.inRange ? -1 : 1;
+      return a.index - b.index;
+    })
+    .map(({ product }) => product);
+}
+
 export function withShopPresentation<T extends Record<string, any>>(product: T): T & {
   shopName: string | null;
   storeName: string | null;

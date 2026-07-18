@@ -104,7 +104,7 @@ export const getOrderById = asyncHandler(
         populate: [
           {
             path: "product",
-            select: "productName mainImage",
+            select: "productName mainImage variations",
           },
           {
             path: "seller",
@@ -198,7 +198,7 @@ export const updateOrderStatus = asyncHandler(
         populate: [
           {
             path: "product",
-            select: "productName mainImage",
+            select: "productName mainImage variations",
           },
           {
             path: "seller",
