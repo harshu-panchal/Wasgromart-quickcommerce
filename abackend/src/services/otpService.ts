@@ -87,7 +87,7 @@ function normalizeMobileNumber(mobile: string): string {
  */
 function buildOtpMessage(otp: string): string {
   const appName = process.env.APP_NAME || 'wasgromart';
-  return `Welcome to the ${appName} powered by SMSINDIAHUB. Your OTP for registration is ${otp}`;
+  return `Welcome to the ${appName} powered by Appzeto.Your OTP for registration is ${otp}.BGADEC`;
 }
 
 /**
