@@ -83,11 +83,34 @@ function normalizeMobileNumber(mobile: string): string {
 }
 
 /**
- * Build DLT-compliant message
+ * Helper to build candidate message variations for DLT matching
  */
-function buildOtpMessage(otp: string): string {
-  const appName = process.env.APP_NAME || 'wasgromart';
-  return `Welcome to the ${appName} powered by Appzeto.Your OTP for registration is ${otp}.BGADEC`;
+function getOtpMessageCandidates(otp: string): string[] {
+  const customAppName = process.env.APP_NAME ? process.env.APP_NAME.trim() : '';
+
+  // Order candidates by highest probability based on registered DLT template:
+  // "Welcome to the ##var## powered by Appzeto.Your OTP for registration is ##var##.BGADEC"
+  const brandNames = Array.from(new Set([
+    customAppName,
+    'Wasgromart',
+    'wasgromart',
+    'Wasgro',
+    'wasgro',
+  ])).filter(Boolean);
+
+  const candidates: string[] = [];
+
+  // With .BGADEC suffix (as shown in DLT portal screenshot)
+  for (const brand of brandNames) {
+    candidates.push(`Welcome to the ${brand} powered by Appzeto.Your OTP for registration is ${otp}.BGADEC`);
+  }
+
+  // Without .BGADEC suffix (in case operator strips header suffix)
+  for (const brand of brandNames) {
+    candidates.push(`Welcome to the ${brand} powered by Appzeto.Your OTP for registration is ${otp}`);
+  }
+
+  return candidates;
 }
 
 /**
@@ -120,39 +143,112 @@ function handleSmsResponse(responseData: SmsIndiaHubResponse): void {
 }
 
 /**
- * Send SMS via SMS India HUB API
+ * Send SMS via SMS India HUB API with automatic candidate fallback on DLT error
  */
-async function sendSmsViaApi(mobile: string, message: string): Promise<void> {
-  if (!SMS_INDIA_HUB_API_KEY || !SMS_INDIA_HUB_SENDER_ID) {
+async function sendSmsViaApi(mobile: string, otpOrMessage: string): Promise<void> {
+  const apiKey = (process.env.SMS_INDIA_HUB_API_KEY || '').trim();
+  const senderId = (process.env.SMS_INDIA_HUB_SENDER_ID || '').trim();
+  const username = (process.env.SMS_INDIA_HUB_USERNAME || '').trim();
+  const dltTemplateId = (process.env.SMS_INDIA_HUB_DLT_TEMPLATE_ID || '').trim();
+
+  if (!apiKey || !senderId) {
     throw new Error('SMS India HUB credentials are missing. Please check environment variables.');
   }
 
   const cleanMobile = normalizeMobileNumber(mobile);
 
-  const params: Record<string, string> = {
-    APIKey: SMS_INDIA_HUB_API_KEY.trim(),
-    msisdn: cleanMobile,
-    sid: SMS_INDIA_HUB_SENDER_ID.trim(),
-    msg: message,
-    fl: '0',
-    gwid: '2',
-  };
+  // Determine if passed string is a 4-digit OTP or a pre-built message
+  const otp = /^\d{4}$/.test(otpOrMessage) ? otpOrMessage : null;
+  const msgCandidates = otp ? getOtpMessageCandidates(otp) : [otpOrMessage];
 
-  if (SMS_INDIA_HUB_DLT_TEMPLATE_ID?.trim()) {
-    params.DLT_TE_ID = SMS_INDIA_HUB_DLT_TEMPLATE_ID.trim();
+  // Try candidate variations until one succeeds or all fail
+  let lastError: Error | null = null;
+
+  for (let i = 0; i < msgCandidates.length; i++) {
+    const candidateMsg = msgCandidates[i];
+
+    // Build params with ALL common alias parameter names for DLT Template ID & Sender ID
+    // so whichever parameter key the SMS gateway parser expects, it receives it!
+    const params: Record<string, string> = {
+      user: username,
+      password: apiKey,
+      APIKey: apiKey,
+      msisdn: cleanMobile,
+      sid: senderId,
+      sender: senderId,
+      senderid: senderId,
+      msg: candidateMsg,
+      fl: '0',
+      gwid: '2', // gwid=2 (Transactional route for OTPs)
+    };
+
+    if (dltTemplateId) {
+      params.DLT_TE_ID = dltTemplateId;
+      params.dlt_te_id = dltTemplateId;
+      params.templateid = dltTemplateId;
+      params.template_id = dltTemplateId;
+    }
+
+    console.log(`[SMS India HUB] Attempting Candidate #${i + 1}/${msgCandidates.length}:`, {
+      msisdn: cleanMobile,
+      sid: senderId,
+      user: username,
+      DLT_TE_ID: dltTemplateId,
+      msg: candidateMsg,
+    });
+
+    try {
+      const response = await axios.get<SmsIndiaHubResponse>(SMS_INDIA_HUB_API_URL, {
+        params,
+        timeout: API_TIMEOUT,
+      });
+
+      console.log(`[SMS India HUB] Candidate #${i + 1} Raw Response:`, JSON.stringify(response.data));
+
+      handleSmsResponse(response.data);
+
+      console.log(`✅ [SMS India HUB] Success with Candidate #${i + 1}: "${candidateMsg}"`);
+      return; // Success!
+    } catch (err: any) {
+      lastError = err;
+      console.warn(`⚠️ [SMS India HUB] Candidate #${i + 1} Failed: ${err.message}`);
+
+      // If it's NOT a DLT template error (e.g. invalid credentials or network error), don't keep retrying variations
+      if (!err.message?.includes('DLT template') && !err.message?.includes('006')) {
+        throw err;
+      }
+    }
   }
 
-  const response = await axios.get<SmsIndiaHubResponse>(SMS_INDIA_HUB_API_URL, {
-    params,
-    paramsSerializer: (params) => {
-      return Object.keys(params)
-        .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`)
-        .join('&');
-    },
-    timeout: API_TIMEOUT,
-  });
+  // Also try once without gwid parameter if all gwid=2 attempts failed
+  if (dltTemplateId && msgCandidates.length > 0) {
+    const fallbackMsg = msgCandidates[0];
+    console.log('[SMS India HUB] Trying fallback attempt without gwid parameter...');
+    try {
+      const fallbackParams: Record<string, string> = {
+        user: username,
+        password: apiKey,
+        APIKey: apiKey,
+        msisdn: cleanMobile,
+        sid: senderId,
+        msg: fallbackMsg,
+        DLT_TE_ID: dltTemplateId,
+        templateid: dltTemplateId,
+      };
+      const response = await axios.get<SmsIndiaHubResponse>(SMS_INDIA_HUB_API_URL, {
+        params: fallbackParams,
+        timeout: API_TIMEOUT,
+      });
+      console.log('[SMS India HUB] Fallback (no gwid) Response:', JSON.stringify(response.data));
+      handleSmsResponse(response.data);
+      console.log(`✅ [SMS India HUB] Success without gwid param: "${fallbackMsg}"`);
+      return;
+    } catch (err: any) {
+      console.warn(`⚠️ [SMS India HUB] Fallback without gwid failed: ${err.message}`);
+    }
+  }
 
-  handleSmsResponse(response.data);
+  throw lastError || new Error('SMS India HUB: Failed to send SMS with all DLT template variations.');
 }
 
 /**
@@ -259,8 +355,7 @@ export async function sendSmsOtp(
 
     // Real mode - Send via SMS India HUB
     await saveOtpToDb(mobile, otp, userType);
-    const message = buildOtpMessage(otp);
-    await sendSmsViaApi(mobile, message);
+    await sendSmsViaApi(mobile, otp);
 
     return {
       success: true,
@@ -366,8 +461,7 @@ export async function sendOTP(
 
     // Real mode - Send via SMS India HUB
     await saveOtpToDb(mobile, otp, userType);
-    const message = buildOtpMessage(otp);
-    await sendSmsViaApi(mobile, message);
+    await sendSmsViaApi(mobile, otp);
 
     return {
       success: true,
