@@ -1,5 +1,6 @@
 
 import dns from "dns";
+import fs from "fs";
 import path from "path";
 import { ensureEnvLoaded, getEnvLoadedFrom } from "./config/env";
 
@@ -47,6 +48,15 @@ app.use(
     },
   })
 );
+
+// Fallback for missing uploaded images: serve default placeholder instead of 404 JSON error
+app.use("/uploads", (req, res) => {
+  const placeholderPath = path.join(UPLOAD_DIR, "default", "placeholder.png");
+  if (fs.existsSync(placeholderPath)) {
+    return res.sendFile(placeholderPath);
+  }
+  return res.status(404).json({ success: false, message: "Image not found" });
+});
 
 // Simple CORS configuration - Standard and reliable
 const allowedOrigins = [
