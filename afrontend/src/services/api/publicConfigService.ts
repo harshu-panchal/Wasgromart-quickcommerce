@@ -1,4 +1,5 @@
-import api, { ApiResponse } from "./config";
+import api from "./config";
+import { ApiResponse } from "./admin/types";
 
 export interface PublicConfig {
   appName: string;
