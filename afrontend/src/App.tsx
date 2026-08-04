@@ -9,6 +9,7 @@ import { ThemeProvider } from "./context/ThemeContext";
 import { LocationProvider } from "./context/LocationContext";
 import { ToastProvider } from "./context/ToastContext";
 import { WishlistProvider } from "./context/WishlistContext";
+import { MaintenanceProvider } from "./context/MaintenanceContext";
 
 import { LoadingProvider } from "./context/LoadingContext";
 import { AxiosLoadingInterceptor } from "./context/AxiosLoadingInterceptor";
@@ -369,6 +370,7 @@ function AppContent() {
                       }}>
                       <RouteLoaderTrigger />
                       <WishlistProvider>
+                      <MaintenanceProvider>
                       <Routes>
                         <Route
                           path="/terms-of-service"
@@ -995,6 +997,7 @@ function AppContent() {
                           }
                         />
                       </Routes>
+                      </MaintenanceProvider>
                       </WishlistProvider>
                     </BrowserRouter>
                   </OrdersProvider>

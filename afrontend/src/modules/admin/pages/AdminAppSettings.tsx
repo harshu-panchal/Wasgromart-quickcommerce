@@ -50,10 +50,10 @@ export default function AdminAppSettings() {
       if (response && response.success && response.data) {
         const data = response.data;
         setAppName(data.appName || "Wasgromart");
-        setContactEmail(data.contactEmail || "");
-        setContactPhone(data.contactPhone || "");
-        setSupportEmail(data.supportEmail || "");
-        setSupportPhone(data.supportPhone || "");
+        setContactEmail(data.contactEmail || "contact@wasgromart.com");
+        setContactPhone(data.contactPhone || "8999475858");
+        setSupportEmail(data.supportEmail || "support@wasgromart.com");
+        setSupportPhone(data.supportPhone || "9579257390");
         setMaintenanceMode(!!data.maintenanceMode);
         setMaintenanceMessage(
           data.maintenanceMessage || PRESET_MESSAGES[0]
@@ -70,15 +70,43 @@ export default function AdminAppSettings() {
     }
   };
 
+  const handleToggleMaintenance = async (newMode: boolean) => {
+    setMaintenanceMode(newMode);
+    try {
+      const updatePayload: any = {
+        appName: appName || "Wasgromart",
+        contactEmail: contactEmail || "contact@wasgromart.com",
+        contactPhone: contactPhone || "8999475858",
+        supportEmail: supportEmail || "support@wasgromart.com",
+        supportPhone: supportPhone || "9579257390",
+        maintenanceMode: newMode,
+        maintenanceMessage: maintenanceMessage || PRESET_MESSAGES[0],
+        features,
+      };
+      const response = await updateAppSettings(updatePayload);
+      if (response.success) {
+        showToast(
+          newMode
+            ? "Maintenance Mode ENABLED for Customer App"
+            : "Maintenance Mode DISABLED - Customer App is Live",
+          newMode ? "info" : "success"
+        );
+      }
+    } catch (err: any) {
+      console.error(err);
+      showToast("Failed to update Maintenance Mode", "error");
+    }
+  };
+
   const handleSave = async () => {
     try {
       setSaving(true);
       const updatePayload: any = {
-        appName,
-        contactEmail,
-        contactPhone,
-        supportEmail,
-        supportPhone,
+        appName: appName || "Wasgromart",
+        contactEmail: contactEmail || "contact@wasgromart.com",
+        contactPhone: contactPhone || "8999475858",
+        supportEmail: supportEmail || "support@wasgromart.com",
+        supportPhone: supportPhone || "9579257390",
         maintenanceMode,
         maintenanceMessage,
         features,
@@ -196,7 +224,7 @@ export default function AdminAppSettings() {
             </span>
             <button
               type="button"
-              onClick={() => setMaintenanceMode(!maintenanceMode)}
+              onClick={() => handleToggleMaintenance(!maintenanceMode)}
               className={`relative inline-flex h-7 w-14 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
                 maintenanceMode ? "bg-amber-500" : "bg-slate-300"
               }`}

@@ -47,7 +47,13 @@ import {
   updateOrderNotes,
 } from "../modules/customer/controllers/customerOrderController";
 
+import configRoutes from "./configRoutes";
+import { checkMaintenanceMode } from "../middleware/maintenanceMiddleware";
+
 const router = Router();
+
+// Public config route
+router.use("/config", configRoutes);
 
 // Health check route
 router.get("/health", (_req, res) => {
@@ -84,6 +90,9 @@ router.use(
   "/delivery/wallet",
   deliveryWalletRoutes
 );
+
+// Apply Maintenance Mode check middleware on all customer endpoints
+router.use("/customer", checkMaintenanceMode);
 
 // Customer routes - Specific routes MUST be registered before general /customer route
 // to prevent Express from matching the broader route first

@@ -95,6 +95,16 @@ api.interceptors.response.use(
     return response;
   },
   (error: any) => {
+    if (error.response?.status === 503 && error.response?.data?.maintenanceMode) {
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("maintenance-mode-triggered", {
+            detail: error.response.data,
+          })
+        );
+      }
+    }
+
     // Only handle 401 (Unauthorized) for auto-logout
     // 403 (Forbidden) means user is authenticated but doesn't have permission - DO NOT LOGOUT
     if (error.response?.status === 401) {

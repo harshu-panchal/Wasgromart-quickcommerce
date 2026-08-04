@@ -37,16 +37,15 @@ export const updateAppSettings = asyncHandler(
     const updateData = req.body;
     updateData.updatedBy = req.user?.userId;
 
-    let settings = await AppSettings.findOne();
+    if (!updateData.contactEmail) updateData.contactEmail = "contact@wasgromart.com";
+    if (!updateData.contactPhone) updateData.contactPhone = "8999475858";
+    if (!updateData.appName) updateData.appName = "Wasgromart";
 
-    if (!settings) {
-      settings = await AppSettings.create(updateData);
-    } else {
-      settings = await AppSettings.findOneAndUpdate({}, updateData, {
-        new: true,
-        runValidators: true,
-      });
-    }
+    let settings = await AppSettings.findOneAndUpdate({}, updateData, {
+      new: true,
+      upsert: true,
+      runValidators: true,
+    });
 
     return res.status(200).json({
       success: true,
