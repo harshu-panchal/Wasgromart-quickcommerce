@@ -8,9 +8,50 @@ ensureEnvLoaded();
  * Root upload directory on disk.
  * Default: sibling of nodejs/ on Hostinger (../uploads) so deploys never wipe user files.
  */
-export const UPLOAD_DIR = path.resolve(
-  process.env.UPLOAD_DIR || path.join(process.cwd(), "../uploads")
-);
+function resolveUploadDir(): string {
+  if (process.env.UPLOAD_DIR) {
+    const envPath = path.resolve(process.env.UPLOAD_DIR);
+    if (fs.existsSync(envPath)) {
+      return envPath;
+    }
+  }
+
+  // Candidate paths in order of preference for Hostinger production and local dev
+  const candidatePaths = [
+    // Production Hostinger absolute path
+    "/home/u910031778/domains/api.wasgromart.com/uploads",
+    // Relative to dist/config/storage.js -> nodejs/../uploads = api.wasgromart.com/uploads
+    path.resolve(__dirname, "../../../uploads"),
+    path.resolve(__dirname, "../../uploads"),
+    // Relative to process.cwd()
+    path.resolve(process.cwd(), "../uploads"),
+    path.resolve(process.cwd(), "uploads"),
+  ];
+
+  // Prioritize directory containing actual subfolders like 'speeup' or 'categories' or 'products'
+  for (const candidate of candidatePaths) {
+    if (fs.existsSync(candidate)) {
+      if (
+        fs.existsSync(path.join(candidate, "speeup")) ||
+        fs.existsSync(path.join(candidate, "categories")) ||
+        fs.existsSync(path.join(candidate, "products"))
+      ) {
+        return candidate;
+      }
+    }
+  }
+
+  // Fallback to first candidate that exists
+  for (const candidate of candidatePaths) {
+    if (fs.existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  return path.resolve(process.cwd(), "../uploads");
+}
+
+export const UPLOAD_DIR = resolveUploadDir();
 
 /**
  * Public base URL for uploaded files (no trailing slash).

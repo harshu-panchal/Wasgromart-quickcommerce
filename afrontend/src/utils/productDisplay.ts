@@ -39,8 +39,8 @@ export function canAddProductToCart(
 ): boolean {
   if (!product) return false;
   if (isProductShopClosed(product)) return false;
-  if (product.isAvailable === false) return false;
-  if (product.isAvailableAtLocation === false) return false;
+  if ((product as any).isAvailable === false) return false;
+  if ((product as any).isAvailableAtLocation === false) return false;
   return true;
 }
 
