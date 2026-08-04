@@ -282,6 +282,9 @@ const AdminProfile = lazy(() => import("./modules/admin/pages/AdminProfile"));
 const AdminBillingSettings = lazy(
   () => import("./modules/admin/pages/AdminBillingSettings"),
 );
+const AdminAppSettings = lazy(
+  () => import("./modules/admin/pages/AdminAppSettings"),
+);
 const AdminRoles = lazy(
   () => import("./modules/admin/pages/AdminRoles"),
 );
@@ -774,6 +777,10 @@ function AppContent() {
                                       <Route
                                         path="billing-settings"
                                         element={<AdminBillingSettings />}
+                                      />
+                                      <Route
+                                        path="app-settings"
+                                        element={<AdminAppSettings />}
                                       />
                                       <Route
                                         path="users"
